@@ -13,6 +13,7 @@ Each app lives in its own dated folder under `apps/`.
 
 | Date | App | Topic |
 |------|-----|-------|
+| 2026-05-08 | [Fermentation Kinetics Simulator](apps/2026-05-08/) | Interactive model of sugar-to-ethanol conversion for red or white must |
 
 ---
 Built with wine, science, and curiosity by Hermes Agent.

@@ -1,0 +1,323 @@
+<!-- Wine Fermentation Kinetics Simulator — Interactive model of sugar-to-ethanol conversion for red/white must. Adjust temperature, yeast tolerance, nutrients, and initial Brix to see predicted Brix drop, ethanol accumulation, and CO2 production over time. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="googlebot" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Fermentation Kinetics Simulator</title>
+<style>
+  :root{ --bg:#0b0f14; --surface:#111820; --panel:#161d27; --border:#243040; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#3fb950; --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080; }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; -webkit-font-smoothing:antialiased; }
+
+  /* Disclaimer banner */
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui,sans-serif; }
+  .disclaimer strong{ font-weight:600; }
+
+  h1{ font-size:clamp(1.3rem,5vw,1.7rem); margin:1.1rem 1rem 0.2rem; background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .subtitle{ color:var(--muted); font-size:0.9rem; margin:0 1rem 1rem; }
+
+  .wrap{ max-width:980px; margin:0 auto; padding:0 1rem 2rem; }
+
+  .grid{ display:grid; grid-template-columns:1fr; gap:1rem; }
+  @media(min-width:640px){ .grid{ grid-template-columns:320px 1fr; } }
+
+  .panel{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:1rem; }
+  .panel h2{ font-size:0.95rem; color:var(--accent); margin-bottom:0.75rem; letter-spacing:0.02em; }
+
+  .control{ margin-bottom:0.9rem; }
+  .control label{ display:flex; justify-content:space-between; font-size:0.85rem; color:var(--muted); margin-bottom:0.35rem; }
+  .control .val{ color:var(--text); font-weight:600; }
+  input[type="range"]{ width:100%; accent-color:var(--accent); height:28px; touch-action:manipulation; }
+  input[type="number"]{ width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:0.55rem 0.7rem; font-size:1rem; touch-action:manipulation; }
+  select{ width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:0.55rem 0.7rem; font-size:1rem; touch-action:manipulation; }
+  button{ width:100%; background:linear-gradient(90deg,var(--accent),#4f8cff); color:#fff; border:none; border-radius:10px; padding:0.7rem; font-size:0.95rem; font-weight:600; cursor:pointer; touch-action:manipulation; min-height:44px; }
+  button:hover{ filter:brightness(1.08); }
+  button:active{ transform:translateY(1px); }
+
+  .stats{ display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; margin-bottom:0.6rem; }
+  .stat{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:0.7rem; text-align:center; }
+  .stat .num{ font-size:1.25rem; font-weight:700; color:var(--accent); }
+  .stat .unit{ font-size:0.75rem; color:var(--muted); }
+
+  .chart-wrap{ position:relative; width:100%; height:260px; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  canvas{ display:block; width:100%; height:100%; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:0.6rem 1rem; margin-top:0.6rem; font-size:0.82rem; color:var(--muted); }
+  .legend span{ display:inline-flex; align-items:center; gap:0.35rem; }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+  .note{ font-size:0.82rem; color:var(--muted); margin-top:0.8rem; line-height:1.5; }
+  .note code{ background:rgba(88,166,255,0.12); color:var(--accent); padding:0.1rem 0.35rem; border-radius:4px; font-size:0.78rem; }
+
+  @media(min-width:640px){ .chart-wrap{ height:320px; } }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<h1>🍷 Fermentation Kinetics Simulator</h1>
+<p class="subtitle">Model sugar-to-ethanol conversion for red or white must.</p>
+
+<div class="wrap">
+  <div class="grid">
+    <div class="panel">
+      <h2>Parameters</h2>
+
+      <div class="control">
+        <label>Must type <span class="val" id="type-val">Red</span></label>
+        <select id="mustType">
+          <option value="red" selected>Red must (skins)</option>
+          <option value="white">White must (clarified)</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label>Initial Brix <span class="val" id="brix-val">24.0 °Bx</span></label>
+        <input type="range" id="brix" min="18" max="32" step="0.5" value="24" inputmode="decimal">
+      </div>
+
+      <div class="control">
+        <label>Temperature <span class="val" id="temp-val">28 °C</span></label>
+        <input type="range" id="temp" min="10" max="35" step="1" value="28">
+      </div>
+
+      <div class="control">
+        <label>Yeast strain (ethanol tolerance) <span class="val" id="tolerance-val">15 %</span></label>
+        <input type="range" id="tolerance" min="12" max="18" step="0.5" value="15">
+      </div>
+
+      <div class="control">
+        <label>Yeast assimilable nitrogen (YAN) <span class="val" id="yan-val">200 mg/L</span></label>
+        <input type="range" id="yan" min="50" max="400" step="10" value="200">
+      </div>
+
+      <div class="control">
+        <label>Simulation days <span class="val" id="days-val">14 days</span></label>
+        <input type="range" id="days" min="7" max="30" step="1" value="14">
+      </div>
+
+      <button id="run">Run Simulation</button>
+    </div>
+
+    <div class="panel">
+      <h2>Results</h2>
+      <div class="stats">
+        <div class="stat"><div class="num" id="final-brix">—</div><div class="unit">Final Brix (°Bx)</div></div>
+        <div class="stat"><div class="num" id="final-abv">—</div><div class="unit">Est. ABV (%)</div></div>
+        <div class="stat"><div class="num" id="peak-rate">—</div><div class="unit">Peak ΔBrix/day</div></div>
+        <div class="stat"><div class="num" id="total-co2">—</div><div class="unit">CO₂ (g/L must)</div></div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+      <div class="legend">
+        <span><span class="dot" style="background:#58a6ff"></span>Brix</span>
+        <span><span class="dot" style="background:#3fb950"></span>Ethanol (%)</span>
+        <span><span class="dot" style="background:#f0883e"></span>CO₂ rate</span>
+      </div>
+      <p class="note">Model uses logistic-like kinetics with temperature and nutrient modifiers. Stuck fermentation may occur if ethanol approaches tolerance or YAN is very low. <code>Brix → ABV</code> uses 0.59×Brix consumed (approx).</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const mustType = $('mustType');
+  const brixIn = $('brix');
+  const tempIn = $('temp');
+  const tolIn = $('tolerance');
+  const yanIn = $('yan');
+  const daysIn = $('days');
+  const runBtn = $('run');
+  const c = $('chart');
+  const ctx = c.getContext('2d');
+
+  let W=0,H=0;
+  function resize(){
+    const rect = c.parentElement.getBoundingClientRect();
+    W = rect.width; H = rect.height;
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    c.width = Math.floor(W*dpr); c.height = Math.floor(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function updateLabels(){
+    $('type-val').textContent = mustType.value==='red' ? 'Red' : 'White';
+    $('brix-val').textContent = parseFloat(brixIn.value).toFixed(1)+' °Bx';
+    $('temp-val').textContent = tempIn.value+' °C';
+    $('tolerance-val').textContent = parseFloat(tolIn.value).toFixed(1)+' %';
+    $('yan-val').textContent = yanIn.value+' mg/L';
+    $('days-val').textContent = daysIn.value+' days';
+  }
+  [mustType,brixIn,tempIn,tolIn,yanIn,daysIn].forEach(el=>el.addEventListener('input', updateLabels));
+
+  function simulate(){
+    const initBrix = parseFloat(brixIn.value);
+    const temp = parseFloat(tempIn.value);
+    const tolerance = parseFloat(tolIn.value);
+    const yan = parseFloat(yanIn.value);
+    const maxDays = parseInt(daysIn.value);
+    const isRed = mustType.value === 'red';
+
+    // Constants
+    const kOpt = isRed ? 0.42 : 0.55; // logistic growth rate (higher for white clarified must)
+    const q10 = 2.0;
+    const tRef = 28;
+    const tempFactor = Math.pow(q10, (temp - tRef)/10);
+    const yanFactor = Math.min(1, yan/180); // diminishing returns above ~180 mg/L
+    const k = kOpt * tempFactor * yanFactor;
+
+    const dt = 0.05; // days step
+    const steps = Math.ceil(maxDays / dt);
+    const time = [];
+    const brixArr = [];
+    const abvArr = [];
+    const co2RateArr = [];
+
+    let B = initBrix;
+    let maxRate = 0;
+    let totalCO2 = 0;
+    const sugar0 = B * 10.6; // approximate g/L sugar per Brix
+
+    for(let i=0;i<=steps;i++){
+      const t = i*dt;
+      // ethanol produced so far
+      const Et = (initBrix - B) * 0.59; // approx ABV from consumed Brix
+      const EtVol = Et; // treat as % v/v approx
+
+      // inhibition: ethanol near tolerance + low temp at end
+      const ethanolInhib = Math.max(0, 1 - Math.pow(EtVol/tolerance, 2.5));
+      const lowTempInhib = temp < 12 ? 0.6 : 1;
+      const stuck = EtVol >= tolerance ? 0 : 1;
+
+      // dB/dt logistic-like, slowing as B drops
+      const carrying = Math.max(0.5, B); // avoid zero divide issues
+      const dB = -k * carrying * ethanolInhib * lowTempInhib * stuck * dt;
+
+      const rate = Math.abs(dB)/dt;
+      if(rate > maxRate) maxRate = rate;
+
+      // CO2 production ~ proportional to sugar consumed (approx 0.49 g CO2 per g sugar)
+      const sugarConsumed = -dB * 10.6; // g/L
+      const co2 = sugarConsumed * 0.49;
+      totalCO2 += co2;
+      const co2Rate = co2 / dt; // g/L/day
+
+      time.push(t);
+      brixArr.push(B);
+      abvArr.push(Et);
+      co2RateArr.push(co2Rate);
+
+      B += dB;
+      if(B < 0) B = 0;
+    }
+
+    $('final-brix').textContent = brixArr[brixArr.length-1].toFixed(1);
+    $('final-abv').textContent = abvArr[abvArr.length-1].toFixed(1);
+    $('peak-rate').textContent = maxRate.toFixed(2);
+    $('total-co2').textContent = totalCO2.toFixed(0);
+
+    draw(time, brixArr, abvArr, co2RateArr, initBrix, tolerance);
+  }
+
+  function draw(time, brix, abv, co2Rate, initBrix, tolerance){
+    ctx.clearRect(0,0,W,H);
+    const pad = {top:18,right:18,bottom:28,left:42};
+    const gw = W - pad.left - pad.right;
+    const gh = H - pad.top - pad.bottom;
+
+    const maxT = time[time.length-1];
+    const maxB = Math.max(initBrix, 1);
+    const maxA = Math.max(...abv, tolerance, 1);
+    const maxC = Math.max(...co2Rate, 1);
+
+    function sx(t){ return pad.left + (t/maxT)*gw; }
+    function syB(v){ return pad.top + (1 - v/maxB)*gh; }
+    function syA(v){ return pad.top + (1 - v/maxA)*gh; }
+    function syC(v){ return pad.top + (1 - v/maxC)*gh; }
+
+    // grid
+    ctx.strokeStyle = 'rgba(200,210,220,0.08)';
+    ctx.lineWidth = 1;
+    for(let i=0;i<=5;i++){
+      const y = pad.top + (i/5)*gh;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W-pad.right, y); ctx.stroke();
+    }
+    for(let i=0;i<=5;i++){
+      const x = pad.left + (i/5)*gw;
+      ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, H-pad.bottom); ctx.stroke();
+    }
+
+    // axes
+    ctx.strokeStyle = 'rgba(200,210,220,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, H-pad.bottom); ctx.lineTo(W-pad.right, H-pad.bottom); ctx.stroke();
+
+    // labels
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for(let i=0;i<=5;i++){
+      const y = pad.top + (i/5)*gh;
+      ctx.fillText((maxB*(1-i/5)).toFixed(1)+'°Bx', pad.left-6, y);
+    }
+    ctx.textAlign = 'left';
+    for(let i=0;i<=5;i++){
+      const x = pad.left + (i/5)*gw;
+      ctx.fillText((maxT*(i/5)).toFixed(0)+'d', x+2, H-pad.bottom+14);
+    }
+
+    // tolerance line
+    const yTol = syA(tolerance);
+    ctx.strokeStyle = 'rgba(255,100,100,0.35)';
+    ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(pad.left, yTol); ctx.lineTo(W-pad.right, yTol); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,120,120,0.8)';
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('Yeast limit', W-pad.right-4, yTol-5);
+
+    // draw series helpers
+    function line(data, yfn, color, width=2){
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for(let i=0;i<time.length;i+=Math.ceil(time.length/1200)){
+        const x = sx(time[i]);
+        const y = yfn(data[i]);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+
+    line(brix, syB, '#58a6ff', 2.5);
+    line(abv, syA, '#3fb950', 2.5);
+    line(co2Rate, syC, '#f0883e', 2);
+
+    // overlay ABV axis on right (small ticks)
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#3fb950';
+    for(let i=0;i<=5;i++){
+      const y = pad.top + (i/5)*gh;
+      ctx.fillText((maxA*(1-i/5)).toFixed(1)+'%', W-pad.right+4, y);
+    }
+    ctx.fillStyle = '#f0883e';
+    ctx.textAlign = 'center';
+    ctx.fillText('CO₂ rate (g/L·d)', W/2, H-6);
+  }
+
+  runBtn.addEventListener('click', simulate);
+  updateLabels();
+  simulate();
+})();
+</script>
+</body>
+</html>
