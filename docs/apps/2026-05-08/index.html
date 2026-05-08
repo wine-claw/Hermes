@@ -14,7 +14,7 @@
   body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; -webkit-font-smoothing:antialiased; }
 
   /* Disclaimer banner */
-  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui,sans-serif; }
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui,sans-serif; position:sticky; top:0; z-index:100; }
   .disclaimer strong{ font-weight:600; }
 
   h1{ font-size:clamp(1.3rem,5vw,1.7rem); margin:1.1rem 1rem 0.2rem; background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
