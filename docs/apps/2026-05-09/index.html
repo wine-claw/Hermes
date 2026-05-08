@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>SO₂ Manager — Molecular Sulfur Dioxide Calculator</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --surface:#141a22;
+    --surface2:#1c2430;
+    --border:#2a3441;
+    --text:#c9d1d9;
+    --muted:#8b949e;
+    --accent:#58a6ff;
+    --accent2:#a371f7;
+    --good:#3fb950;
+    --warn:#d29922;
+    --danger:#f85149;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; padding:1rem; }
+  .wrap{ max-width:720px; margin:0 auto; }
+  header{ text-align:center; padding:1.5rem 0 1rem; }
+  header h1{ font-size:clamp(1.4rem,5vw,2rem); background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  header p{ color:var(--muted); font-size:0.9rem; margin-top:0.4rem; }
+
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:1.1rem; margin-bottom:1rem; }
+  .card h2{ font-size:1.05rem; color:var(--accent); margin-bottom:0.7rem; display:flex; align-items:center; gap:0.45rem; }
+  .row{ display:flex; flex-wrap:wrap; gap:0.75rem; margin-bottom:0.6rem; }
+  .field{ flex:1 1 140px; }
+  .field label{ display:block; font-size:0.78rem; color:var(--muted); margin-bottom:0.25rem; }
+  .field input, .field select{ width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:0.55rem 0.7rem; border-radius:10px; font-size:0.95rem; outline:none; }
+  .field input:focus, .field select:focus{ border-color:var(--accent); }
+  .field .unit{ float:right; font-size:0.72rem; color:var(--muted); margin-top:-1.55rem; margin-right:0.6rem; pointer-events:none; }
+
+  .pill{ display:inline-flex; align-items:center; gap:0.4rem; background:var(--surface2); border:1px solid var(--border); padding:0.35rem 0.7rem; border-radius:999px; font-size:0.82rem; }
+  .pill .dot{ width:8px; height:8px; border-radius:50%; }
+  .dot.good{ background:var(--good); }
+  .dot.warn{ background:var(--warn); }
+  .dot.danger{ background:var(--danger); }
+
+  .big-num{ font-size:clamp(2rem,6vw,2.8rem); font-weight:700; letter-spacing:-0.02em; }
+  .big-num.good{ color:var(--good); }
+  .big-num.warn{ color:var(--warn); }
+  .big-num.danger{ color:var(--danger); }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media(max-width:520px){ .grid2{ grid-template-columns:1fr; } }
+
+  .bar-wrap{ background:var(--surface2); border-radius:999px; height:10px; overflow:hidden; margin-top:0.4rem; }
+  .bar{ height:100%; border-radius:999px; transition:width .4s ease, background .3s ease; }
+
+  .recommend{ background:var(--surface2); border-left:3px solid var(--accent); border-radius:0 10px 10px 0; padding:0.8rem 1rem; margin-top:0.6rem; font-size:0.9rem; }
+  .recommend strong{ color:var(--accent); }
+
+  .small{ font-size:0.8rem; color:var(--muted); }
+  .note{ font-size:0.78rem; color:var(--muted); margin-top:0.6rem; line-height:1.5; }
+
+  .btn{ background:linear-gradient(90deg,var(--accent),var(--accent2)); color:#fff; border:none; padding:0.65rem 1.1rem; border-radius:10px; font-size:0.9rem; font-weight:600; cursor:pointer; width:100%; margin-top:0.4rem; }
+  .btn:active{ transform:scale(0.98); }
+
+  table{ width:100%; border-collapse:collapse; font-size:0.85rem; margin-top:0.5rem; }
+  th, td{ text-align:left; padding:0.45rem 0.35rem; border-bottom:1px solid var(--border); }
+  th{ color:var(--muted); font-weight:500; }
+
+  canvas{ width:100%; height:220px; background:var(--surface2); border-radius:10px; border:1px solid var(--border); }
+
+  .slider-row{ display:flex; align-items:center; gap:0.6rem; margin-top:0.3rem; }
+  input[type=range]{ flex:1; accent-color:var(--accent); }
+  .slider-val{ min-width:3.2rem; text-align:right; font-variant-numeric:tabular-nums; font-size:0.9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>SO₂ Manager</h1>
+    <p>Molecular sulfur dioxide calculator &amp; addition planner for winemakers</p>
+  </header>
+
+  <div class="card">
+    <h2>🧪 Current Wine State</h2>
+    <div class="row">
+      <div class="field">
+        <label>Free SO₂</label>
+        <input type="number" id="freeSo2" value="25" step="1" min="0">
+        <span class="unit">mg/L (ppm)</span>
+      </div>
+      <div class="field">
+        <label>pH</label>
+        <input type="number" id="ph" value="3.4" step="0.01" min="2.8" max="4.2">
+        <span class="unit">pH</span>
+      </div>
+      <div class="field">
+        <label>Wine Volume</label>
+        <input type="number" id="volume" value="1000" step="10" min="1">
+        <span class="unit">L</span>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Wine Type</label>
+        <select id="wineType">
+          <option value="dry_white">Dry White / Rosé</option>
+          <option value="red">Red Wine</option>
+          <option value="sweet">Sweet / Late Harvest</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Target Molecular SO₂</label>
+        <input type="number" id="targetMolecular" value="0.8" step="0.05" min="0.1" max="2.0">
+        <span class="unit">mg/L</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📊 Molecular SO₂ Status</h2>
+    <div class="grid2">
+      <div>
+        <div class="small">Molecular SO₂ (active antimicrobial form)</div>
+        <div id="molDisplay" class="big-num good">0.00</div>
+        <div class="small">mg/L · <span id="pctDisplay">0.0</span>% of free SO₂</div>
+        <div class="bar-wrap"><div id="molBar" class="bar" style="width:0%;background:var(--good)"></div></div>
+        <div style="margin-top:0.6rem;">
+          <span class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Evaluating…</span></span>
+        </div>
+      </div>
+      <div>
+        <div class="small">Recommended targets</div>
+        <table>
+          <tr><th>Type</th><th>Target (mg/L)</th></tr>
+          <tr><td>Dry white / Rosé</td><td>0.80 – 1.00</td></tr>
+          <tr><td>Red wine</td><td>0.50 – 0.80</td></tr>
+          <tr><td>Sweet / Late harvest</td><td>1.20 – 1.50</td></tr>
+        </table>
+        <div class="note">Molecular SO₂ is the only antimicrobial form. Bound SO₂ has negligible biological activity.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>⚗️ Addition Planner</h2>
+    <div class="recommend" id="additionRec">
+      <strong>Recommendation:</strong> <span id="recText">—</span>
+    </div>
+    <div class="row" style="margin-top:0.8rem;">
+      <div class="field">
+        <label>Addition compound</label>
+        <select id="compound">
+          <option value="kmbs">Potassium metabisulfite (KMBS)</option>
+          <option value="liquid">6% liquid SO₂ solution</option>
+          <option value="campden">Campden tablets</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Purity / Assay</label>
+        <input type="number" id="purity" value="100" step="1" min="1" max="100">
+        <span class="unit">%</span>
+      </div>
+    </div>
+    <table id="addTable">
+      <tr><th>Compound</th><th>Dose needed</th><th>Yield</th></tr>
+      <tr><td>KMBS powder</td><td id="doseKmbs">—</td><td>≈ 57% SO₂ by weight</td></tr>
+      <tr><td>6% Liquid SO₂</td><td id="doseLiquid">—</td><td>60 g/L SO₂</td></tr>
+      <tr><td>Campden tablets</td><td id="doseCampden">—</td><td>≈ 0.44 g SO₂ per tablet</td></tr>
+    </table>
+    <div class="note">Additions raise <em>total</em> SO₂; not all becomes free. Assume ~50–70% binds depending on wine chemistry. Recheck lab values after addition.</div>
+  </div>
+
+  <div class="card">
+    <h2>📈 Molecular % vs pH</h2>
+    <canvas id="chart"></canvas>
+    <div class="slider-row">
+      <label class="small">Free SO₂:</label>
+      <input type="range" id="sliderFree" min="5" max="100" value="25">
+      <span class="slider-val" id="sliderFreeVal">25</span>
+    </div>
+    <div class="note">Drag the slider to see how molecular SO₂ percentage changes with pH at different free SO₂ levels. The vertical dashed line marks your current pH.</div>
+  </div>
+
+  <div class="card">
+    <h2>🧮 Quick Reference: Free SO₂ needed for target molecular</h2>
+    <table>
+      <tr><th>pH</th><th>0.5 mg/L mol</th><th>0.8 mg/L mol</th><th>1.0 mg/L mol</th><th>1.5 mg/L mol</th></tr>
+      <tbody id="refTable"></tbody>
+    </table>
+    <div class="note">Values are approximate because molecular fraction depends on pKa (≈ 1.81) and temperature (assumed 25 °C). Lower temperature increases effective molecular SO₂.</div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const round = (n, d=2) => Number(n).toFixed(d);
+
+  // pKa for sulfurous acid at 25°C
+  const pKa = 1.81;
+
+  function molecularFraction(pH){
+    // fraction of free SO2 that is molecular (H2SO3) = 1 / (1 + 10^(pH - pKa))
+    return 1 / (1 + Math.pow(10, pH - pKa));
+  }
+
+  function compute(){
+    const free = parseFloat($('freeSo2').value) || 0;
+    const ph = parseFloat($('ph').value) || 3.4;
+    const vol = parseFloat($('volume').value) || 1000;
+    const target = parseFloat($('targetMolecular').value) || 0.8;
+    const type = $('wineType').value;
+
+    const f = molecularFraction(ph);
+    const mol = free * f;
+    const pct = f * 100;
+
+    // Update displays
+    $('molDisplay').textContent = round(mol, 2);
+    $('pctDisplay').textContent = round(pct, 1);
+    $('molBar').style.width = Math.min(pct * 3, 100) + '%';
+
+    // Color coding
+    const thresholds = { dry_white:{min:0.7, max:1.1}, red:{min:0.4, max:0.9}, sweet:{min:1.1, max:1.6} };
+    const t = thresholds[type];
+    let status, statusClass;
+    if(mol < t.min){ status='Below target — vulnerable to spoilage'; statusClass='danger'; }
+    else if(mol > t.max){ status='Above typical target — check sensory impact'; statusClass='warn'; }
+    else { status='Within recommended range'; statusClass='good'; }
+
+    $('molDisplay').className = 'big-num ' + statusClass;
+    $('molBar').style.background = 'var(--' + statusClass + ')';
+    $('statusDot').className = 'dot ' + statusClass;
+    $('statusText').textContent = status;
+
+    // Addition recommendation
+    const needFree = target / f;
+    const addFree = Math.max(0, needFree - free);
+    const addTotalAssumed = addFree / 0.55; // rough assumption 55% remains free after addition
+
+    const purity = (parseFloat($('purity').value) || 100) / 100;
+    const doseKmbs = (addTotalAssumed * vol) / (0.57 * purity); // KMBS is ~57% SO2
+    const doseLiquid = (addTotalAssumed * vol) / (60 * purity); // 6% = 60 g/L
+    const doseCampden = (addTotalAssumed * vol) / (0.44 * purity); // 0.44 g SO2 per tablet typical
+
+    $('recText').innerHTML = `To reach ~${round(target,2)} mg/L molecular at pH ${ph}, aim for ~${round(needFree,1)} mg/L free SO₂.<br>You need ≈ +${round(addFree,1)} mg/L free SO₂ (≈ ${round(addTotalAssumed * vol / 1000, 2)} kg total SO₂ equiv for ${vol} L).`;
+    $('doseKmbs').textContent = doseKmbs > 0.01 ? `${round(doseKmbs, 1)} g` : 'None';
+    $('doseLiquid').textContent = doseLiquid > 0.01 ? `${round(doseLiquid, 1)} mL` : 'None';
+    $('doseCampden').textContent = doseCampden > 0.01 ? `${Math.round(doseCampden)} tabs` : 'None';
+
+    return { ph, free, f, mol, pct };
+  }
+
+  // Chart
+  function drawChart(current){
+    const canvas = $('chart');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    const W = rect.width, H = rect.height;
+    const pad = {t:18, r:18, b:32, l:44};
+
+    const free = parseFloat($('sliderFree').value) || 25;
+    $('sliderFreeVal').textContent = free;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = getComputedStyle(canvas).backgroundColor;
+    ctx.fillRect(0, 0, W, H);
+
+    // Axes
+    ctx.strokeStyle = 'rgba(139,148,158,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, pad.t);
+    ctx.lineTo(pad.l, H - pad.b);
+    ctx.lineTo(W - pad.r, H - pad.b);
+    ctx.stroke();
+
+    // Plot molecular % vs pH for current free SO2
+    const x = ph => pad.l + (ph - 2.8) / (4.0 - 2.8) * (W - pad.l - pad.r);
+    const y = pct => H - pad.b - (pct / 15) * (H - pad.t - pad.b);
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'var(--accent)';
+    ctx.lineWidth = 2.5;
+    for(let p = 2.8; p <= 4.0; p += 0.02){
+      const pct = molecularFraction(p) * 100;
+      const px = x(p), py = y(pct);
+      if(p === 2.8) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // Fill under
+    ctx.lineTo(x(4.0), H - pad.b);
+    ctx.lineTo(x(2.8), H - pad.b);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(88,166,255,0.08)';
+    ctx.fill();
+
+    // Current pH line
+    const cph = parseFloat($('ph').value) || 3.4;
+    const cx = x(cph);
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'var(--accent2)';
+    ctx.beginPath();
+    ctx.moveTo(cx, pad.t);
+    ctx.lineTo(cx, H - pad.b);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Current point
+    const cpct = molecularFraction(cph) * 100;
+    const cpx = cx, cpy = y(cpct);
+    ctx.beginPath();
+    ctx.fillStyle = 'var(--accent2)';
+    ctx.arc(cpx, cpy, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Labels
+    ctx.fillStyle = 'var(--muted)';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    for(let p = 2.8; p <= 4.0; p += 0.3){
+      ctx.fillText(p.toFixed(1), x(p), H - 10);
+    }
+    ctx.textAlign = 'right';
+    for(let pct = 0; pct <= 15; pct += 3){
+      ctx.fillText(pct + '%', pad.l - 6, y(pct) + 3);
+    }
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'var(--text)';
+    ctx.fillText(`Molecular % at ${free} mg/L free SO₂`, pad.l, pad.t - 4);
+  }
+
+  function fillRefTable(){
+    const tbody = $('refTable');
+    tbody.innerHTML = '';
+    for(let p = 3.0; p <= 3.8; p += 0.1){
+      const f = molecularFraction(p);
+      const tr = document.createElement('tr');
+      const targets = [0.5, 0.8, 1.0, 1.5];
+      tr.innerHTML = `<td>${p.toFixed(1)}</td>` + targets.map(t => `<td>${Math.round(t / f)}</td>`).join('');
+      tbody.appendChild(tr);
+    }
+  }
+
+  ['freeSo2','ph','volume','targetMolecular','wineType','compound','purity','sliderFree'].forEach(id => {
+    $(id).addEventListener('input', () => { compute(); drawChart(); });
+  });
+  window.addEventListener('resize', () => drawChart());
+
+  compute();
+  fillRefTable();
+  setTimeout(drawChart, 0);
+</script>
+</body>
+</html>
