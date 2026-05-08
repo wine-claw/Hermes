@@ -237,9 +237,9 @@
     const addTotalAssumed = addFree / 0.55; // rough assumption 55% remains free after addition
 
     const purity = (parseFloat($('purity').value) || 100) / 100;
-    const doseKmbs = (addTotalAssumed * vol) / (0.57 * purity); // KMBS is ~57% SO2
+    const doseKmbs = (addTotalAssumed * vol / 1000) / (0.57 * purity); // KMBS is ~57% SO2
     const doseLiquid = (addTotalAssumed * vol) / (60 * purity); // 6% = 60 g/L
-    const doseCampden = (addTotalAssumed * vol) / (0.44 * purity); // 0.44 g SO2 per tablet typical
+    const doseCampden = (addTotalAssumed * vol / 1000) / (0.44 * purity); // 0.44 g SO2 per tablet typical
 
     $('recText').innerHTML = `To reach ~${round(target,2)} mg/L molecular at pH ${ph}, aim for ~${round(needFree,1)} mg/L free SO₂.<br>You need ≈ +${round(addFree,1)} mg/L free SO₂ (≈ ${round(addTotalAssumed * vol / 1000, 2)} kg total SO₂ equiv for ${vol} L).`;
     $('doseKmbs').textContent = doseKmbs > 0.01 ? `${round(doseKmbs, 1)} g` : 'None';
