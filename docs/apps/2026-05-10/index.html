@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vineyard GDD Tracker — Hermes</title>
+<style>
+  :root{ --bg:#0b0f14; --surface:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#a371f7; --good:#3fb950; --warn:#d29922; --danger:#f85149; }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:720px; margin:0 auto; padding:1rem; }
+  h1{ font-size:clamp(1.3rem,5vw,1.7rem); margin-bottom:0.25rem; }
+  .sub{ color:var(--muted); font-size:0.9rem; margin-bottom:1.25rem; }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1rem; margin-bottom:1rem; }
+  .card h2{ font-size:1rem; color:var(--accent); margin-bottom:0.6rem; }
+  .row{ display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:0.6rem; align-items:end; }
+  .field{ flex:1; min-width:120px; }
+  .field label{ display:block; font-size:0.78rem; color:var(--muted); margin-bottom:0.25rem; }
+  .field input, .field select{ width:100%; background:#0b0f14; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:0.55rem 0.6rem; font-size:0.95rem; }
+  .field input:focus, .field select:focus{ outline:none; border-color:var(--accent); }
+  button{ background:var(--accent); color:#fff; border:none; border-radius:8px; padding:0.6rem 1rem; font-size:0.9rem; font-weight:600; cursor:pointer; touch-action:manipulation; }
+  button.secondary{ background:transparent; border:1px solid var(--border); color:var(--text); }
+  button:active{ transform:translateY(1px); }
+  .tags{ display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.6rem; }
+  .tag{ background:#0b0f14; border:1px solid var(--border); border-radius:999px; padding:0.25rem 0.6rem; font-size:0.78rem; color:var(--muted); cursor:pointer; }
+  .tag.active{ border-color:var(--accent); color:var(--accent); background:rgba(88,166,255,0.08); }
+  table{ width:100%; border-collapse:collapse; font-size:0.85rem; }
+  th, td{ text-align:left; padding:0.45rem 0.35rem; border-bottom:1px solid var(--border); }
+  th{ color:var(--muted); font-weight:500; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; }
+  td input{ width:70px; background:#0b0f14; border:1px solid var(--border); color:var(--text); border-radius:6px; padding:0.35rem 0.4rem; font-size:0.85rem; }
+  .right{ text-align:right; }
+  .del{ color:var(--danger); cursor:pointer; font-size:0.8rem; }
+  .stats{ display:grid; grid-template-columns:repeat(2,1fr); gap:0.6rem; }
+  @media(min-width:520px){ .stats{ grid-template-columns:repeat(4,1fr); } }
+  .stat{ background:#0b0f14; border:1px solid var(--border); border-radius:10px; padding:0.7rem; text-align:center; }
+  .stat .num{ font-size:1.35rem; font-weight:700; color:var(--accent); }
+  .stat .lbl{ font-size:0.72rem; color:var(--muted); margin-top:0.15rem; }
+  .stages{ margin-top:0.8rem; }
+  .stage{ display:flex; align-items:center; gap:0.6rem; margin-bottom:0.5rem; }
+  .stage-name{ width:110px; font-size:0.82rem; color:var(--muted); }
+  .stage-bar-wrap{ flex:1; height:18px; background:#0b0f14; border-radius:999px; overflow:hidden; border:1px solid var(--border); }
+  .stage-bar{ height:100%; border-radius:999px; width:0%; transition:width .4s ease; }
+  .stage-val{ width:50px; text-align:right; font-size:0.78rem; color:var(--muted); }
+  .chart-wrap{ position:relative; height:220px; margin-top:0.6rem; }
+  canvas{ width:100%; height:100%; }
+  .empty{ color:var(--muted); font-size:0.85rem; text-align:center; padding:1.2rem; }
+  .hint{ font-size:0.78rem; color:var(--muted); margin-top:0.4rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🍇 Vineyard GDD Tracker</h1>
+  <p class="sub">Growing Degree-Day calculator for grapevine phenology & harvest timing</p>
+
+  <div class="card">
+    <h2>Settings</h2>
+    <div class="row">
+      <div class="field">
+        <label>Base temp (°C)</label>
+        <input id="base" type="number" value="10" step="0.5">
+      </div>
+      <div class="field">
+        <label>Variety preset</label>
+        <select id="variety">
+          <option value="custom">Custom / Generic</option>
+          <option value="cs">Cabernet Sauvignon</option>
+          <option value="merlot">Merlot</option>
+          <option value="pinot">Pinot Noir</option>
+          <option value="chardonnay">Chardonnay</option>
+          <option value="riesling">Riesling</option>
+          <option value="syrah">Syrah / Shiraz</option>
+          <option value="sauvblanc">Sauvignon Blanc</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint">GDD = Σ((Tmax + Tmin)/2 − Tbase), reset to 0 on days below base.</div>
+  </div>
+
+  <div class="card">
+    <h2>Add daily temperatures</h2>
+    <div class="row">
+      <div class="field">
+        <label>Date</label>
+        <input id="dDate" type="date">
+      </div>
+      <div class="field">
+        <label>Min °C</label>
+        <input id="dMin" type="number" step="0.1" placeholder="8.5">
+      </div>
+      <div class="field">
+        <label>Max °C</label>
+        <input id="dMax" type="number" step="0.1" placeholder="22.0">
+      </div>
+      <button id="btnAdd">Add day</button>
+    </div>
+    <div class="tags" id="quickTags"></div>
+    <div class="hint">Tip: Use the quick-fill buttons above to simulate a typical season, then edit individual days.</div>
+  </div>
+
+  <div class="card" id="dataCard" style="display:none">
+    <h2>Daily data</h2>
+    <div style="max-height:260px; overflow:auto;">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Min °C</th><th>Max °C</th><th class="right">Daily GDD</th><th class="right">Cumul. GDD</th><th></th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:0.6rem;">
+      <button class="secondary" id="btnClear">Clear all</button>
+    </div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <h2>Season summary</h2>
+    <div class="stats">
+      <div class="stat"><div class="num" id="sTotal">0</div><div class="lbl">Total GDD</div></div>
+      <div class="stat"><div class="num" id="sDays">0</div><div class="lbl">Active days</div></div>
+      <div class="stat"><div class="num" id="sAvg">0</div><div class="lbl">Avg daily GDD</div></div>
+      <div class="stat"><div class="num" id="sPeak">0</div><div class="lbl">Peak daily GDD</div></div>
+    </div>
+    <div class="stages" id="stages"></div>
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="card empty" id="emptyCard">
+    No data yet. Add temperatures or use quick-fill to see GDD accumulation and phenology stages.
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const varietyTargets = {
+  custom: { budBreak: 200, flowering: 700, veraison: 1200, harvest: 1900 },
+  cs: { budBreak: 250, flowering: 800, veraison: 1400, harvest: 2200 },
+  merlot: { budBreak: 230, flowering: 750, veraison: 1300, harvest: 2100 },
+  pinot: { budBreak: 180, flowering: 600, veraison: 1100, harvest: 1700 },
+  chardonnay: { budBreak: 220, flowering: 750, veraison: 1250, harvest: 2000 },
+  riesling: { budBreak: 200, flowering: 650, veraison: 1150, harvest: 1800 },
+  syrah: { budBreak: 260, flowering: 850, veraison: 1450, harvest: 2300 },
+  sauvblanc: { budBreak: 210, flowering: 700, veraison: 1200, harvest: 1900 },
+};
+
+let data = JSON.parse(localStorage.getItem('gdd_data_v1') || '[]');
+
+function todayISO(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function setToday(){ $('dDate').value = todayISO(); }
+setToday();
+
+function save(){ localStorage.setItem('gdd_data_v1', JSON.stringify(data)); }
+
+function fmt(n){ return Number(n).toFixed(1); }
+
+function gddDay(min, max, base){
+  const avg = (parseFloat(min) + parseFloat(max)) / 2;
+  return Math.max(0, avg - parseFloat(base));
+}
+
+function compute(){
+  const base = parseFloat($('base').value) || 10;
+  let cum = 0, peak = 0, active = 0;
+  const out = data.map((r, i) => {
+    const daily = gddDay(r.min, r.max, base);
+    if (daily > 0) active++;
+    cum += daily;
+    if (daily > peak) peak = daily;
+    return { ...r, daily, cum, idx: i };
+  });
+  return { rows: out, total: cum, active, peak, avg: active ? cum / active : 0 };
+}
+
+function renderTable(){
+  const { rows } = compute();
+  const tb = $('tbody');
+  if (!rows.length){ $('dataCard').style.display='none'; return; }
+  $('dataCard').style.display='';
+  tb.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.date}</td>
+      <td><input type="number" step="0.1" value="${fmt(r.min)}" data-i="${r.idx}" data-f="min"></td>
+      <td><input type="number" step="0.1" value="${fmt(r.max)}" data-i="${r.idx}" data-f="max"></td>
+      <td class="right">${fmt(r.daily)}</td>
+      <td class="right">${fmt(r.cum)}</td>
+      <td class="right del" data-del="${r.idx}">✕</td>
+    </tr>
+  `).join('');
+  tb.querySelectorAll('input').forEach(el => {
+    el.addEventListener('change', e => {
+      const i = +e.target.dataset.i;
+      const f = e.target.dataset.f;
+      data[i][f] = parseFloat(e.target.value) || 0;
+      save(); refresh();
+    });
+  });
+  tb.querySelectorAll('[data-del]').forEach(el => {
+    el.addEventListener('click', e => {
+      const i = +e.target.dataset.del;
+      data.splice(i, 1);
+      save(); refresh();
+    });
+  });
+}
+
+function renderStats(){
+  const { total, active, peak, avg } = compute();
+  const v = $('variety').value;
+  const t = varietyTargets[v] || varietyTargets.custom;
+  $('sTotal').textContent = fmt(total);
+  $('sDays').textContent = active;
+  $('sAvg').textContent = fmt(avg);
+  $('sPeak').textContent = fmt(peak);
+
+  const stages = [
+    { key:'budBreak', label:'Bud break', target:t.budBreak, color:'var(--accent)' },
+    { key:'flowering', label:'Flowering', target:t.flowering, color:'var(--accent2)' },
+    { key:'veraison', label:'Veraison', target:t.veraison, color:'var(--warn)' },
+    { key:'harvest', label:'Harvest', target:t.harvest, color:'var(--good)' },
+  ];
+
+  $('stages').innerHTML = stages.map(s => {
+    const pct = Math.min(100, Math.max(0, (total / s.target) * 100));
+    const hit = total >= s.target;
+    return `
+      <div class="stage">
+        <div class="stage-name">${s.label}</div>
+        <div class="stage-bar-wrap"><div class="stage-bar" style="width:${pct}%; background:${s.color}; opacity:${hit?1:0.7}"></div></div>
+        <div class="stage-val">${fmt(total)}/${s.target}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function drawChart(){
+  const { rows } = compute();
+  const cvs = $('chart');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const rect = cvs.getBoundingClientRect();
+  cvs.width = rect.width * dpr; cvs.height = rect.height * dpr;
+  const ctx = cvs.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0,0,W,H);
+  if (rows.length < 2) return;
+
+  const maxCum = Math.max(...rows.map(r=>r.cum), 1);
+  const pad = {l:36,r:12,t:18,b:28};
+  const graphW = W - pad.l - pad.r;
+  const graphH = H - pad.t - pad.b;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(139,148,158,0.15)';
+  ctx.lineWidth = 1;
+  for (let i=0;i<=4;i++){
+    const y = pad.t + (graphH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+    const val = fmt(maxCum * (1 - i/4));
+    ctx.fillStyle = '#8b949e'; ctx.font = '11px sans-serif'; ctx.textAlign='right'; ctx.fillText(val, pad.l-6, y+3);
+  }
+
+  // Area under curve
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t+graphH);
+  rows.forEach((r,i) => {
+    const x = pad.l + (i/(rows.length-1))*graphW;
+    const y = pad.t + graphH - (r.cum/maxCum)*graphH;
+    ctx.lineTo(x,y);
+  });
+  ctx.lineTo(pad.l + graphW, pad.t+graphH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(88,166,255,0.08)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  rows.forEach((r,i) => {
+    const x = pad.l + (i/(rows.length-1))*graphW;
+    const y = pad.t + graphH - (r.cum/maxCum)*graphH;
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = 'var(--accent)'; ctx.lineWidth = 2; ctx.stroke();
+
+  // X labels (first, middle, last)
+  ctx.fillStyle = '#8b949e'; ctx.font = '11px sans-serif'; ctx.textAlign='center';
+  [0, Math.floor((rows.length-1)/2), rows.length-1].forEach(idx => {
+    const x = pad.l + (idx/(rows.length-1))*graphW;
+    ctx.fillText(rows[idx].date.slice(5), x, H-6);
+  });
+}
+
+function refresh(){
+  renderTable();
+  const { rows } = compute();
+  if (rows.length){
+    $('emptyCard').style.display='none';
+    $('resultCard').style.display='';
+    renderStats();
+    drawChart();
+  } else {
+    $('emptyCard').style.display='';
+    $('resultCard').style.display='none';
+  }
+}
+
+function addDay(date, min, max){
+  if (!date) return;
+  data.push({ date, min: parseFloat(min)||0, max: parseFloat(max)||0 });
+  data.sort((a,b)=>a.date.localeCompare(b.date));
+  save(); refresh();
+}
+
+$('btnAdd').addEventListener('click', () => {
+  addDay($('dDate').value, $('dMin').value, $('dMax').value);
+  setToday(); $('dMin').value=''; $('dMax').value='';
+});
+
+$('btnClear').addEventListener('click', () => { data=[]; save(); refresh(); });
+
+// Quick-fill presets
+const quickPresets = [
+  {label:'Simulate season (cool)', temps:[
+    ['04-01',3,12],['04-15',5,14],['05-01',7,17],['05-15',9,20],['06-01',11,23],['06-15',13,25],['07-01',15,28],['07-15',16,30],['08-01',16,29],['08-15',14,26],['09-01',12,22],['09-15',9,18]
+  ]},
+  {label:'Simulate season (warm)', temps:[
+    ['04-01',6,15],['04-15',8,18],['05-01',10,21],['05-15',12,24],['06-01',14,27],['06-15',16,30],['07-01',18,33],['07-15',19,35],['08-01',19,34],['08-15',17,31],['09-01',15,27],['09-15',12,23]
+  ]},
+];
+
+function applyPreset(preset){
+  const year = new Date().getFullYear();
+  preset.temps.forEach(([md,mn,mx]) => addDay(`${year}-${md}`, mn, mx));
+}
+
+$('quickTags').innerHTML = quickPresets.map((p,i)=>`<span class="tag" data-p="${i}">${p.label}</span>`).join('');
+$('quickTags').querySelectorAll('.tag').forEach(el => {
+  el.addEventListener('click', e => {
+    const idx = +e.target.dataset.p;
+    applyPreset(quickPresets[idx]);
+    // visual feedback
+    e.target.classList.add('active');
+    setTimeout(()=>e.target.classList.remove('active'), 400);
+  });
+});
+
+window.addEventListener('resize', drawChart);
+
+refresh();
+</script>
+</body>
+</html>
