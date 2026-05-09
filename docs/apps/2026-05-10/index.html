@@ -210,7 +210,6 @@
 <div class="footer">Hermes Agent · Wine Research Institute · Interactive Oenology</div>
 
 <script>
-/* ================== WINE FERMENTATION ECOSYSTEM SIMULATOR ================== */
 (function(){
   'use strict';
 
@@ -233,10 +232,10 @@
   window.addEventListener('resize', resize);
 
   /* ---- Simulation State ---- */
-  const MAX_PARTICLES = 2500;
-  const MAX_BUBBLES = 400;
-  const MAX_AROMATICS = 120;
-  const GRID_W = 40, GRID_H = 20;
+  const MAX_PARTICLES = 2200;
+  const MAX_BUBBLES = 300;
+  const MAX_AROMATICS = 80;
+  const GRID_W = 30, GRID_H = 15;
   let particles = [];
   let bubbles = [];
   let aromatics = [];
@@ -276,7 +275,6 @@
     for (let gy = 0; gy < GRID_H; gy++) {
       const row = [];
       for (let gx = 0; gx < GRID_W; gx++) {
-        // Higher sugar at bottom, slight random variation
         const base = initialSugar * (0.3 + 0.7 * (gy / (GRID_H - 1)));
         row.push(base + rand(20));
       }
@@ -312,7 +310,7 @@
         age: rand(50),
         divisionCooldown: rand(30),
         health: 1.0,
-        size: randRange(1.5, 2.8),
+        size: randRange(2.2, 4.0),
         glow: rand(0.5),
       });
     }
@@ -324,11 +322,11 @@
     history.ethanol = []; history.glycerol = []; history.esters = []; history.higherAlcohols = [];
     capOpacity = 1.0; punchDownCooldown = 0;
     initSugarGrid();
-    spawnYeast(400);
+    spawnYeast(320);
   }
 
   initSugarGrid();
-  spawnYeast(400);
+  spawnYeast(320);
 
   /* ---- Physics & Update ---- */
   function updateYeast(dt) {
@@ -341,15 +339,12 @@
       const p = particles[i];
       p.age += dt;
 
-      // Movement
       const sugar = getSugarAt(p.x, p.y);
       const sugarNorm = clamp(sugar / initialSugar, 0, 1);
 
-      // Brownian-ish + chemotaxis toward sugar
       p.vx += randRange(-0.3, 0.3) + (rand() - 0.5) * 0.1;
-      p.vy += randRange(-0.3, 0.3) + 0.05; // slight buoyancy
+      p.vy += randRange(-0.3, 0.3) + 0.05;
 
-      // Dampen
       p.vx *= 0.92; p.vy *= 0.92;
 
       p.x += p.vx; p.y += p.vy;
@@ -358,14 +353,12 @@
       if (p.y < 0) { p.y = 0; p.vy *= -0.5; }
       if (p.y > H) { p.y = H; p.vy *= -0.5; }
 
-      // State transitions
       if (p.state === YEAST_DORMANT) {
         if (sugar > 5 && temp > 12 && p.age > 10) {
           p.state = YEAST_ACTIVE;
           p.glow = 1.0;
         }
       } else if (p.state === YEAST_ACTIVE) {
-        // Metabolism
         const consume = 0.3 * growthRate * sugarNorm;
         consumeSugar(p.x, p.y, consume);
         ethanol += consume * 0.018;
@@ -373,12 +366,10 @@
         if (Math.random() < 0.0008 * sugarNorm) esters += 0.01;
         if (Math.random() < 0.0003 * sugarNorm) higherAlcohols += 0.01;
 
-        // CO2 bubbles
         if (Math.random() < 0.08 * growthRate * sugarNorm) {
           spawnBubble(p.x, p.y);
         }
 
-        // Health
         p.health -= 0.0008 + ethanolStress * 0.002 + tempStress * 0.001;
         if (p.health <= 0) {
           p.state = YEAST_DEAD;
@@ -386,7 +377,6 @@
           p.state = YEAST_STRESSED;
         }
 
-        // Division
         if (p.divisionCooldown <= 0 && particles.length < MAX_PARTICLES && sugar > 10 && p.health > 0.4) {
           p.divisionCooldown = randRange(20, 40) / Math.max(growthRate, 0.1);
           particles.push({
@@ -402,10 +392,8 @@
         }
         p.divisionCooldown -= dt;
 
-        // Aromatics release occasionally
         if (Math.random() < 0.005) spawnAromatic(p.x, p.y);
       } else if (p.state === YEAST_STRESSED) {
-        // Slow metabolism, more off-flavors
         const consume = 0.05 * sugarNorm;
         consumeSugar(p.x, p.y, consume);
         ethanol += consume * 0.015;
@@ -419,7 +407,7 @@
         p.health -= 0.002;
       } else if (p.state === YEAST_DEAD) {
         p.vx *= 0.5; p.vy *= 0.5;
-        p.y += 0.1; // sinking
+        p.y += 0.1;
         if (p.y > H - 2) { p.y = H - 2; p.vy = 0; }
         if (p.age > 200 && Math.random() < 0.001) {
           particles.splice(i, 1);
@@ -437,7 +425,7 @@
       x: x, y: y,
       vy: randRange(-1.5, -3),
       vx: randRange(-0.3, 0.3),
-      size: randRange(1, 3.5),
+      size: randRange(1.5, 4.5),
       life: randRange(60, 150),
       maxLife: 150,
       wobblePhase: rand(Math.PI * 2),
@@ -446,7 +434,7 @@
 
   function spawnAromatic(x, y) {
     if (aromatics.length >= MAX_AROMATICS) return;
-    const hue = randRange(30, 70); // golden-green aromatics
+    const hue = randRange(30, 70);
     aromatics.push({
       x: x, y: y,
       vx: randRange(-0.5, 0.5),
@@ -454,7 +442,7 @@
       life: randRange(40, 90),
       maxLife: 90,
       hue: hue,
-      size: randRange(1.5, 3),
+      size: randRange(2, 4),
     });
   }
 
@@ -465,7 +453,6 @@
       b.x += b.vx + Math.sin(time * 0.05 + b.wobblePhase) * 0.3;
       b.life -= dt;
       if (b.y < 0 || b.life <= 0) {
-        // At surface, may release aromatic if cap is punched down
         if (capOpacity < 0.7 && Math.random() < 0.2) spawnAromatic(b.x, 10);
         bubbles.splice(i, 1);
       }
@@ -500,7 +487,7 @@
     for (let gy = 0; gy < GRID_H; gy++) {
       for (let gx = 0; gx < GRID_W; gx++) {
         const sugar = sugarGrid[gy][gx];
-        const alpha = clamp(sugar / initialSugar, 0, 0.25);
+        const alpha = clamp(sugar / initialSugar, 0, 0.22);
         if (alpha < 0.01) continue;
         ctx.fillStyle = `rgba(200, 180, 140, ${alpha})`;
         ctx.fillRect(gx * cellW, gy * cellH, cellW + 1, cellH + 1);
@@ -510,62 +497,81 @@
 
   function drawParticles() {
     for (const p of particles) {
-      let r, g, b, a;
+      let r, g, b, a, glowR;
       if (p.state === YEAST_ACTIVE) {
-        r = 240; g = 216; b = 120;
-        a = 0.65 + p.glow * 0.35;
+        r = 250; g = 225; b = 100; a = 0.9; glowR = 8;
       } else if (p.state === YEAST_STRESSED) {
-        r = 255; g = 107; b = 74;
-        a = 0.6;
+        r = 255; g = 90; b = 60; a = 0.85; glowR = 6;
       } else if (p.state === YEAST_DORMANT) {
-        r = 160; g = 144; b = 96;
-        a = 0.4;
+        r = 170; g = 155; b = 110; a = 0.5; glowR = 4;
       } else {
-        r = 74; g = 58; b = 48;
-        a = 0.35;
+        r = 90; g = 72; b = 58; a = 0.45; glowR = 3;
       }
+
+      const s = p.size;
+      // Outer soft glow
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, s + glowR, 0, Math.PI * 2);
+      const glowAlpha = p.state === YEAST_ACTIVE ? 0.15 * p.glow : (p.state === YEAST_STRESSED ? 0.12 : 0.06);
+      ctx.fillStyle = `rgba(${r},${g},${b},${glowAlpha})`;
+      ctx.fill();
+
+      // Mid glow
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, s + glowR * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},${a * 0.4})`;
+      ctx.fill();
+
+      // Core bright body
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
       ctx.fill();
 
-      // Glow ring for active
-      if (p.state === YEAST_ACTIVE && p.glow > 0.5) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${r},${g},${b},${0.08 * p.glow})`;
-        ctx.fill();
-      }
+      // Bright specular highlight
+      ctx.beginPath();
+      ctx.arc(p.x - s * 0.25, p.y - s * 0.3, s * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${a * 0.5})`;
+      ctx.fill();
     }
   }
 
   function drawBubbles() {
     for (const b of bubbles) {
-      const a = clamp(b.life / b.maxLife, 0, 0.6);
+      const a = clamp(b.life / b.maxLife, 0, 0.7);
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size + 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${a * 0.15})`;
+      ctx.fill();
+      // Body
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,255,255,${a})`;
+      ctx.fillStyle = `rgba(255,255,255,${a * 0.55})`;
       ctx.fill();
-      // highlight
+      // Highlight
       ctx.beginPath();
-      ctx.arc(b.x - b.size * 0.25, b.y - b.size * 0.25, b.size * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,255,255,${a * 0.6})`;
+      ctx.arc(b.x - b.size * 0.3, b.y - b.size * 0.35, b.size * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${a * 0.9})`;
       ctx.fill();
     }
   }
 
   function drawAromatics() {
     for (const a of aromatics) {
-      const alpha = clamp(a.life / a.maxLife, 0, 0.8);
+      const alpha = clamp(a.life / a.maxLife, 0, 0.9);
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, a.size + 2, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${a.hue}, 90%, 70%, ${alpha * 0.2})`;
+      ctx.fill();
       ctx.beginPath();
       ctx.arc(a.x, a.y, a.size, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${a.hue}, 80%, 65%, ${alpha})`;
+      ctx.fillStyle = `hsla(${a.hue}, 90%, 70%, ${alpha})`;
       ctx.fill();
     }
   }
 
   function drawBackground() {
-    // Deep wine must color
     const grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#1a0a14');
     grad.addColorStop(0.5, '#240e1c');
@@ -573,13 +579,13 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // Subtle light shafts
+    // Warm light shafts
     const t = time * 0.3;
     for (let i = 0; i < 3; i++) {
       const x = (W * 0.2) + i * (W * 0.3) + Math.sin(t * 0.02 + i) * 40;
       const grad2 = ctx.createLinearGradient(x, 0, x + 60, H);
-      grad2.addColorStop(0, 'rgba(200, 180, 140, 0.03)');
-      grad2.addColorStop(0.5, 'rgba(200, 180, 140, 0.01)');
+      grad2.addColorStop(0, 'rgba(200, 180, 140, 0.04)');
+      grad2.addColorStop(0.5, 'rgba(200, 180, 140, 0.015)');
       grad2.addColorStop(1, 'rgba(200, 180, 140, 0)');
       ctx.fillStyle = grad2;
       ctx.beginPath();
@@ -611,7 +617,6 @@
     if (w <= 0 || h <= 0) return;
     c.clearRect(0, 0, w, h);
 
-    // Background grid
     c.strokeStyle = 'rgba(255,255,255,0.04)';
     c.lineWidth = 1;
     for (let i = 1; i < 5; i++) {
@@ -638,8 +643,6 @@
         else c.lineTo(x, y);
       }
       c.stroke();
-
-      // Glow under line
       c.lineTo(w, h); c.lineTo(0, h);
       c.fillStyle = ds.color + '10';
       c.fill();
@@ -683,12 +686,10 @@
   function punchDown(x, y) {
     capOpacity = 0.1;
     punchDownCooldown = 180;
-    // Burst of oxygen + mixing
     for (let i = 0; i < 20; i++) {
       spawnBubble(x + randRange(-40, 40), y + randRange(-40, 40));
       spawnAromatic(x + randRange(-40, 40), y + randRange(-40, 40));
     }
-    // Mix sugar grid
     const cx = Math.floor(clamp(x / W * GRID_W, 0, GRID_W - 1));
     const cy = Math.floor(clamp(y / H * GRID_H, 0, GRID_H - 1));
     const radius = 6;
@@ -699,7 +700,6 @@
         }
       }
     }
-    // Wake dormant yeast
     for (const p of particles) {
       if (p.state === YEAST_DORMANT && Math.hypot(p.x - x, p.y - y) < 80) {
         p.state = YEAST_ACTIVE;
