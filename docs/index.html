@@ -57,7 +57,7 @@
 <main>
   <section class="intro">
     <h2>About this gallery</h2>
-    <p>Every day at 1am a 30-second video is generated, and at 4am an interactive app is built — both on topics spanning vineyards, wineries, and technology. Everything is sorted newest-first.</p>
+    <p>Every day at 1am a 30-second video is generated, and at 4am an interactive app is built — both on topics spanning vineyards, wineries, and technology. Multiple items per day are supported.</p>
   </section>
   <div id="app-grid"></div>
 </main>
@@ -66,14 +66,14 @@
 </footer>
 <script>
 const VIDEOS = [
-  {date: "2026-05-10", title: "Fermentation Tank", description: "30s portrait macro inside a fermentation tank.", url: "./videos/2026-05-10/video.mp4"},
-  {date: "2026-05-10", title: "Vineyard Sunrise", description: "30s procedural animation of a vineyard at dawn.", url: "./videos/2026-05-10/video.mp4"}
+  {date: "2026-05-10", title: "Fermentation Tank", description: "30s portrait macro inside a fermentation tank.", url: "./videos/2026-05-10/video-2.mp4"},
+  {date: "2026-05-10", title: "Vineyard Sunrise", description: "30s procedural animation of a vineyard at dawn.", url: "./videos/2026-05-10/video-1.mp4"}
 ];
 const APPS = [
   {date: "2026-05-10", title: "Wine Tartrate Crystal Growth", description: "Interactive potassium bitartrate crystallisation simulator with molecular dynamics, solubility trajectories, and stability prediction.", url: "./apps/2026-05-10/tartrate.html"},
-  {date: "2026-05-10", title: "Wine Fermentation Ecosystem", description: "Particle-based yeast population simulator with compound evolution, cap punching, and aromatic release.", url: "./apps/2026-05-10/index.html"},
-  {date: "2026-05-09", title: "SO₂ Manager", description: "Molecular sulfur dioxide calculator & addition planner for winemakers.", url: "./apps/2026-05-09/index.html"},
-  {date: "2026-05-08", title: "Fermentation Kinetics Simulator", description: "Interactive model of sugar-to-ethanol conversion for red or white must.", url: "./apps/2026-05-08/index.html"}
+  {date: "2026-05-10", title: "Wine Fermentation Ecosystem", description: "Particle-based yeast population simulator with compound evolution, cap punching, and aromatic release.", url: "./apps/2026-05-10/app-1.html"},
+  {date: "2026-05-09", title: "SO₂ Manager", description: "Molecular sulfur dioxide calculator & addition planner for winemakers.", url: "./apps/2026-05-09/app-1.html"},
+  {date: "2026-05-08", title: "Fermentation Kinetics Simulator", description: "Interactive model of sugar-to-ethanol conversion for red or white must.", url: "./apps/2026-05-08/app-1.html"}
 ];
 </script>
 <script>
@@ -82,7 +82,13 @@ function render(){
   const items=[
     ...VIDEOS.map(v=>({...v,type:'video'})),
     ...APPS.map(a=>({...a,type:'app'}))
-  ].sort((a,b)=>b.date.localeCompare(a.date)||(a.type==='video'?-1:1));
+  ].sort((a,b)=>{
+    // Primary: date descending
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    // Secondary: video before app on same date
+    if (a.type !== b.type) return a.type==='video' ? -1 : 1;
+    return 0;
+  });
 
   if(!items.length){
     grid.innerHTML='<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:2rem;">Nothing here yet — check back tomorrow!</div>';
@@ -104,7 +110,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById('last-updated').textContent="2026-05-11";
+document.getElementById('last-updated').textContent="2026-05-10";
 render();
 </script>
 </body>
