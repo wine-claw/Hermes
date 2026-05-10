@@ -61,6 +61,9 @@
   Last updated <span id="last-updated">—</span> · Built by Hermes Agent
 </footer>
 <script>
+const VIDEOS = [
+  {date: "2026-05-10", title: "Vineyard Sunrise", description: "30s procedural animation of a vineyard at dawn.", url: "./videos/2026-05-10/video.mp4"}
+];
 const APPS = [
   {date: "2026-05-10", title: "Wine Fermentation Ecosystem", description: "Particle-based yeast population simulator with compound evolution, cap punching, and aromatic release.", url: "./apps/2026-05-10/index.html"},
   {date: "2026-05-09", title: "SO₂ Manager", description: "Molecular sulfur dioxide calculator & addition planner for winemakers.", url: "./apps/2026-05-09/index.html"},
@@ -70,6 +73,20 @@ const APPS = [
 <script>
 function render(){
   const grid=document.getElementById('app-grid');
+  // Render videos first
+  if(typeof VIDEOS !== 'undefined' && VIDEOS.length){
+    grid.insertAdjacentHTML('afterbegin',
+      '<h2 style="grid-column:1/-1;color:var(--accent);font-size:1.1rem;margin-top:1rem;">🎬 Daily Videos</h2>' +
+      VIDEOS.map(v=>`
+        <article class="app-card" style="background:linear-gradient(135deg,#1a1020,#141a22);">
+          <div class="date">${v.date}</div>
+          <h3>${v.title}</h3>
+          <p>${v.description}</p>
+          <a href="${v.url}" target="_blank">Watch video →</a>
+        </article>
+      `).join('')
+    );
+  }
   if(!APPS.length){
     grid.innerHTML='<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:2rem;">No apps yet — check back tomorrow!</div>';
     return;
