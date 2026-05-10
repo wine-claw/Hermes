@@ -726,7 +726,33 @@ function simStep() {
   
   // Grow crystals
   crystals.forEach(c => c.grow(sat, dt));
-  
+
+  // Merge crystals that grow into each other
+  if (crystals.length > 1) {
+    const mergeDist = 8; // px world-space overlap threshold
+    const merged = new Set();
+    for (let i = 0; i < crystals.length; i++) {
+      if (merged.has(i)) continue;
+      const A = crystals[i];
+      for (let j = i + 1; j < crystals.length; j++) {
+        if (merged.has(j)) continue;
+        const B = crystals[j];
+        const dx = A.x - B.x, dy = A.y - B.y;
+        const d = Math.hypot(dx, dy);
+        // merge when crystals overlap
+        if (d < A.maxRadius + B.maxRadius + mergeDist) {
+          // absorb B into A
+          A.mass += B.mass;
+          A.maxRadius = Math.max(A.maxRadius, B.maxRadius + d * 0.5);
+          merged.add(j);
+        }
+      }
+    }
+    if (merged.size > 0) {
+      crystals = crystals.filter((_, idx) => !merged.has(idx));
+    }
+  }
+
   // Spontaneous nucleation when highly supersaturated
   if (sat > 1.3 && Math.random() < (sat - 1.3) * 0.003) {
     seedCrystal();

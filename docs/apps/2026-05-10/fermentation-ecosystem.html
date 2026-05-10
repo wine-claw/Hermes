@@ -264,10 +264,21 @@
   const YEAST_DEAD = 3;
 
   /* ---- Helpers ---- */
-  function rand(n) { return Math.random() * n; }
+  function rand(n) { return n === undefined ? Math.random() : Math.random() * n; }
   function randRange(a, b) { return a + Math.random() * (b - a); }
-  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function clamp(v, lo, hi) {
+    if (!isFinite(v)) return isFinite(lo) ? lo : 0;
+    return Math.max(lo, Math.min(hi, v));
+  }
   function lerp(a, b, t) { return a + (b - a) * t; }
+  // NaN recovery for all core state variables
+  function sanitizeState() {
+    if (!isFinite(ethanol))     { ethanol     = 0; }
+    if (!isFinite(glycerol))    { glycerol    = 0; }
+    if (!isFinite(esters))      { esters      = 0; }
+    if (!isFinite(higherAlcohols)) { higherAlcohols = 0; }
+    if (!isFinite(time))        { time        = 0; }
+  }
 
   /* ---- Initialization ---- */
   function initSugarGrid() {
@@ -599,10 +610,10 @@
 
   /* ---- Charts ---- */
   function pushHistory() {
-    history.ethanol.push(ethanol);
-    history.glycerol.push(glycerol);
-    history.esters.push(esters);
-    history.higherAlcohols.push(higherAlcohols);
+    history.ethanol.push(isFinite(ethanol) ? ethanol : 0);
+    history.glycerol.push(isFinite(glycerol) ? glycerol : 0);
+    history.esters.push(isFinite(esters) ? (esters || 0) : 0);
+    history.higherAlcohols.push(isFinite(higherAlcohols) ? (higherAlcohols || 0) : 0);
     if (history.ethanol.length > HISTORY_LEN) {
       history.ethanol.shift();
       history.glycerol.shift();
@@ -676,10 +687,10 @@
     pb.textContent = phase + ' Phase';
     pb.className = 'phase-indicator ' + phaseClass;
 
-    document.getElementById('timeText').textContent = time.toFixed(1);
+    document.getElementById('timeText').textContent = (isFinite(time) ? time : 0).toFixed(1);
     document.getElementById('sugarText').textContent = avgSugar().toFixed(1);
     document.getElementById('tempText').textContent = temp.toFixed(1);
-    document.getElementById('ethanolText').textContent = ethanol.toFixed(2);
+    document.getElementById('ethanolText').textContent = (isFinite(ethanol) ? ethanol : 0).toFixed(2);
   }
 
   /* ---- Interaction ---- */
@@ -746,6 +757,7 @@
     time += dt * 0.05;
 
     updateYeast(dt);
+    sanitizeState();
     updateBubbles(dt);
     updateAromatics(dt);
     updateCap();
