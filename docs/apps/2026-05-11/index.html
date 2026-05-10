@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Tartrate Crystal Growth Simulator</title>
+<style>
+  :root {
+    --bg: #07050a;
+    --panel: #121018;
+    --panel2: #1c1625;
+    --accent: #7ec8e3;
+    --accent2: #d4a0e3;
+    --accent3: #e3c07e;
+    --text: #e8e0f0;
+    --text2: #9e90a8;
+    --crystal: rgba(200, 230, 255, 0.85);
+    --crystal-edge: rgba(255, 255, 255, 0.95);
+    --wine: rgba(80, 15, 40, 0.6);
+    --cold: #7ec8e3;
+    --warm: #e3a07e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; overflow-x: hidden; }
+  
+  .disclaimer-banner {
+    position: sticky; top: 0; z-index: 100;
+    background: linear-gradient(90deg, #3a1a2a, #5a2a4a, #3a1a2a);
+    color: #ffcccc;
+    padding: 8px 16px;
+    font-size: 13px;
+    text-align: center;
+    border-bottom: 1px solid #8b1a3c;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  
+  .hero {
+    text-align: center;
+    padding: 30px 20px 10px;
+    background: radial-gradient(ellipse at center top, #1a1018 0%, var(--bg) 70%);
+  }
+  .hero h1 { margin: 0; font-size: 26px; font-weight: 300; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; }
+  .hero p { margin: 8px 0 0; color: var(--text2); font-size: 14px; letter-spacing: 1px; }
+  
+  .layout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 16px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+  
+  .sim-container {
+    position: relative; border-radius: 14px; overflow: hidden;
+    background: var(--panel); border: 1px solid #2a2038; min-height: 600px;
+  }
+  #simCanvas { display: block; width: 100%; height: 620px; cursor: crosshair; }
+  
+  .microscope-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; border-radius: 14px;
+    box-shadow: inset 0 0 80px rgba(0,0,0,0.6), inset 0 0 20px rgba(126,200,227,0.08);
+  }
+  .vignette {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(circle at 50% 50%, transparent 55%, rgba(7,5,10,0.7) 100%);
+    pointer-events: none;
+  }
+  
+  .sim-overlay {
+    position: absolute; top: 14px; left: 14px; pointer-events: none;
+    background: rgba(7,5,10,0.8); padding: 12px 16px; border-radius: 10px;
+    border: 1px solid #2a2038; font-size: 12px; line-height: 1.7; color: var(--text2);
+    backdrop-filter: blur(6px); max-width: 220px;
+  }
+  .sim-overlay span { color: var(--text); font-weight: 600; }
+  .sim-overlay .stable { color: #7ee3a0; }
+  .sim-overlay .unstable { color: #e37e7e; }
+  
+  .sidebar { display: flex; flex-direction: column; gap: 14px; }
+  .panel {
+    background: var(--panel); border: 1px solid #2a2038; border-radius: 12px; padding: 16px;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .panel:hover { border-color: #3a3058; transform: translateY(-1px); }
+  .panel h3 { margin: 0 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); font-weight: 500; }
+  
+  .controls { display: flex; flex-direction: column; gap: 14px; }
+  .control-row { display: flex; align-items: center; gap: 10px; }
+  .control-row label { font-size: 12px; color: var(--text2); min-width: 100px; }
+  input[type="range"] {
+    flex: 1; -webkit-appearance: none; appearance: none; height: 5px;
+    border-radius: 3px; outline: none; cursor: pointer;
+    background: linear-gradient(to right, var(--warm), var(--cold));
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px rgba(126,200,227,0.5); cursor: pointer;
+    border: 2px solid #fff;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); box-shadow: 0 0 18px rgba(126,200,227,0.8); }
+  .val-badge {
+    min-width: 50px; text-align: center; font-size: 11px; font-weight: 600;
+    background: var(--panel2); padding: 4px 10px; border-radius: 4px; color: var(--text);
+    border: 1px solid #2a2038;
+  }
+  
+  .btn {
+    background: linear-gradient(135deg, #4a3080, #2a2060);
+    color: #fff; border: none; padding: 11px 18px; border-radius: 8px; cursor: pointer;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+    transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; position: relative; overflow: hidden;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 18px rgba(74,48,128,0.5); filter: brightness(1.15); }
+  .btn:active { transform: translateY(0); }
+  .btn::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    transition: left 0.6s;
+  }
+  .btn:hover::after { left: 100%; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  
+  .chart-wrap { width: 100%; height: 150px; position: relative; }
+  .chart-wrap canvas { width: 100%; height: 100%; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text2); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-box {
+    background: var(--panel2); padding: 12px; border-radius: 8px; text-align: center;
+    border: 1px solid #2a2038; transition: background 0.3s;
+  }
+  .stat-box:hover { background: #2a2040; }
+  .stat-box .num { font-size: 20px; font-weight: 700; color: var(--text); display: block; font-variant-numeric: tabular-nums; }
+  .stat-box .lbl { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+  
+  .sat-bar {
+    height: 22px; border-radius: 6px; background: var(--panel2); border: 1px solid #2a2038;
+    overflow: hidden; position: relative; margin-top: 6px;
+  }
+  .sat-fill {
+    height: 100%; border-radius: 6px; transition: width 0.4s ease, background 0.4s ease;
+    background: linear-gradient(90deg, #7ee3a0, #e3c07e, #e37e7e);
+  }
+  .sat-labels {
+    display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); margin-top: 4px;
+  }
+  
+  .hint { font-size: 11px; color: var(--text2); margin-top: 10px; line-height: 1.5; font-style: italic; }
+  .footer { text-align: center; padding: 20px; color: var(--text2); font-size: 11px; }
+  
+  .molecule-preview {
+    width: 100%; height: 80px; background: var(--panel2); border-radius: 8px;
+    border: 1px solid #2a2038; margin-top: 8px; position: relative; overflow: hidden;
+  }
+  .molecule-preview canvas { width: 100%; height: 100%; }
+  
+  .status-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px;
+  }
+  .status-stable { background: rgba(126,227,160,0.12); color: #7ee3a0; border: 1px solid rgba(126,227,160,0.3); }
+  .status-marginal { background: rgba(227,192,126,0.12); color: #e3c07e; border: 1px solid rgba(227,192,126,0.3); }
+  .status-unstable { background: rgba(227,126,126,0.12); color: #e37e7e; border: 1px solid rgba(227,126,126,0.3); }
+</style>
+</head>
+<body>
+<div class="disclaimer-banner">⚠ Disclaimer: Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div class="hero">
+  <h1>Wine Tartrate Crystal Growth</h1>
+  <p>Interactive potassium bitartrate crystallisation simulator &amp; stability predictor</p>
+</div>
+
+<div class="layout">
+  <div class="sim-container">
+    <canvas id="simCanvas"></canvas>
+    <div class="microscope-overlay"></div>
+    <div class="vignette"></div>
+    <div class="sim-overlay">
+      <div>Temp: <span id="dispTemp">22.0</span> °C</div>
+      <div>KHT Saturation: <span id="dispSat">45</span> %</div>
+      <div>Crystals: <span id="dispCrystals">0</span></div>
+      <div>Mass deposited: <span id="dispMass">0.0</span> g/L</div>
+      <div>Stability: <span id="dispStability" class="stable">STABLE</span></div>
+      <div class="hint">Click to seed new crystal. Drag to pan view.</div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="panel">
+      <h3>Wine Composition</h3>
+      <div class="controls">
+        <div class="control-row">
+          <label>Temperature</label>
+          <input type="range" id="tempSlider" min="-6" max="30" value="22" step="0.5">
+          <div class="val-badge" id="tempVal">22°C</div>
+        </div>
+        <div class="control-row">
+          <label>Ethanol %</label>
+          <input type="range" id="ethSlider" min="0" max="18" value="13" step="0.5">
+          <div class="val-badge" id="ethVal">13%</div>
+        </div>
+        <div class="control-row">
+          <label>pH</label>
+          <input type="range" id="phSlider" min="2.8" max="4.5" value="3.4" step="0.05">
+          <div class="val-badge" id="phVal">3.4</div>
+        </div>
+        <div class="control-row">
+          <label>K+ (mg/L)</label>
+          <input type="range" id="kSlider" min="200" max="1500" value="800" step="10">
+          <div class="val-badge" id="kVal">800</div>
+        </div>
+        <div class="control-row">
+          <label>Tartaric (g/L)</label>
+          <input type="range" id="tarSlider" min="1" max="8" value="3.5" step="0.1">
+          <div class="val-badge" id="tarVal">3.5</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <div style="font-size:11px;color:var(--text2);">Saturation Index</div>
+        <div class="sat-bar"><div class="sat-fill" id="satFill" style="width:45%"></div></div>
+        <div class="sat-labels"><span>0%</span><span>50%</span><span>100%</span><span>150%</span></div>
+      </div>
+      <div id="stabilityBadge" class="status-badge status-stable">Stable — No Crystallisation Risk</div>
+    </div>
+
+    <div class="panel">
+      <h3>Solubility Trajectory</h3>
+      <div class="chart-wrap"><canvas id="chartCanvas"></canvas></div>
+      <div class="legend">
+        <div class="legend-item"><div class="dot" style="background:var(--accent)"></div>KHT Solubility</div>
+        <div class="legend-item"><div class="dot" style="background:var(--accent2)"></div>Actual Conc.</div>
+        <div class="legend-item"><div class="dot" style="background:#e37e7e"></div>Saturation</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>KHT Molecular Structure</h3>
+      <div class="molecule-preview"><canvas id="molCanvas"></canvas></div>
+      <div class="hint">Potassium bitartrate: the crystal responsible for wine "wine diamonds"</div>
+    </div>
+
+    <div class="panel">
+      <h3>Crystallisation Stats</h3>
+      <div class="stats-grid">
+        <div class="stat-box"><span class="num" id="statNucleation">0</span><div class="lbl">Nucleation Events</div></div>
+        <div class="stat-box"><span class="num" id="statGrowth">0</span><div class="lbl">Growth Rate μm/h</div></div>
+        <div class="stat-box"><span class="num" id="statSurface">0</span><div class="lbl">Surface Area mm²</div></div>
+        <div class="stat-box"><span class="num" id="statTime">0</span><div class="lbl">Sim Hours</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Actions</h3>
+      <div class="btn-row">
+        <button class="btn" id="btnSeed">Seed Crystal</button>
+        <button class="btn" id="btnChill">Flash Chill</button>
+        <button class="btn" id="btnWarm">Flash Warm</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn" id="btnReset">Reset Simulation</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">Wine Tartrate Crystal Growth Simulator · Built by Hermes Agent · 2026-05-11</div>
+
+<script>
+/* === Physics & Chemistry Model === */
+const KHT = {
+  // KHT solubility in water (g/L) at temperature T (C)
+  solubilityWater(T) {
+    // Empirical fit from literature data
+    return 0.38 + 0.085 * T + 0.0012 * T * T;
+  },
+  // Ethanol reduces solubility significantly
+  solubility(T, ethanol, pH) {
+    const sWater = this.solubilityWater(T);
+    const ethFactor = Math.max(0.15, 1 - 0.042 * ethanol); // ethanol suppresses solubility
+    const pHFactor = 1 + 0.08 * (3.6 - pH); // lower pH = higher [H+] = shifts equilibrium
+    return sWater * ethFactor * pHFactor;
+  },
+  // Calculate KHT concentration from K+ and tartaric acid
+  concentration(K_mg_L, tartaric_g_L) {
+    const K_mmol = K_mg_L / 39.1;
+    const tart_mmol = tartaric_g_L * 1000 / 150.09;
+    const KHT_mmol = Math.min(K_mmol, tart_mmol);
+    return KHT_mmol * 188.18 / 1000; // g/L
+  },
+  saturationIndex(T, ethanol, pH, K_mg_L, tartaric_g_L) {
+    const conc = this.concentration(K_mg_L, tartaric_g_L);
+    const sol = this.solubility(T, ethanol, pH);
+    return conc / Math.max(sol, 0.01);
+  }
+};
+
+/* === Crystal Simulation === */
+class Crystal {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.age = 0;
+    this.mass = 0.001;
+    this.branches = [];
+    this.maxRadius = 2;
+    this.growthRate = 0;
+    this.nucleated = false;
+    this.seed();
+  }
+  
+  seed() {
+    // Create initial 6-fold symmetric seed (KHT is monoclinic, often pseudo-hexagonal)
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI / 3) * i + (Math.random() - 0.5) * 0.2;
+      this.branches.push({
+        angle, length: 4 + Math.random() * 4,
+        width: 1.5 + Math.random(),
+        children: [],
+        tipX: 0, tipY: 0
+      });
+    }
+  }
+  
+  grow(saturation, dt) {
+    if (saturation <= 1.0) return;
+    const supersat = saturation - 1.0;
+    this.growthRate = supersat * 15; // μm/h approx
+    this.age += dt;
+    
+    // Grow branches
+    this.branches.forEach(b => {
+      const growth = this.growthRate * dt * (0.8 + Math.random() * 0.4);
+      b.length += growth;
+      b.width = Math.min(b.width + growth * 0.15, 4);
+      
+      // Occasionally bifurcate
+      if (Math.random() < 0.008 * supersat * dt && b.children.length < 3) {
+        b.children.push({
+          angle: b.angle + (Math.random() - 0.5) * 0.8,
+          length: b.length * 0.4,
+          width: b.width * 0.6,
+          children: [], tipX: 0, tipY: 0
+        });
+      }
+      
+      // Grow children
+      b.children.forEach(c => {
+        const cg = this.growthRate * dt * 0.6 * (0.8 + Math.random() * 0.4);
+        c.length += cg;
+        c.width = Math.min(c.width + cg * 0.12, 2.5);
+      });
+    });
+    
+    this.mass += this.growthRate * dt * 0.0001;
+    this.maxRadius = Math.max(this.maxRadius, ...this.branches.map(b => b.length));
+  }
+  
+  draw(ctx, scale, viewX, viewY) {
+    const sx = (this.x - viewX) * scale;
+    const sy = (this.y - viewY) * scale;
+    
+    // Glow
+    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, this.maxRadius * scale * 2);
+    glow.addColorStop(0, 'rgba(200, 240, 255, 0.08)');
+    glow.addColorStop(1, 'rgba(200, 240, 255, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sx, sy, this.maxRadius * scale * 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw crystal structure
+    this.branches.forEach(b => this.drawBranch(ctx, sx, sy, b, scale, 0));
+  }
+  
+  drawBranch(ctx, x, y, branch, scale, depth) {
+    const len = branch.length * scale;
+    const ex = x + Math.cos(branch.angle) * len;
+    const ey = y + Math.sin(branch.angle) * len;
+    branch.tipX = ex;
+    branch.tipY = ey;
+    
+    // Main branch line with gradient
+    const grad = ctx.createLinearGradient(x, y, ex, ey);
+    grad.addColorStop(0, `rgba(255,255,255,${0.5 + depth * 0.2})`);
+    grad.addColorStop(1, 'rgba(200,240,255,0.9)');
+    
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = branch.width * scale * (1 - depth * 0.15);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    
+    // Facet highlights
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = branch.width * scale * 0.3;
+    ctx.beginPath();
+    const perp = branch.angle + Math.PI / 2;
+    const off = branch.width * scale * 0.3;
+    ctx.moveTo(x + Math.cos(perp) * off, y + Math.sin(perp) * off);
+    ctx.lineTo(ex + Math.cos(perp) * off * 0.5, ey + Math.sin(perp) * off * 0.5);
+    ctx.stroke();
+    
+    // Children
+    branch.children.forEach(c => this.drawBranch(ctx, ex, ey, c, scale, depth + 1));
+  }
+}
+
+/* === Floating Particles === */
+class Particle {
+  constructor(w, h) {
+    this.reset(w, h);
+  }
+  reset(w, h) {
+    this.x = Math.random() * w;
+    this.y = Math.random() * h;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.life = Math.random();
+    this.size = 0.5 + Math.random() * 2;
+    this.alpha = 0.1 + Math.random() * 0.3;
+    this.type = Math.random() < 0.7 ? 'dust' : 'sparkle';
+  }
+  update(w, h, dt) {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life += dt * 0.2;
+    if (this.x < 0 || this.x > w || this.y < 0 || this.y > h || this.life > 1) {
+      this.reset(w, h);
+    }
+  }
+  draw(ctx) {
+    if (this.type === 'sparkle') {
+      const flicker = 0.5 + 0.5 * Math.sin(this.life * 10);
+      ctx.fillStyle = `rgba(200, 240, 255, ${this.alpha * flicker})`;
+    } else {
+      ctx.fillStyle = `rgba(180, 200, 220, ${this.alpha})`;
+    }
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* === Main Simulation === */
+const simCanvas = document.getElementById('simCanvas');
+const simCtx = simCanvas.getContext('2d');
+const chartCanvas = document.getElementById('chartCanvas');
+const chartCtx = chartCanvas.getContext('2d');
+const molCanvas = document.getElementById('molCanvas');
+const molCtx = molCanvas.getContext('2d');
+
+let crystals = [];
+let particles = [];
+let simTime = 0;
+let viewX = 0, viewY = 0;
+let targetViewX = 0, targetViewY = 0;
+let scale = 1;
+let isDragging = false;
+let dragStartX, dragStartY;
+let history = [];
+let nucleationEvents = 0;
+
+const params = {
+  temp: 22,
+  ethanol: 13,
+  pH: 3.4,
+  K: 800,
+  tartaric: 3.5
+};
+
+function resize() {
+  const rect = simCanvas.parentElement.getBoundingClientRect();
+  simCanvas.width = rect.width;
+  simCanvas.height = 620;
+  
+  const chartRect = chartCanvas.parentElement.getBoundingClientRect();
+  chartCanvas.width = chartRect.width;
+  chartCanvas.height = 150;
+  
+  const molRect = molCanvas.parentElement.getBoundingClientRect();
+  molCanvas.width = molRect.width;
+  molCanvas.height = 80;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < 80; i++) {
+    particles.push(new Particle(simCanvas.width, simCanvas.height));
+  }
+}
+initParticles();
+
+function getSaturation() {
+  return KHT.saturationIndex(params.temp, params.ethanol, params.pH, params.K, params.tartaric);
+}
+
+function seedCrystal(x, y) {
+  const sat = getSaturation();
+  if (sat > 1.05) {
+    crystals.push(new Crystal(x || (simCanvas.width / 2 / scale + viewX + (Math.random() - 0.5) * 200), y || (simCanvas.height / 2 / scale + viewY + (Math.random() - 0.5) * 200)));
+    nucleationEvents++;
+  }
+}
+
+function updateUI() {
+  const sat = getSaturation();
+  const pct = Math.round(sat * 100);
+  
+  document.getElementById('dispTemp').textContent = params.temp.toFixed(1);
+  document.getElementById('dispSat').textContent = pct;
+  document.getElementById('dispCrystals').textContent = crystals.length;
+  
+  const totalMass = crystals.reduce((s, c) => s + c.mass, 0);
+  document.getElementById('dispMass').textContent = totalMass.toFixed(2);
+  
+  const stabEl = document.getElementById('dispStability');
+  const badge = document.getElementById('stabilityBadge');
+  const fill = document.getElementById('satFill');
+  
+  fill.style.width = Math.min(pct, 150) + '%';
+  
+  if (sat < 0.85) {
+    stabEl.textContent = 'STABLE';
+    stabEl.className = 'stable';
+    badge.className = 'status-badge status-stable';
+    badge.textContent = 'Stable — No Crystallisation Risk';
+  } else if (sat < 1.05) {
+    stabEl.textContent = 'MARGINAL';
+    stabEl.className = '';
+    stabEl.style.color = '#e3c07e';
+    badge.className = 'status-badge status-marginal';
+    badge.textContent = 'Marginal — Monitor Closely';
+  } else {
+    stabEl.textContent = 'UNSTABLE';
+    stabEl.className = 'unstable';
+    badge.className = 'status-badge status-unstable';
+    badge.textContent = 'Unstable — Crystallisation Imminent';
+  }
+  
+  document.getElementById('statNucleation').textContent = nucleationEvents;
+  const avgGrowth = crystals.length > 0 ? crystals.reduce((s, c) => s + c.growthRate, 0) / crystals.length : 0;
+  document.getElementById('statGrowth').textContent = avgGrowth.toFixed(1);
+  const surface = crystals.reduce((s, c) => s + Math.PI * c.maxRadius * c.maxRadius * 0.01, 0);
+  document.getElementById('statSurface').textContent = surface.toFixed(2);
+  document.getElementById('statTime').textContent = Math.floor(simTime);
+}
+
+function drawBackground() {
+  // Deep wine-dark gradient background
+  const grad = simCtx.createRadialGradient(
+    simCanvas.width / 2, simCanvas.height / 2, 0,
+    simCanvas.width / 2, simCanvas.height / 2, Math.max(simCanvas.width, simCanvas.height) * 0.7
+  );
+  grad.addColorStop(0, '#1a1020');
+  grad.addColorStop(0.5, '#0f0a14');
+  grad.addColorStop(1, '#07050a');
+  simCtx.fillStyle = grad;
+  simCtx.fillRect(0, 0, simCanvas.width, simCanvas.height);
+  
+  // Microscope reticle / grid lines
+  simCtx.strokeStyle = 'rgba(126, 200, 227, 0.04)';
+  simCtx.lineWidth = 1;
+  const gridSize = 60 * scale;
+  const offX = (-viewX * scale) % gridSize;
+  const offY = (-viewY * scale) % gridSize;
+  for (let x = offX; x < simCanvas.width; x += gridSize) {
+    simCtx.beginPath(); simCtx.moveTo(x, 0); simCtx.lineTo(x, simCanvas.height); simCtx.stroke();
+  }
+  for (let y = offY; y < simCanvas.height; y += gridSize) {
+    simCtx.beginPath(); simCtx.moveTo(0, y); simCtx.lineTo(simCanvas.width, y); simCtx.stroke();
+  }
+  
+  // Particles
+  particles.forEach(p => p.draw(simCtx));
+}
+
+function drawCrystals() {
+  // Sort by size for depth
+  crystals.sort((a, b) => a.maxRadius - b.maxRadius);
+  crystals.forEach(c => c.draw(simCtx, scale, viewX, viewY));
+}
+
+function drawTempGradient() {
+  // Visual temperature indicator at edges
+  const t = (params.temp + 6) / 36; // normalized -6 to 30
+  const coldColor = [126, 200, 227];
+  const warmColor = [227, 160, 126];
+  const r = Math.round(coldColor[0] + (warmColor[0] - coldColor[0]) * t);
+  const g = Math.round(coldColor[1] + (warmColor[1] - coldColor[1]) * t);
+  const b = Math.round(coldColor[2] + (warmColor[2] - coldColor[2]) * t);
+  
+  simCtx.strokeStyle = `rgba(${r},${g},${b},0.15)`;
+  simCtx.lineWidth = 3;
+  simCtx.strokeRect(10, 10, simCanvas.width - 20, simCanvas.height - 20);
+}
+
+function drawChart() {
+  const w = chartCanvas.width;
+  const h = chartCanvas.height;
+  chartCtx.clearRect(0, 0, w, h);
+  
+  // Grid
+  chartCtx.strokeStyle = 'rgba(126,200,227,0.08)';
+  chartCtx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = h - 20 - (i / 4) * (h - 40);
+    chartCtx.beginPath(); chartCtx.moveTo(30, y); chartCtx.lineTo(w - 10, y); chartCtx.stroke();
+  }
+  
+  if (history.length < 2) return;
+  
+  // Solubility curve
+  chartCtx.strokeStyle = 'rgba(126, 200, 227, 0.8)';
+  chartCtx.lineWidth = 2;
+  chartCtx.beginPath();
+  history.forEach((pt, i) => {
+    const x = 30 + (i / (history.length - 1)) * (w - 40);
+    const y = h - 20 - pt.solubility / 8 * (h - 40);
+    if (i === 0) chartCtx.moveTo(x, y); else chartCtx.lineTo(x, y);
+  });
+  chartCtx.stroke();
+  
+  // Actual concentration
+  chartCtx.strokeStyle = 'rgba(212, 160, 227, 0.8)';
+  chartCtx.lineWidth = 2;
+  chartCtx.beginPath();
+  history.forEach((pt, i) => {
+    const x = 30 + (i / (history.length - 1)) * (w - 40);
+    const y = h - 20 - pt.concentration / 8 * (h - 40);
+    if (i === 0) chartCtx.moveTo(x, y); else chartCtx.lineTo(x, y);
+  });
+  chartCtx.stroke();
+  
+  // Saturation band
+  chartCtx.fillStyle = 'rgba(227, 126, 126, 0.08)';
+  chartCtx.beginPath();
+  history.forEach((pt, i) => {
+    const x = 30 + (i / (history.length - 1)) * (w - 40);
+    const y = h - 20 - pt.saturation / 2 * (h - 40);
+    if (i === 0) chartCtx.moveTo(x, y); else chartCtx.lineTo(x, y);
+  });
+  chartCtx.lineTo(w - 10, h - 20);
+  chartCtx.lineTo(30, h - 20);
+  chartCtx.closePath();
+  chartCtx.fill();
+}
+
+function drawMolecule() {
+  const w = molCanvas.width;
+  const h = molCanvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  molCtx.clearRect(0, 0, w, h);
+  
+  // Animated rotation
+  const t = Date.now() / 2000;
+  
+  // Simplified KHT structure: K+ center, tartrate chain
+  const nodes = [
+    { x: 0, y: 0, r: 10, color: '#c8a0e3', label: 'K+' },
+    { x: -25, y: -15, r: 6, color: '#7ec8e3', label: 'O' },
+    { x: 25, y: -15, r: 6, color: '#7ec8e3', label: 'O' },
+    { x: -35, y: 12, r: 5, color: '#e3c07e', label: 'C' },
+    { x: 35, y: 12, r: 5, color: '#e3c07e', label: 'C' },
+    { x: -50, y: 5, r: 5, color: '#7ec8e3', label: 'O' },
+    { x: 50, y: 5, r: 5, color: '#7ec8e3', label: 'O' },
+    { x: 0, y: 28, r: 5, color: '#e3c07e', label: 'C' },
+    { x: 0, y: 45, r: 6, color: '#7ec8e3', label: 'O' },
+  ];
+  
+  const bonds = [
+    [0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [0, 7], [7, 8]
+  ];
+  
+  // Glow
+  const glow = molCtx.createRadialGradient(cx, cy, 0, cx, cy, 40);
+  glow.addColorStop(0, 'rgba(200, 160, 227, 0.2)');
+  glow.addColorStop(1, 'rgba(200, 160, 227, 0)');
+  molCtx.fillStyle = glow;
+  molCtx.fillRect(0, 0, w, h);
+  
+  molCtx.save();
+  molCtx.translate(cx, cy);
+  molCtx.rotate(t * 0.3);
+  
+  // Bonds
+  molCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+  molCtx.lineWidth = 2;
+  bonds.forEach(([a, b]) => {
+    molCtx.beginPath();
+    molCtx.moveTo(nodes[a].x, nodes[a].y);
+    molCtx.lineTo(nodes[b].x, nodes[b].y);
+    molCtx.stroke();
+  });
+  
+  // Nodes
+  nodes.forEach(n => {
+    const grad = molCtx.createRadialGradient(n.x - 1, n.y - 1, 0, n.x, n.y, n.r);
+    grad.addColorStop(0, n.color);
+    grad.addColorStop(1, n.color + '88');
+    molCtx.fillStyle = grad;
+    molCtx.beginPath();
+    molCtx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    molCtx.fill();
+    
+    molCtx.fillStyle = 'rgba(255,255,255,0.9)';
+    molCtx.font = '9px sans-serif';
+    molCtx.textAlign = 'center';
+    molCtx.textBaseline = 'middle';
+    molCtx.fillText(n.label, n.x, n.y);
+  });
+  
+  molCtx.restore();
+}
+
+function simStep() {
+  const dt = 0.05; // simulation hours per frame
+  simTime += dt;
+  
+  const sat = getSaturation();
+  
+  // Grow crystals
+  crystals.forEach(c => c.grow(sat, dt));
+  
+  // Spontaneous nucleation when highly supersaturated
+  if (sat > 1.3 && Math.random() < (sat - 1.3) * 0.003) {
+    seedCrystal();
+  }
+  
+  // Remove tiny crystals that might have dissolved
+  crystals = crystals.filter(c => c.maxRadius > 2 || sat > 1.0);
+  
+  // Update particles
+  particles.forEach(p => p.update(simCanvas.width, simCanvas.height, dt));
+  
+  // Update view (smooth pan)
+  viewX += (targetViewX - viewX) * 0.05;
+  viewY += (targetViewY - viewY) * 0.05;
+  
+  // Record history every few frames
+  if (Math.floor(simTime * 10) % 3 === 0) {
+    history.push({
+      solubility: KHT.solubility(params.temp, params.ethanol, params.pH),
+      concentration: KHT.concentration(params.K, params.tartaric),
+      saturation: sat
+    });
+    if (history.length > 120) history.shift();
+  }
+  
+  updateUI();
+}
+
+function render() {
+  drawBackground();
+  drawCrystals();
+  drawTempGradient();
+  drawChart();
+  drawMolecule();
+  requestAnimationFrame(render);
+}
+
+// Controls
+document.getElementById('tempSlider').addEventListener('input', e => {
+  params.temp = parseFloat(e.target.value);
+  document.getElementById('tempVal').textContent = params.temp.toFixed(1) + '°C';
+});
+document.getElementById('ethSlider').addEventListener('input', e => {
+  params.ethanol = parseFloat(e.target.value);
+  document.getElementById('ethVal').textContent = params.ethanol + '%';
+});
+document.getElementById('phSlider').addEventListener('input', e => {
+  params.pH = parseFloat(e.target.value);
+  document.getElementById('phVal').textContent = params.pH.toFixed(2);
+});
+document.getElementById('kSlider').addEventListener('input', e => {
+  params.K = parseFloat(e.target.value);
+  document.getElementById('kVal').textContent = params.K;
+});
+document.getElementById('tarSlider').addEventListener('input', e => {
+  params.tartaric = parseFloat(e.target.value);
+  document.getElementById('tarVal').textContent = params.tartaric.toFixed(1);
+});
+
+// Buttons
+document.getElementById('btnSeed').addEventListener('click', () => {
+  seedCrystal(simCanvas.width / 2 / scale + viewX, simCanvas.height / 2 / scale + viewY);
+});
+document.getElementById('btnChill').addEventListener('click', () => {
+  params.temp = Math.max(-6, params.temp - 5);
+  document.getElementById('tempSlider').value = params.temp;
+  document.getElementById('tempVal').textContent = params.temp.toFixed(1) + '°C';
+});
+document.getElementById('btnWarm').addEventListener('click', () => {
+  params.temp = Math.min(30, params.temp + 5);
+  document.getElementById('tempSlider').value = params.temp;
+  document.getElementById('tempVal').textContent = params.temp.toFixed(1) + '°C';
+});
+document.getElementById('btnReset').addEventListener('click', () => {
+  crystals = [];
+  nucleationEvents = 0;
+  simTime = 0;
+  history = [];
+  params.temp = 22;
+  params.ethanol = 13;
+  params.pH = 3.4;
+  params.K = 800;
+  params.tartaric = 3.5;
+  document.getElementById('tempSlider').value = 22;
+  document.getElementById('ethSlider').value = 13;
+  document.getElementById('phSlider').value = 3.4;
+  document.getElementById('kSlider').value = 800;
+  document.getElementById('tarSlider').value = 3.5;
+  document.getElementById('tempVal').textContent = '22°C';
+  document.getElementById('ethVal').textContent = '13%';
+  document.getElementById('phVal').textContent = '3.4';
+  document.getElementById('kVal').textContent = '800';
+  document.getElementById('tarVal').textContent = '3.5';
+});
+
+// Canvas interactions
+simCanvas.addEventListener('mousedown', e => {
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+});
+simCanvas.addEventListener('mousemove', e => {
+  if (isDragging) {
+    targetViewX -= (e.clientX - dragStartX) / scale;
+    targetViewY -= (e.clientY - dragStartY) / scale;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+  }
+});
+simCanvas.addEventListener('mouseup', e => {
+  if (isDragging && Math.abs(e.clientX - dragStartX) < 5 && Math.abs(e.clientY - dragStartY) < 5) {
+    const rect = simCanvas.getBoundingClientRect();
+    seedCrystal((e.clientX - rect.left) / scale + viewX, (e.clientY - rect.top) / scale + viewY);
+  }
+  isDragging = false;
+});
+simCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  scale = Math.max(0.3, Math.min(3, scale * delta));
+});
+
+// Start
+setInterval(simStep, 50);
+render();
+seedCrystal();
+</script>
+</body>
+</html>
