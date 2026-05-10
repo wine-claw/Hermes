@@ -73,10 +73,9 @@ const APPS = [
 <script>
 function render(){
   const grid=document.getElementById('app-grid');
-  // Render videos first
+  let html = '';
   if(typeof VIDEOS !== 'undefined' && VIDEOS.length){
-    grid.insertAdjacentHTML('afterbegin',
-      '<h2 style="grid-column:1/-1;color:var(--accent);font-size:1.1rem;margin-top:1rem;">🎬 Daily Videos</h2>' +
+    html += '<h2 style="grid-column:1/-1;color:var(--accent);font-size:1.1rem;margin-top:0;">🎬 Daily Videos</h2>' +
       VIDEOS.map(v=>`
         <article class="app-card" style="background:linear-gradient(135deg,#1a1020,#141a22);">
           <div class="date">${v.date}</div>
@@ -84,21 +83,23 @@ function render(){
           <p>${v.description}</p>
           <a href="${v.url}" target="_blank">Watch video →</a>
         </article>
-      `).join('')
-    );
+      `).join('');
   }
-  if(!APPS.length){
-    grid.innerHTML='<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:2rem;">No apps yet — check back tomorrow!</div>';
-    return;
+  if(APPS.length){
+    html += '<h2 style="grid-column:1/-1;color:var(--accent);font-size:1.1rem;margin-top:1rem;">📱 Daily Apps</h2>' +
+      APPS.map(a=>`
+        <article class="app-card">
+          <div class="date">${a.date}</div>
+          <h3>${a.title}</h3>
+          <p>${a.description}</p>
+          <a href="${a.url}">Open app →</a>
+        </article>
+      `).join('');
   }
-  grid.innerHTML=APPS.map(a=>`
-    <article class="app-card">
-      <div class="date">${a.date}</div>
-      <h3>${a.title}</h3>
-      <p>${a.description}</p>
-      <a href="${a.url}">Open app →</a>
-    </article>
-  `).join('');
+  if(!html){
+    html = '<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:2rem;">No apps yet — check back tomorrow!</div>';
+  }
+  grid.innerHTML = html;
 }
 document.getElementById('last-updated').textContent="2026-05-10";
 render();
