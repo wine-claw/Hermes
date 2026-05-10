@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 <meta name="robots" content="noindex, nofollow">
 <meta name="googlebot" content="noindex, nofollow">
-<title>Hermes Gallery — Daily Mini-Apps</title>
+<title>Hermes Gallery — Daily Apps & Videos</title>
 <style>
   :root{ --bg:#0b0f14; --surface:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#a371f7; --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080; }
   *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
@@ -37,6 +37,10 @@
   .app-card a{ display:inline-block; color:var(--accent); text-decoration:none; font-size:0.85rem; font-weight:600; padding:0.35rem 0; }
   .app-card a:hover{ text-decoration:underline; }
 
+  .badge{ display:inline-block; font-size:0.65rem; padding:0.15rem 0.4rem; border-radius:4px; margin-right:0.4rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+  .badge-video{ background:linear-gradient(90deg,#a371f7,#58a6ff); color:#fff; }
+  .badge-app{ background:#2a3441; color:var(--muted); }
+
   footer{ text-align:center; padding:1.5rem 1rem; color:var(--muted); font-size:0.82rem; border-top:1px solid var(--border); margin-top:1.5rem; }
 
   /* Touch-friendly */
@@ -48,12 +52,12 @@
 <div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
 <header>
   <h1>Hermes Gallery</h1>
-  <p>Daily mini-apps built for wine-claw by the Hermes Agent</p>
+  <p>Daily mini-apps & 30-second videos built for wine-claw by the Hermes Agent</p>
 </header>
 <main>
   <section class="intro">
     <h2>About this gallery</h2>
-    <p>Every day at 4am, the Hermes Agent builds a small app on a science or technology topic related to vineyards and wineries. This page collects them all.</p>
+    <p>Every day at 1am a 30-second video is generated, and at 4am an interactive app is built — both on topics spanning vineyards, wineries, and technology. Everything is sorted newest-first.</p>
   </section>
   <div id="app-grid"></div>
 </main>
@@ -73,33 +77,30 @@ const APPS = [
 <script>
 function render(){
   const grid=document.getElementById('app-grid');
-  let html = '';
-  if(typeof VIDEOS !== 'undefined' && VIDEOS.length){
-    html += '<h2 style="grid-column:1/-1;color:var(--accent);font-size:1.1rem;margin-top:0;">🎬 Daily Videos</h2>' +
-      VIDEOS.map(v=>`
-        <article class="app-card" style="background:linear-gradient(135deg,#1a1020,#141a22);">
-          <div class="date">${v.date}</div>
-          <h3>${v.title}</h3>
-          <p>${v.description}</p>
-          <a href="${v.url}" target="_blank">Watch video →</a>
-        </article>
-      `).join('');
+  const items=[
+    ...VIDEOS.map(v=>({...v,type:'video'})),
+    ...APPS.map(a=>({...a,type:'app'}))
+  ].sort((a,b)=>b.date.localeCompare(a.date)||(a.type==='video'?-1:1));
+
+  if(!items.length){
+    grid.innerHTML='<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:2rem;">Nothing here yet — check back tomorrow!</div>';
+    return;
   }
-  if(APPS.length){
-    html += '<h2 style="grid-column:1/-1;color:var(--accent);font-size:1.1rem;margin-top:1rem;">📱 Daily Apps</h2>' +
-      APPS.map(a=>`
-        <article class="app-card">
-          <div class="date">${a.date}</div>
-          <h3>${a.title}</h3>
-          <p>${a.description}</p>
-          <a href="${a.url}">Open app →</a>
-        </article>
-      `).join('');
-  }
-  if(!html){
-    html = '<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:2rem;">No apps yet — check back tomorrow!</div>';
-  }
-  grid.innerHTML = html;
+
+  grid.innerHTML=items.map(item=>{
+    const isVideo=item.type==='video';
+    const cardStyle=isVideo?'background:linear-gradient(135deg,#1a1020,#141a22);':'';
+    const badge=isVideo?'<span class="badge badge-video">Video</span>':'<span class="badge badge-app">App</span>';
+    const action=isVideo?'Watch video →':'Open app →';
+    const target=isVideo?' target="_blank"':'';
+    return `
+    <article class="app-card" style="${cardStyle}">
+      <div class="date">${badge}${item.date}</div>
+      <h3>${item.title}</h3>
+      <p>${item.description}</p>
+      <a href="${item.url}"${target}>${action}</a>
+    </article>`;
+  }).join('');
 }
 document.getElementById('last-updated').textContent="2026-05-10";
 render();
