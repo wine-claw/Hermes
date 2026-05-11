@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Color & Polymerization Dynamics</title>
+<style>
+  :root {
+    --bg: #0b0c10;
+    --surface: #14151a;
+    --panel: #1a1b22;
+    --border: #2a2d38;
+    --text: #c9cdd4;
+    --muted: #7a7f8a;
+    --accent: #c73e3e;
+    --accent2: #8b5a2b;
+    --accent3: #4a9eff;
+    --wine: #6b0f1a;
+    --gold: #c9a040;
+    --glass: rgba(255,255,255,0.04);
+    --shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html { font-size:16px; }
+  body {
+    background:var(--bg);
+    color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+
+  .disclaimer {
+    background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060;
+    padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui,sans-serif;
+    position:sticky; top:0; z-index:100;
+  }
+  .disclaimer strong { font-weight:600; }
+
+  header {
+    text-align:center; padding:1.5rem 1rem 0.75rem;
+  }
+  header h1 {
+    font-size:clamp(1.3rem,5vw,1.8rem);
+    background:linear-gradient(90deg,#c73e3e,#8b5a2b);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    display:inline-block; letter-spacing:-0.02em;
+  }
+  header p { color:var(--muted); margin-top:0.3rem; font-size:0.88rem; }
+
+  .main-grid {
+    max-width:1200px; margin:0 auto; padding:1rem;
+    display:grid; grid-template-columns:1fr; gap:1rem;
+  }
+  @media(min-width:900px) {
+    .main-grid { grid-template-columns: 1.2fr 0.8fr; gap:1.25rem; padding:1.25rem; }
+  }
+
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    overflow:hidden; box-shadow:var(--shadow);
+  }
+  .card-header {
+    padding:0.85rem 1.1rem; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; gap:0.5rem; flex-wrap:wrap;
+  }
+  .card-header h2 { font-size:0.95rem; font-weight:600; color:var(--text); }
+  .card-header .sub { font-size:0.78rem; color:var(--muted); }
+
+  .sim-wrap { position:relative; background:#08090c; }
+  #simCanvas { display:block; width:100%; height:420px; cursor:grab; }
+  #simCanvas:active { cursor:grabbing; }
+  .vignette {
+    position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, transparent 55%, rgba(7,5,10,0.7) 100%);
+    border-radius:0 0 14px 14px;
+  }
+  .overlay-stats {
+    position:absolute; top:10px; left:12px; pointer-events:none;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .stat-chip {
+    background:rgba(10,12,16,0.75); backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,0.06); border-radius:8px;
+    padding:0.35rem 0.6rem; font-size:0.72rem; color:var(--muted);
+    display:flex; align-items:center; gap:0.4rem;
+  }
+  .stat-chip b { color:var(--text); font-weight:600; }
+  .color-swatch {
+    width:14px; height:14px; border-radius:50%; border:1px solid rgba(255,255,255,0.2);
+  }
+
+  .controls { padding:1rem; display:flex; flex-direction:column; gap:0.9rem; }
+  .ctrl-row { display:flex; flex-direction:column; gap:0.35rem; }
+  .ctrl-label { display:flex; justify-content:space-between; font-size:0.8rem; color:var(--muted); }
+  .ctrl-label b { color:var(--text); font-weight:500; }
+  input[type=range] {
+    -webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:3px;
+    background:linear-gradient(to right, var(--accent), var(--accent2));
+    outline:none; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%;
+    background:#fff; box-shadow:0 2px 8px rgba(0,0,0,0.4); border:2px solid var(--accent);
+    cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width:18px; height:18px; border-radius:50%; background:#fff;
+    box-shadow:0 2px 8px rgba(0,0,0,0.4); border:2px solid var(--accent); cursor:pointer;
+  }
+
+  .btn-bar { display:flex; gap:0.5rem; flex-wrap:wrap; }
+  button {
+    background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:8px;
+    padding:0.5rem 0.9rem; font-size:0.82rem; font-weight:500; cursor:pointer; transition:all .15s;
+    min-height:44px; touch-action:manipulation;
+  }
+  button:hover { border-color:var(--accent); background:#22242c; }
+  button.primary { background:linear-gradient(135deg,var(--accent),#8b1a2b); border:none; color:#fff; }
+  button.primary:hover { filter:brightness(1.1); }
+  button.active { border-color:var(--gold); color:var(--gold); }
+
+  .chart-grid {
+    display:grid; grid-template-columns:1fr; gap:0.75rem; padding:0 1rem 1rem;
+  }
+  @media(min-width:900px) {
+    .chart-grid { grid-template-columns:1fr 1fr; }
+  }
+  .chart-box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:0.7rem; }
+  .chart-box h3 { font-size:0.78rem; color:var(--muted); margin-bottom:0.4rem; font-weight:500; }
+  .chart-box canvas { display:block; width:100%; height:140px; }
+
+  .legend { display:flex; flex-wrap:wrap; gap:0.5rem; padding:0 1rem 0.75rem; }
+  .legend-item { display:flex; align-items:center; gap:0.35rem; font-size:0.72rem; color:var(--muted); }
+  .legend-dot { width:8px; height:8px; border-radius:50%; }
+
+  .wine-preview {
+    display:flex; align-items:center; justify-content:center; gap:1rem; padding:0.75rem 1rem;
+    background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);
+  }
+  .wine-glass {
+    width:70px; height:90px; border-radius:0 0 35px 35px;
+    border:2px solid rgba(255,255,255,0.15); border-top:none;
+    position:relative; overflow:hidden;
+    background:rgba(255,255,255,0.03);
+  }
+  .wine-glass::after {
+    content:''; position:absolute; bottom:0; left:0; right:0; height:75%;
+    border-radius:0 0 33px 33px; transition:background .4s;
+  }
+  .wine-glass-stem {
+    width:8px; height:24px; background:rgba(255,255,255,0.12); margin-top:-2px;
+  }
+  .wine-glass-base {
+    width:36px; height:4px; background:rgba(255,255,255,0.12); border-radius:2px;
+  }
+
+  footer { text-align:center; padding:1.2rem 1rem; color:var(--muted); font-size:0.78rem; border-top:1px solid var(--border); margin-top:0.5rem; }
+
+  /* pH-specific slider color feedback */
+  .ph-low  input[type=range] { background:linear-gradient(to right, #c73e3e, #d46b3a); }
+  .ph-mid  input[type=range] { background:linear-gradient(to right, #d46b3a, #8b5a2b); }
+  .ph-high input[type=range] { background:linear-gradient(to right, #8b5a2b, #5a4a7a); }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<header>
+  <h1>Wine Color & Polymerization Dynamics</h1>
+  <p>Interactive anthocyanin particle simulator with pH-driven color shifts, SO₂ bleaching & co-pigmentation</p>
+</header>
+
+<div class="main-grid">
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <div><h2>Molecular Viewport</h2><span class="sub">Particle dynamics · <span id="particleCount">0</span> agents</span></div>
+        <div style="font-size:0.78rem;color:var(--muted)">Drag to pan · Scroll to zoom</div>
+      </div>
+      <div class="sim-wrap">
+        <canvas id="simCanvas"></canvas>
+        <div class="vignette"></div>
+        <div class="overlay-stats">
+          <div class="stat-chip"><div class="color-swatch" id="swatchColor"></div><b>Color Density</b> <span id="valColorDensity">—</span></div>
+          <div class="stat-chip"><b>Polymeric %</b> <span id="valPolymeric">—</span></div>
+          <div class="stat-chip"><b>Hue (A420/A520)</b> <span id="valHue">—</span></div>
+        </div>
+      </div>
+      <div class="wine-preview">
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="wine-glass" id="wineGlass"><div id="wineLiquid"></div></div>
+          <div class="wine-glass-stem"></div>
+          <div class="wine-glass-base"></div>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.35rem">Spectral Absorbance Preview</div>
+          <canvas id="spectralCanvas" style="width:100%;height:70px;display:block;border-radius:8px;background:var(--panel)"></canvas>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#c73e3e"></div>Anthocyanin</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8b5a2b"></div>Tannin (co-pigment)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e8c84a"></div>SO₂ (bleach)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#4a1a2a"></div>Polymeric pigment</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#a0a0a0"></div>Carbinol (colorless)</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-header"><h2>Parameters</h2><span class="sub">Adjust to observe color shifts</span></div>
+      <div class="controls">
+        <div class="ctrl-row" id="phRow">
+          <div class="ctrl-label"><b>pH</b><span id="lblPh">3.40</span></div>
+          <input type="range" id="inpPh" min="2.8" max="4.0" step="0.01" value="3.40">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><b>Free SO₂ (mg/L)</b><span id="lblSo2">30</span></div>
+          <input type="range" id="inpSo2" min="0" max="100" step="1" value="30">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><b>Temperature (°C)</b><span id="lblTemp">22</span></div>
+          <input type="range" id="inpTemp" min="10" max="35" step="1" value="22">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><b>Simulated Aging (months)</b><span id="lblAge">0</span></div>
+          <input type="range" id="inpAge" min="0" max="36" step="0.5" value="0">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><b>Co-pigment Ratio</b><span id="lblCo">0.6</span></div>
+          <input type="range" id="inpCo" min="0.1" max="2.0" step="0.05" value="0.6">
+        </div>
+        <div class="btn-bar">
+          <button id="btnReset" class="primary">Reset Simulation</button>
+          <button id="btnPause">Pause</button>
+          <button id="btnPulse">Pulse SO₂</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <div class="card-header"><h2>Trends</h2><span class="sub">Real-time accumulation</span></div>
+      <div class="chart-grid">
+        <div class="chart-box">
+          <h3>Absorbance Over Time</h3>
+          <canvas id="chartAbs"></canvas>
+        </div>
+        <div class="chart-box">
+          <h3>Species Fraction</h3>
+          <canvas id="chartFrac"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Built by Hermes Agent · Research-backed wine chemistry simulation</footer>
+
+<script>
+// ======================= State & Config =======================
+const state = {
+  ph: 3.40,
+  so2: 30,
+  temp: 22,
+  age: 0,
+  coRatio: 0.6,
+  paused: false,
+  time: 0,
+  dt: 1/60,
+  viewX: 0, viewY: 0, targetViewX: 0, targetViewY: 0, scale: 1, targetScale: 1,
+  particles: [], dust: [],
+  history: {
+    t: [], a420: [], a520: [], a620: [], polyFrac: [],
+    maxLen: 300
+  },
+  wineColor: {r:80,g:10,b:18},
+  mouseDown: false, dragStartX:0, dragStartY:0,
+};
+
+const PARAMS = {
+  anthoCount: 180,
+  tanninCount: 90,
+  so2Count: 40,
+  mergePadding: 10,
+  baseSpeed: 0.6,
+  clusterK: 0.015,
+  so2BleachRadius: 35,
+  polyRateBase: 0.0008,
+  tempPolyQ10: 1.8,
+  pKaFlavylium: 2.6,
+  pKaQuinoidal: 8.5,
+  pKaCarbinol: 4.5,
+  so2BleachRate: 0.008,
+  so2RecoveryRate: 0.002,
+};
+
+function rand(n){ return n===undefined?Math.random():Math.random()*n; }
+function clamp(v,lo,hi){ if(!Number.isFinite(v))return lo; return Math.max(lo,Math.min(hi,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function hexToRgb(hex){ const m=hex.match(/#?(..)(..)(..)/); return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:0,g:0,b:0}; }
+function rgbToStr(c,a){ return `rgba(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)},${a})`; }
+
+// ======================= Particle Classes =======================
+class Particle {
+  constructor(type, w, h) {
+    this.type = type; // 'antho','tannin','so2','polymeric','carbinol'
+    this.x = rand(w); this.y = rand(h);
+    const spd = PARAMS.baseSpeed * (0.7 + rand(0.6));
+    const ang = rand(Math.PI*2);
+    this.vx = Math.cos(ang)*spd; this.vy = Math.sin(ang)*spd;
+    this.radius = type==='antho'?3.2 : type==='tannin'?2.8 : type==='so2'?2.0 : type==='polymeric'?5.5 : 2.5;
+    this.mass = this.radius;
+    this.life = rand(1);
+    this.bleached = false;
+    this.clusterId = null;
+    this.clustered = false;
+  }
+  update(w,h,dt) {
+    this.x += this.vx*dt*60; this.y += this.vy*dt*60; this.life += dt*0.3;
+    // Bounce
+    if(this.x < 0){ this.x=0; this.vx*= -1; }
+    if(this.x > w){ this.x=w; this.vx*= -1; }
+    if(this.y < 0){ this.y=0; this.vy*= -1; }
+    if(this.y > h){ this.y=h; this.vy*= -1; }
+    // Thermal jitter
+    const jitter = 0.04 * (state.temp/20);
+    this.vx += (rand(2)-1)*jitter;
+    this.vy += (rand(2)-1)*jitter;
+    // Damping
+    this.vx *= 0.985; this.vy *= 0.985;
+  }
+}
+
+class Dust {
+  constructor(w,h) {
+    this.x=rand(w); this.y=rand(h);
+    this.vx=(rand()-0.5)*0.25; this.vy=(rand()-0.5)*0.25;
+    this.size=0.6+rand(1.6); this.alpha=0.08+rand(0.18);
+    this.life=rand(1);
+  }
+  update(w,h,dt) {
+    this.x+=this.vx; this.y+=this.vy; this.life+=dt*0.2;
+    if(this.x<0||this.x>w||this.y<0||this.y>h||this.life>1) {
+      this.x=rand(w); this.y=rand(h); this.life=0;
+    }
+  }
+  draw(ctx) {
+    const a=this.alpha*(0.5+0.5*Math.sin(this.life*6));
+    ctx.fillStyle=`rgba(180,200,220,${a})`;
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fill();
+  }
+}
+
+// ======================= Simulation =======================
+function initSim() {
+  const c = document.getElementById('simCanvas');
+  const w = c.width = c.clientWidth * Math.min(2, window.devicePixelRatio||1);
+  const h = c.height = c.clientHeight * Math.min(2, window.devicePixelRatio||1);
+  state.particles = [];
+  state.dust = [];
+  for(let i=0;i<PARAMS.anthoCount;i++) state.particles.push(new Particle('antho', w, h));
+  for(let i=0;i<PARAMS.tanninCount;i++) state.particles.push(new Particle('tannin', w, h));
+  for(let i=0;i<PARAMS.so2Count;i++) state.particles.push(new Particle('so2', w, h));
+  for(let i=0;i<80;i++) state.dust.push(new Dust(w, h));
+  state.history.t=[]; state.history.a420=[]; state.history.a520=[]; state.history.a620=[]; state.history.polyFrac=[];
+  state.time=0; state.viewX=0; state.viewY=0; state.targetViewX=0; state.targetViewY=0; state.scale=1; state.targetScale=1;
+}
+
+function fractionFlavylium(ph) {
+  // Simplified speciation: flavylium cation (red) vs carbinol (colorless) vs quinoidal (blue)
+  // Using Henderson-Hasselbalch approximations for pKa values
+  const H = Math.pow(10, -ph);
+  const Ka1 = Math.pow(10, -PARAMS.pKaFlavylium);
+  const Ka2 = Math.pow(10, -PARAMS.pKaCarbinol);
+  const Ka3 = Math.pow(10, -PARAMS.pKaQuinoidal);
+  // Flavylium proportion
+  const denom = 1 + Ka1/H + Ka2/H + H/Ka3; // simplified model
+  // More accurate relative proportions for wine-relevant pH 2.8-4.0:
+  // At low pH: mostly flavylium (red). At pH ~4: significant carbinol (colorless).
+  const flavy = 1 / (1 + Math.pow(10, ph - PARAMS.pKaCarbinol));
+  const quinoidal = Math.max(0, (ph - 3.0) * 0.02); // tiny at wine pH
+  const carbinol = Math.max(0, 1 - flavy - quinoidal);
+  return { flavy: clamp(flavy,0,1), quinoidal: clamp(quinoidal,0,1), carbinol: clamp(carbinol,0,1) };
+}
+
+function computeAbsorbance() {
+  const spec = fractionFlavylium(state.ph);
+  const totalAntho = state.particles.filter(p=>p.type==='antho'||p.type==='polymeric').length;
+  const totalPoly = state.particles.filter(p=>p.type==='polymeric').length;
+  const polyFrac = totalAntho>0 ? totalPoly/totalAntho : 0;
+  const bleachFrac = state.particles.filter(p=>p.type==='antho'&&p.bleached).length / Math.max(1, state.particles.filter(p=>p.type==='antho').length);
+
+  // SO2 bleaching reduces 520nm absorbance
+  const so2Factor = Math.max(0, 1 - (state.so2/100)*0.7);
+  // Temperature effect on color expression (slight shift)
+  const tempFac = 1 - Math.abs(state.temp - 22)*0.003;
+
+  // Anthocyanin absorbance peaks: ~520nm (red), ~320nm (UV, not shown), ~620nm tail (blue)
+  // Polymeric pigments shift toward 420nm (browning)
+  // Co-pigmentation increases 520nm absorbance hyperchromically
+  const coHyper = 1 + state.coRatio * 0.35;
+
+  const a520 = (spec.flavy * (1-bleachFrac) * so2Factor * tempFac * coHyper * 1.2 + polyFrac*0.3) * (totalAntho/200);
+  const a420 = (polyFrac * 0.9 + spec.carbinol * 0.15 + (state.age/36)*0.2) * (totalAntho/200);
+  const a620 = (spec.quinoidal * 0.4 + polyFrac * 0.15) * (totalAntho/200);
+
+  const colorDensity = a420 + a520 + a620;
+  const hue = a520>0 ? a420/a520 : 0;
+  return { a420, a520, a620, colorDensity, hue, polyFrac, spec, bleachFrac };
+}
+
+function updateSim() {
+  if(state.paused) return;
+  const c = document.getElementById('simCanvas');
+  const w = c.width, h = c.height;
+  const dt = state.dt;
+  state.time += dt;
+
+  // --- Update particles ---
+  state.particles.forEach(p => p.update(w, h, dt));
+  state.dust.forEach(d => d.update(w, h, dt));
+
+  // --- Co-pigmentation attraction (antho <-> tannin) ---
+  const anthos = state.particles.filter(p=>p.type==='antho');
+  const tannins = state.particles.filter(p=>p.type==='tannin');
+  const k = PARAMS.clusterK * state.coRatio;
+  anthos.forEach(a => {
+    tannins.forEach(t => {
+      const dx = t.x - a.x, dy = t.y - a.y;
+      const d2 = dx*dx+dy*dy; const d = Math.sqrt(d2);
+      if(d>2 && d<120) {
+        const f = k * 600 / (d2+10);
+        a.vx += f*dx/d; a.vy += f*dy/d;
+        t.vx -= f*dx/d; t.vy -= f*dy/d;
+      }
+    });
+  });
+
+  // --- SO2 bleaching ---
+  const so2s = state.particles.filter(p=>p.type==='so2');
+  anthos.forEach(a => {
+    if(a.bleached) {
+      // Natural recovery
+      if(rand() < PARAMS.so2RecoveryRate) a.bleached = false;
+      return;
+    }
+    so2s.forEach(s => {
+      const dx = s.x - a.x, dy = s.y - a.y;
+      const d = Math.hypot(dx, dy);
+      if(d < PARAMS.so2BleachRadius) {
+        const bleachProb = PARAMS.so2BleachRate * (state.so2/30) * (1 - state.ph/6); // more bleaching at lower pH
+        if(rand() < bleachProb) a.bleached = true;
+      }
+    });
+  });
+
+  // --- Polymerization over aging ---
+  // Probability an anthocyanin + tannin nearby forms polymeric pigment
+  const polyRate = PARAMS.polyRateBase * Math.pow(PARAMS.tempPolyQ10, (state.temp-20)/10) * (state.age>0?Math.min(1,state.age/6):0.01);
+  // Only cluster near tannins convert
+  const newPolymers = [];
+  for(let i=state.particles.length-1;i>=0;i--) {
+    const p = state.particles[i];
+    if(p.type!=='antho' || p.bleached) continue;
+    // Find nearest tannin
+    let nearest = null, minD = 50;
+    for(const t of tannins) {
+      const d = Math.hypot(t.x-p.x, t.y-p.y);
+      if(d < minD) { minD=d; nearest=t; }
+    }
+    if(nearest && rand() < polyRate) {
+      // Convert antho to polymeric at midpoint
+      const poly = new Particle('polymeric', w, h);
+      poly.x = (p.x+nearest.x)*0.5; poly.y = (p.y+nearest.y)*0.5;
+      poly.vx = (p.vx+nearest.vx)*0.3; poly.vy = (p.vy+nearest.vy)*0.3;
+      newPolymers.push(poly);
+      // Remove antho and tannin
+      state.particles.splice(i,1);
+      const ti = state.particles.indexOf(nearest);
+      if(ti>-1) state.particles.splice(ti,1);
+    }
+  }
+  state.particles.push(...newPolymers);
+
+  // --- Spontaneous nucleation / balance maintenance ---
+  // Keep particle counts roughly stable for visual continuity
+  const counts = { antho:0, tannin:0, so2:0, polymeric:0 };
+  state.particles.forEach(p=>counts[p.type]++);
+  while(counts.antho < PARAMS.anthoCount - Math.floor(state.age*1.5)) {
+    state.particles.push(new Particle('antho', w, h)); counts.antho++;
+  }
+  while(counts.tannin < PARAMS.tanninCount) {
+    state.particles.push(new Particle('tannin', w, h)); counts.tannin++;
+  }
+  while(counts.so2 < PARAMS.so2Count * (state.so2/50)) {
+    state.particles.push(new Particle('so2', w, h)); counts.so2++;
+  }
+
+  // --- Merge nearby polymeric pigments ---
+  const merged = new Set();
+  const polys = state.particles.filter(p=>p.type==='polymeric');
+  for(let i=0;i<polys.length;i++){
+    if(merged.has(polys[i])) continue;
+    const A=polys[i];
+    for(let j=i+1;j<polys.length;j++){
+      if(merged.has(polys[j])) continue;
+      const B=polys[j];
+      const d=Math.hypot(A.x-B.x,A.y-B.y);
+      if(d < A.radius+B.radius+PARAMS.mergePadding){
+        A.radius = Math.min(18, Math.sqrt(A.radius*A.radius + B.radius*B.radius));
+        A.mass += B.mass;
+        merged.add(B);
+      }
+    }
+  }
+  state.particles = state.particles.filter(p => !merged.has(p));
+
+  // --- History logging ---
+  const abs = computeAbsorbance();
+  if(state.time % 0.2 < state.dt) {
+    state.history.t.push(state.time);
+    state.history.a420.push(abs.a420);
+    state.history.a520.push(abs.a520);
+    state.history.a620.push(abs.a620);
+    state.history.polyFrac.push(abs.polyFrac);
+    if(state.history.t.length > state.history.maxLen) {
+      state.history.t.shift(); state.history.a420.shift(); state.history.a520.shift();
+      state.history.a620.shift(); state.history.polyFrac.shift();
+    }
+  }
+
+  // --- Update wine color for glass preview ---
+  const flavy = abs.spec.flavy;
+  const quin = abs.spec.quinoidal;
+  const carb = abs.spec.carbinol;
+  const poly = abs.polyFrac;
+  // Base wine color interpolation
+  const r = lerp(lerp(80,120,poly), 40, quin) * flavy + 30*carb;
+  const g = lerp(lerp(10,40,poly), 20, quin) * flavy + 30*carb;
+  const b = lerp(lerp(18,15,poly), 70, quin) * flavy + 30*carb;
+  state.wineColor = { r:clamp(r,10,180), g:clamp(g,5,80), b:clamp(b,8,100) };
+
+  // --- UI updates ---
+  document.getElementById('particleCount').textContent = state.particles.length + state.dust.length;
+  document.getElementById('valColorDensity').textContent = abs.colorDensity.toFixed(2);
+  document.getElementById('valPolymeric').textContent = (abs.polyFrac*100).toFixed(1)+'%';
+  document.getElementById('valHue').textContent = abs.hue.toFixed(2);
+  document.getElementById('swatchColor').style.background = `rgb(${Math.round(state.wineColor.r)},${Math.round(state.wineColor.g)},${Math.round(state.wineColor.b)})`;
+
+  // Update glass liquid
+  const liq = document.getElementById('wineLiquid');
+  if(liq) {
+    liq.style.cssText = `position:absolute;bottom:0;left:0;right:0;height:75%;border-radius:0 0 33px 33px;background:rgba(${Math.round(state.wineColor.r)},${Math.round(state.wineColor.g)},${Math.round(state.wineColor.b)},0.85);transition:background 0.3s;`;
+  }
+}
+
+// ======================= Render =======================
+function drawSim() {
+  const c = document.getElementById('simCanvas');
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+
+  // Grid reticle
+  ctx.strokeStyle = 'rgba(126,200,227,0.035)';
+  ctx.lineWidth = 1;
+  const gs = 50 * state.scale;
+  const offX = (-state.viewX * state.scale) % gs;
+  const offY = (-state.viewY * state.scale) % gs;
+  for(let x=offX;x<w;x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+  for(let y=offY;y<h;y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+  ctx.save();
+  ctx.translate(w/2 + state.viewX*state.scale, h/2 + state.viewY*state.scale);
+  ctx.scale(state.scale, state.scale);
+  ctx.translate(-w/2, -h/2);
+
+  // Dust
+  state.dust.forEach(d=>d.draw(ctx));
+
+  // Particles
+  state.particles.forEach(p => {
+    let color, alpha=0.85, glow=null;
+    if(p.type==='antho') {
+      if(p.bleached) { color={r:160,g:160,b:160}; alpha=0.35; }
+      else { color={r:199,g:62,b:62}; alpha=0.9; glow='rgba(199,62,62,0.12)'; }
+    } else if(p.type==='tannin') {
+      color={r:139,g:90,b:43}; alpha=0.8; glow='rgba(139,90,43,0.08)';
+    } else if(p.type==='so2') {
+      color={r:232,g:200,b:74}; alpha=0.75; glow='rgba(232,200,74,0.1)';
+    } else if(p.type==='polymeric') {
+      color={r:74,g:26,b:42}; alpha=0.95; glow='rgba(120,40,60,0.15)';
+    } else {
+      color={r:160,g:160,b:160}; alpha=0.3;
+    }
+
+    const r = p.radius * (p.type==='polymeric'?1.1:1);
+    if(glow) {
+      const rg=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3);
+      rg.addColorStop(0,glow); rg.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(p.x,p.y,r*3,0,Math.PI*2); ctx.fill();
+    }
+    const grad = ctx.createRadialGradient(p.x-1,p.y-1,0,p.x,p.y,r);
+    grad.addColorStop(0, `rgba(${color.r+40},${color.g+40},${color.b+40},${alpha})`);
+    grad.addColorStop(1, `rgba(${color.r},${color.g},${color.b},${alpha})`);
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
+    // Specular highlight
+    ctx.fillStyle=`rgba(255,255,255,${alpha*0.35})`;
+    ctx.beginPath(); ctx.arc(p.x-r*0.25,p.y-r*0.25,r*0.35,0,Math.PI*2); ctx.fill();
+  });
+
+  // Connection lines for co-pigmentation clusters
+  const anthos = state.particles.filter(p=>p.type==='antho' && !p.bleached);
+  const tannins = state.particles.filter(p=>p.type==='tannin');
+  ctx.strokeStyle='rgba(199,62,62,0.12)';
+  ctx.lineWidth=0.8;
+  anthos.forEach(a => {
+    tannins.forEach(t => {
+      const d=Math.hypot(a.x-t.x,a.y-t.y);
+      if(d<55) {
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(t.x,t.y); ctx.stroke();
+      }
+    });
+  });
+
+  // Border glow based on pH
+  const t = clamp((state.ph - 2.8)/1.2,0,1);
+  const cold=[126,200,227], warm=[227,160,126];
+  const r=Math.round(cold[0]+(warm[0]-cold[0])*t);
+  const g=Math.round(cold[1]+(warm[1]-cold[1])*t);
+  const b=Math.round(cold[2]+(warm[2]-cold[2])*t);
+  ctx.strokeStyle=`rgba(${r},${g},${b},0.12)`;
+  ctx.lineWidth=3;
+  ctx.strokeRect(10,10,w-20,h-20);
+
+  ctx.restore();
+}
+
+function drawSpectral() {
+  const c = document.getElementById('spectralCanvas');
+  const ctx = c.getContext('2d');
+  const w = c.width = c.clientWidth * Math.min(2, window.devicePixelRatio||1);
+  const h = c.height = c.clientHeight * Math.min(2, window.devicePixelRatio||1);
+  ctx.clearRect(0,0,w,h);
+
+  const abs = computeAbsorbance();
+  const maxA = 1.8;
+  const barW = w/3.5;
+  const pad = (w - barW*3)/4;
+
+  const drawBar = (x, label, val, color) => {
+    const bh = Math.min(h*0.75, (val/maxA)*h*0.75);
+    const y = h*0.85 - bh;
+    const grad = ctx.createLinearGradient(x,y,x,y+bh);
+    grad.addColorStop(0, color+'88'); grad.addColorStop(1, color+'ee');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, barW, bh);
+    ctx.strokeStyle = color; ctx.lineWidth=1.5;
+    ctx.strokeRect(x, y, barW, bh);
+    ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='700 11px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(label, x+barW/2, h*0.96);
+    ctx.font='500 10px sans-serif'; ctx.fillStyle='rgba(255,255,255,0.55)';
+    ctx.fillText(val.toFixed(2), x+barW/2, y-6);
+  };
+
+  drawBar(pad, '420 nm', abs.a420, '#b8a030');
+  drawBar(pad*2+barW, '520 nm', abs.a520, '#c73e3e');
+  drawBar(pad*3+barW*2, '620 nm', abs.a620, '#4a6aff');
+}
+
+function drawCharts() {
+  // Absorbance over time
+  const c1 = document.getElementById('chartAbs');
+  const ctx1 = c1.getContext('2d');
+  const w1 = c1.width = c1.clientWidth * Math.min(2, window.devicePixelRatio||1);
+  const h1 = c1.height = c1.clientHeight * Math.min(2, window.devicePixelRatio||1);
+  ctx1.clearRect(0,0,w1,h1);
+
+  if(state.history.t.length<2) return;
+  const maxT = Math.max(1, state.history.t[state.history.t.length-1]);
+  const maxA = 2.0;
+  const pad=22;
+
+  const toX = (t)=>pad + (t/maxT)*(w1-pad*2);
+  const toY = (a)=>h1-pad - (a/maxA)*(h1-pad*2);
+
+  const drawSeries = (arr, color) => {
+    ctx1.strokeStyle=color; ctx1.lineWidth=2; ctx1.beginPath();
+    arr.forEach((v,i)=>{ const x=toX(state.history.t[i]), y=toY(v); if(i===0)ctx1.moveTo(x,y); else ctx1.lineTo(x,y); });
+    ctx1.stroke();
+  };
+  drawSeries(state.history.a420, 'rgba(184,160,48,0.9)');
+  drawSeries(state.history.a520, 'rgba(199,62,62,0.9)');
+  drawSeries(state.history.a620, 'rgba(74,106,255,0.9)');
+
+  // Axes
+  ctx1.strokeStyle='rgba(255,255,255,0.08)'; ctx1.lineWidth=1;
+  ctx1.beginPath(); ctx1.moveTo(pad,pad); ctx1.lineTo(pad,h1-pad); ctx1.lineTo(w1-pad,h1-pad); ctx1.stroke();
+
+  // Polymeric fraction
+  const c2 = document.getElementById('chartFrac');
+  const ctx2 = c2.getContext('2d');
+  const w2 = c2.width = c2.clientWidth * Math.min(2, window.devicePixelRatio||1);
+  const h2 = c2.height = c2.clientHeight * Math.min(2, window.devicePixelRatio||1);
+  ctx2.clearRect(0,0,w2,h2);
+
+  const toX2 = (t)=>pad + (t/maxT)*(w2-pad*2);
+  const toY2 = (f)=>h2-pad - f*(h2-pad*2);
+  ctx2.fillStyle='rgba(120,40,60,0.25)'; ctx2.beginPath();
+  state.history.polyFrac.forEach((f,i)=>{ const x=toX2(state.history.t[i]), y=toY2(f); if(i===0)ctx2.moveTo(x,y); else ctx2.lineTo(x,y); });
+  ctx2.lineTo(toX2(state.history.t[state.history.t.length-1]), h2-pad);
+  ctx2.lineTo(toX2(state.history.t[0]), h2-pad); ctx2.closePath(); ctx2.fill();
+  ctx2.strokeStyle='rgba(200,80,100,0.9)'; ctx2.lineWidth=2; ctx2.beginPath();
+  state.history.polyFrac.forEach((f,i)=>{ const x=toX2(state.history.t[i]), y=toY2(f); if(i===0)ctx2.moveTo(x,y); else ctx2.lineTo(x,y); });
+  ctx2.stroke();
+  ctx2.strokeStyle='rgba(255,255,255,0.08)'; ctx2.lineWidth=1;
+  ctx2.beginPath(); ctx2.moveTo(pad,pad); ctx2.lineTo(pad,h2-pad); ctx2.lineTo(w2-pad,h2-pad); ctx2.stroke();
+}
+
+function loop() {
+  updateSim();
+  drawSim();
+  drawSpectral();
+  drawCharts();
+  // Smooth camera
+  state.viewX += (state.targetViewX - state.viewX)*0.06;
+  state.viewY += (state.targetViewY - state.viewY)*0.06;
+  state.scale += (state.targetScale - state.scale)*0.06;
+  requestAnimationFrame(loop);
+}
+
+// ======================= Controls =======================
+function bind(id, key, lbl) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', e => {
+    state[key] = parseFloat(e.target.value);
+    document.getElementById(lbl).textContent = state[key].toFixed(key==='ph'?2: key==='age'?1:0);
+    if(key==='ph'){
+      const row = document.getElementById('phRow');
+      row.className = 'ctrl-row' + (state.ph<3.2?' ph-low': state.ph<3.6?' ph-mid':' ph-high');
+    }
+    saveState();
+  });
+}
+
+function saveState() {
+  localStorage.setItem('wineColorState', JSON.stringify({
+    ph:state.ph, so2:state.so2, temp:state.temp, age:state.age, coRatio:state.coRatio
+  }));
+}
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem('wineColorState'));
+    if(s) { state.ph=s.ph; state.so2=s.so2; state.temp=s.temp; state.age=s.age; state.coRatio=s.coRatio; }
+  } catch(e){}
+}
+
+function applyUI() {
+  document.getElementById('inpPh').value = state.ph; document.getElementById('lblPh').textContent = state.ph.toFixed(2);
+  document.getElementById('inpSo2').value = state.so2; document.getElementById('lblSo2').textContent = Math.round(state.so2);
+  document.getElementById('inpTemp').value = state.temp; document.getElementById('lblTemp').textContent = Math.round(state.temp);
+  document.getElementById('inpAge').value = state.age; document.getElementById('lblAge').textContent = state.age.toFixed(1);
+  document.getElementById('inpCo').value = state.coRatio; document.getElementById('lblCo').textContent = state.coRatio.toFixed(2);
+  const row = document.getElementById('phRow');
+  row.className = 'ctrl-row' + (state.ph<3.2?' ph-low': state.ph<3.6?' ph-mid':' ph-high');
+}
+
+// ======================= Event Listeners =======================
+document.getElementById('btnReset').addEventListener('click', () => {
+  state.age=0; state.time=0; initSim();
+});
+document.getElementById('btnPause').addEventListener('click', () => {
+  state.paused = !state.paused;
+  document.getElementById('btnPause').textContent = state.paused ? 'Resume' : 'Pause';
+  document.getElementById('btnPause').classList.toggle('active', state.paused);
+});
+document.getElementById('btnPulse').addEventListener('click', () => {
+  const c = document.getElementById('simCanvas');
+  const w=c.width, h=c.height;
+  for(let i=0;i<15;i++) state.particles.push(new Particle('so2', w, h));
+  setTimeout(() => {
+    state.particles = state.particles.filter(p=>p.type!=='so2' || Math.random()<0.3);
+  }, 3000);
+});
+
+const simCanvas = document.getElementById('simCanvas');
+simCanvas.addEventListener('mousedown', e => {
+  state.mouseDown=true; state.dragStartX=e.clientX; state.dragStartY=e.clientY;
+});
+window.addEventListener('mouseup', ()=>state.mouseDown=false);
+window.addEventListener('mousemove', e => {
+  if(!state.mouseDown) return;
+  const dx=e.clientX-state.dragStartX, dy=e.clientY-state.dragStartY;
+  state.targetViewX += dx/state.scale; state.targetViewY += dy/state.scale;
+  state.dragStartX=e.clientX; state.dragStartY=e.clientY;
+});
+simCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.targetScale = clamp(state.targetScale * (e.deltaY>0?0.92:1.08), 0.3, 3);
+}, {passive:false});
+
+window.addEventListener('resize', () => {
+  const c=document.getElementById('simCanvas');
+  c.width=c.clientWidth*Math.min(2,window.devicePixelRatio||1);
+  c.height=c.clientHeight*Math.min(2,window.devicePixelRatio||1);
+});
+
+// ======================= Init =======================
+loadState();
+applyUI();
+initSim();
+loop();
+</script>
+</body>
+</html>
