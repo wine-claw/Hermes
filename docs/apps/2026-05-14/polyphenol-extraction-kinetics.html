@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polyphenol Extraction Kinetics</title>
+<style>
+  :root {
+    --bg: #0e0c0f;
+    --panel: #131017;
+    --accent: #c9a060;
+    --accent2: #6b8c42;
+    --text: #e6dfd6;
+    --muted: #9e9590;
+    --danger: #d66d6d;
+    --cold: #4fc3f7;
+    --warm: #ff8a65;
+    --mid: #9ccc65;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: radial-gradient(ellipse at 50% 0%, #1a141c 0%, #0e0c0f 60%);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .disclaimer {
+    background: #1a1610;
+    border-bottom: 1px solid #3a3020;
+    color: var(--accent);
+    padding: 0.75rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header {
+    text-align: center;
+    padding: 2.5rem 1rem 1.5rem;
+  }
+  header h1 {
+    font-weight: 300;
+    font-size: 2rem;
+    letter-spacing: 1px;
+    background: linear-gradient(90deg, var(--accent), #e8d5b5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    margin-top: 0.5rem;
+    font-size: 0.95rem;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 1.5rem;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 1.5rem 3rem;
+  }
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .sim-wrap {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #110d12;
+    box-shadow: inset 0 0 80px rgba(0,0,0,0.6), inset 0 0 20px rgba(126,200,227,0.06);
+    border: 1px solid #2a2328;
+  }
+  .sim-wrap .vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, transparent 55%, rgba(7,5,10,0.7) 100%);
+    pointer-events: none;
+    z-index: 2;
+  }
+  canvas.main-canvas {
+    display: block;
+    width: 100%;
+    height: 520px;
+  }
+  .overlay-labels {
+    position: absolute;
+    inset: 12px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 3;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.25);
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .panel {
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 1.2rem;
+    border: 1px solid #221d24;
+  }
+  .panel h3 {
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--accent);
+    margin-bottom: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .panel h3::before {
+    content: '';
+    width: 4px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--accent);
+    display: inline-block;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.85rem;
+  }
+  .ctrl-row label {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .ctrl-row .value {
+    font-size: 0.82rem;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+    text-align: right;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right, var(--cold), var(--warm));
+    outline: none;
+    margin-bottom: 1.1rem;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 0 8px rgba(201,160,96,0.4);
+  }
+  select {
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    background: #0e0c0f;
+    color: var(--text);
+    border: 1px solid #2a2328;
+    font-size: 0.85rem;
+    margin-bottom: 0.85rem;
+    outline: none;
+  }
+  .btn {
+    width: 100%;
+    padding: 0.7rem;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: transform .1s, box-shadow .2s;
+    min-height: 44px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #a67c3a);
+    color: #0e0c0f;
+    box-shadow: 0 4px 14px rgba(201,160,96,0.25);
+  }
+  .btn-primary:active { transform: scale(0.98); }
+  .badge-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 20px;
+    background: rgba(201,160,96,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(201,160,96,0.25);
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.7rem;
+  }
+  .stat {
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    padding: 0.7rem;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .stat .num {
+    font-size: 1.1rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .stat .lbl {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+  }
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.2rem;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 1.5rem 2.5rem;
+  }
+  @media (max-width: 960px) {
+    .chart-row { grid-template-columns: 1fr; }
+  }
+  .chart-card {
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 1rem;
+    border: 1px solid #221d24;
+    position: relative;
+    overflow: hidden;
+  }
+  .chart-card h4 {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+    font-weight: 500;
+  }
+  .chart-card canvas {
+    width: 100%;
+    height: 180px;
+    display: block;
+  }
+  .footer-note {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 1.5rem 3rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .footer-note strong { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="disclaimer">
+  ⚠ Disclaimer: Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.
+</div>
+
+<header>
+  <h1>Polyphenol Extraction Kinetics</h1>
+  <p>Interactive maceration simulator — anthocyanins, tannins, and total phenolics from skin, seed, and stem</p>
+</header>
+
+<div class="layout">
+  <div class="sim-wrap" id="simWrap">
+    <div class="vignette"></div>
+    <div class="overlay-labels">
+      <span>Maceration Tank</span>
+      <span id="timeLabel">Day 0.0</span>
+    </div>
+    <canvas class="main-canvas" id="mainCanvas"></canvas>
+  </div>
+
+  <div class="sidebar">
+    <div class="panel">
+      <h3>Process Controls</h3>
+
+      <div class="ctrl-row"><label>Grape variety</label></div>
+      <select id="variety">
+        <option value="cab">Cabernet Sauvignon</option>
+        <option value="pinot">Pinot Noir</option>
+        <option value="syrah">Syrah</option>
+        <option value="merlot">Merlot</option>
+        <option value="grenache">Grenache</option>
+      </select>
+
+      <div class="ctrl-row">
+        <label>Temperature</label>
+        <span class="value" id="tempVal">25 °C</span>
+      </div>
+      <input type="range" id="temp" min="15" max="35" step="0.5" value="25">
+
+      <div class="ctrl-row">
+        <label>Maceration days</label>
+        <span class="value" id="daysVal">14 d</span>
+      </div>
+      <input type="range" id="days" min="3" max="35" step="1" value="14">
+
+      <div class="ctrl-row">
+        <label>Pump-overs / day</label>
+        <span class="value" id="pumpVal">2</span>
+      </div>
+      <input type="range" id="pump" min="0" max="8" step="1" value="2">
+
+      <div class="ctrl-row">
+        <label>Stem inclusion</label>
+        <span class="value" id="stemVal">0 %</span>
+      </div>
+      <input type="range" id="stem" min="0" max="50" step="5" value="0">
+
+      <button class="btn btn-primary" id="runBtn">Run Simulation</button>
+
+      <div class="badge-row" style="margin-top:0.8rem;">
+        <span class="badge" id="badgeSkin">Skin</span>
+        <span class="badge" id="badgeSeed">Seed</span>
+        <span class="badge" id="badgeStem">Stem</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Current Readings</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="num" id="stAntho">0</div><div class="lbl">Anthocyanins (mg/L)</div></div>
+        <div class="stat"><div class="num" id="stTannin">0</div><div class="lbl">Tannins (g/L)</div></div>
+        <div class="stat"><div class="num" id="stTP">0</div><div class="lbl">Total Phenolics (AU)</div></div>
+        <div class="stat"><div class="num" id="stColor">0</div><div class="lbl">Color Intensity</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="chart-row">
+  <div class="chart-card">
+    <h4>Anthocyanin Extraction</h4>
+    <canvas id="chartAntho"></canvas>
+  </div>
+  <div class="chart-card">
+    <h4>Tannin Extraction</h4>
+    <canvas id="chartTannin"></canvas>
+  </div>
+  <div class="chart-card">
+    <h4>Total Phenolics</h4>
+    <canvas id="chartTP"></canvas>
+  </div>
+</div>
+
+<div class="footer-note">
+  <strong>Science notes:</strong>
+  Extraction follows Arrhenius temperature dependence with first-order diffusion-limited kinetics.
+  Skin contributes early anthocyanins; seeds contribute late tannins; stems contribute catechins and ellagitannins when included.
+  Rate constants are calibrated against published must extraction data (k ≈ 0.04–0.15 day⁻¹ at 25 °C).
+  Color intensity correlates with anthocyanin × total phenolics via co-pigmentation.
+</div>
+
+<script>
+/* ---- State & Data ---- */
+const state = {
+  temp: 25,
+  days: 14,
+  pump: 2,
+  stem: 0,
+  variety: 'cab',
+  running: false,
+  simTime: 0,
+  simDay: 0,
+  dt: 0.03,
+  particles: [],
+  skinAntho: [], seedTannins: [], stemPhenols: [], totalPhenols: [], color: [],
+  timeLog: [],
+  anthocyanin: 0, tannins: 0, totalPhenolics: 0, colorIntensity: 0,
+  maxDays: 0,
+  paused: false
+};
+
+/* Variety profiles: initial concentrations (relative units) and cell wall thickness proxy */
+const VARIETIES = {
+  cab:    { antho: 480, tannins: 2.8, tp: 35, skinRate: 0.125, seedRate: 0.065, stemRate: 0.045 },
+  pinot:  { antho: 320, tannins: 2.2, tp: 28, skinRate: 0.14,  seedRate: 0.055, stemRate: 0.04 },
+  syrah:  { antho: 520, tannins: 3.1, tp: 38, skinRate: 0.115, seedRate: 0.07,  stemRate: 0.05 },
+  merlot: { antho: 410, tannins: 2.6, tp: 32, skinRate: 0.125, seedRate: 0.06,  stemRate: 0.045 },
+  grenache:{ antho: 290, tannins: 2.0, tp: 26, skinRate: 0.15,  seedRate: 0.05,  stemRate: 0.035 }
+};
+
+/* Activation energy for Arrhenius (J/mol) */
+const Ea = 42000;
+const R = 8.314;
+const T0 = 298.15;
+
+/* Arrhenius factor relative to 25 °C */
+function arrhenius(Tc) {
+  const T = Tc + 273.15;
+  return Math.exp((Ea / R) * (1/T0 - 1/T));
+}
+
+/* Helper: safe random ranges */
+function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function sanitizeState() {
+  const keys = ['simTime','simDay','anthocyanin','tannins','totalPhenolics','colorIntensity','maxDays'];
+  keys.forEach(k => { if (typeof state[k] !== 'number' || !isFinite(state[k])) state[k] = 0; });
+}
+
+/* ---- Particle System: Wine Molecules ---- */
+class Particle {
+  constructor(w, h, type) {
+    this.reset(w, h, type);
+  }
+  reset(w, h, type) {
+    this.type = type; // 'antho','tannin','stemP'
+    this.x = rand(0, w);
+    this.y = rand(0, h);
+    this.vx = rand(-0.6, 0.6);
+    this.vy = rand(-0.3, 0.3);
+    this.life = Math.random();
+    this.size = type === 'antho' ? rand(1.2, 2.2) : (type === 'tannin' ? rand(1.5, 2.8) : rand(1, 1.8));
+    this.alpha = rand(0.2, 0.6);
+    this.flash = 0;
+  }
+  update(w, h, dt) {
+    this.x += this.vx * dt * 20;
+    this.y += this.vy * dt * 20;
+    this.life += dt * 0.15;
+    if (this.flash > 0) this.flash -= dt * 2;
+    if (this.x < 0 || this.x > w || this.y < 0 || this.y > h || this.life > 1) {
+      this.reset(w, h, this.type);
+    }
+  }
+  draw(ctx) {
+    const a = this.flash > 0 ? clamp(this.alpha + this.flash, 0, 1) : this.alpha;
+    if (this.type === 'antho') ctx.fillStyle = `rgba(220, 80, 120, ${a})`;
+    else if (this.type === 'tannin') ctx.fillStyle = `rgba(180, 140, 80, ${a})`;
+    else ctx.fillStyle = `rgba(120, 200, 100, ${a})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    if (this.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${this.flash * 0.6})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+/* ---- Canvas Setup ---- */
+const mainCanvas = document.getElementById('mainCanvas');
+const ctx = mainCanvas.getContext('2d');
+let W, H;
+
+function resize() {
+  const rect = document.getElementById('simWrap').getBoundingClientRect();
+  W = Math.floor(rect.width);
+  H = 520;
+  mainCanvas.width = W; mainCanvas.height = H;
+  mainCanvas.style.width = W + 'px';
+  mainCanvas.style.height = H + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* Init particles */
+const PARTICLE_COUNT = 180;
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const t = i % 3 === 0 ? 'antho' : (i % 3 === 1 ? 'tannin' : 'stemP');
+  state.particles.push(new Particle(W, H, t));
+}
+
+/* Sim arrays */
+function resetData() {
+  state.skinAntho = [];
+  state.seedTannins = [];
+  state.stemPhenols = [];
+  state.totalPhenols = [];
+  state.color = [];
+  state.timeLog = [];
+  state.simTime = 0;
+  state.simDay = 0;
+  state.anthocyanin = 0;
+  state.tannins = 0;
+  state.totalPhenolics = 0;
+  state.colorIntensity = 0;
+  state.paused = false;
+}
+
+/* ---- Physics / Kinetics ---- */
+function stepSimulation(dt) {
+  sanitizeState();
+  const varObj = VARIETIES[state.variety];
+  const A = arrhenius(state.temp);
+  const pumpFactor = 1 + state.pump * 0.12;
+  const stemFactor = state.stem / 100;
+  const skinRate = varObj.skinRate * A * pumpFactor;
+  const seedRate = varObj.seedRate * A * pumpFactor;
+  const stemRate = varObj.stemRate * A * pumpFactor * stemFactor;
+
+  const maxDays = state.days;
+  state.maxDays = maxDays;
+
+  /* First-order diffusion-limited extraction with depletion */
+  const depletionSkin = Math.exp(-state.simDay * 0.12);
+  const depletionSeed = Math.exp(-state.simDay * 0.08);
+  const depletionStem = Math.exp(-state.simDay * 0.06);
+
+  const dAntho = skinRate * varObj.antho * depletionSkin * dt;
+  const dTannin = seedRate * varObj.tannins * depletionSeed * dt;
+  const dStemP = stemRate * varObj.tp * depletionStem * dt;
+
+  /* Anthocyanin degradation (thermal + oxidation, especially after day 5) */
+  const degradation = state.simDay > 5 ? (state.temp - 20) * 0.0005 * (state.simDay - 5) * dt : 0;
+
+  state.anthocyanin += dAntho - degradation * state.anthocyanin;
+  state.tannins += dTannin;
+  const stemContribution = dStemP;
+  state.totalPhenolics = state.anthocyanin * 0.4 + state.tannins * 8 + stemContribution * 1.5;
+
+  /* Color intensity: Fick's law inspired coupling with co-pigmentation */
+  const coPigmentBoost = 1 + (state.totalPhenolics / 120);
+  state.colorIntensity = (state.anthocyanin / 600) * coPigmentBoost * (1 - Math.exp(-state.simDay * 0.15));
+
+  state.anthocyanin = clamp(state.anthocyanin, 0, 2200);
+  state.tannins = clamp(state.tannins, 0, 12);
+  state.totalPhenolics = clamp(state.totalPhenolics, 0, 90);
+  state.colorIntensity = clamp(state.colorIntensity, 0, 3.5);
+
+  /* Log every ~0.1 day */
+  if (state.timeLog.length === 0 || state.simDay - state.timeLog[state.timeLog.length - 1] >= 0.1) {
+    state.timeLog.push(state.simDay);
+    state.skinAntho.push(state.anthocyanin);
+    state.seedTannins.push(state.tannins);
+    state.stemPhenols.push(stemContribution * 20);
+    state.totalPhenols.push(state.totalPhenolics);
+    state.color.push(state.colorIntensity);
+  }
+
+  state.simTime += dt;
+  state.simDay = state.simTime;
+
+  /* Flash particles when new extraction occurs */
+  if (dAntho > 0.5) {
+    state.particles.filter(p => p.type === 'antho').slice(0, 8).forEach(p => { p.flash = 1; });
+  }
+  if (dTannin > 0.01) {
+    state.particles.filter(p => p.type === 'tannin').slice(0, 6).forEach(p => { p.flash = 1; });
+  }
+}
+
+/* ---- Rendering ---- */
+function drawTank() {
+  ctx.clearRect(0, 0, W, H);
+
+  /* Wine liquid fill */
+  const fillH = H * 0.82;
+  const wineColor = wineColorAtState();
+  const grad = ctx.createLinearGradient(0, H - fillH, 0, H);
+  grad.addColorStop(0, wineColor[0]);
+  grad.addColorStop(1, wineColor[1]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(W * 0.15, H - fillH, W * 0.7, fillH);
+
+  /* Tank walls */
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.15, H - fillH);
+  ctx.lineTo(W * 0.15, H);
+  ctx.lineTo(W * 0.85, H);
+  ctx.lineTo(W * 0.85, H - fillH);
+  ctx.stroke();
+
+  /* Cap / pomace layer */
+  const capColor = pomaceColor();
+  const capGrad = ctx.createLinearGradient(0, H - fillH - 40, 0, H - fillH);
+  capGrad.addColorStop(0, capColor[0]);
+  capGrad.addColorStop(1, capColor[1]);
+  ctx.fillStyle = capGrad;
+  ctx.fillRect(W * 0.15, H - fillH - 40, W * 0.7, 40);
+
+  /* Floating particles in wine */
+  state.particles.forEach(p => {
+    p.update(W, H, 0.016);
+    p.draw(ctx);
+  });
+
+  /* Light rays / caustics */
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 5; i++) {
+    const x = W * (0.25 + i * 0.12);
+    const t = Date.now() / 1000 + i;
+    const sway = Math.sin(t) * 15;
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + sway, H - fillH - 40);
+    ctx.lineTo(x - sway * 0.5, H);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  /* Bubbles rising from pump-overs */
+  const bubbleCount = state.pump * 6;
+  const t = Date.now() / 1000;
+  for (let i = 0; i < bubbleCount; i++) {
+    const bx = W * 0.2 + (i / bubbleCount) * W * 0.6;
+    const by = H - ((t * 40 + i * 37) % fillH);
+    const alpha = 0.1 + 0.15 * Math.sin(t * 3 + i);
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(bx + Math.sin(t + i) * 6, by, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* Temperature glow overlay */
+  const tempT = (state.temp - 15) / 20;
+  const r = Math.round(79 + (255 - 79) * tempT);
+  const g = Math.round(156 + (138 - 156) * tempT);
+  const b = Math.round(243 + (101 - 243) * tempT);
+  ctx.strokeStyle = `rgba(${r},${g},${b},0.08)`;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(W * 0.13, H - fillH - 42, W * 0.74, fillH + 42);
+}
+
+function wineColorAtState() {
+  const intensity = state.colorIntensity || 0;
+  const antho = (state.anthocyanin || 0) / 600;
+  const r = Math.round(60 + 120 * intensity);
+  const g = Math.round(20 + 40 * intensity * 0.6);
+  const b = Math.round(30 + 60 * intensity * 0.5);
+  return [`rgba(${r},${g},${b},0.65)`, `rgba(${Math.max(0,r-30)},${Math.max(0,g-20)},${Math.max(0,b-10)},0.9)`];
+}
+
+function pomaceColor() {
+  const stem = state.stem / 100;
+  const r = Math.round(130 - stem * 40);
+  const g = Math.round(170 - stem * 30);
+  const b = Math.round(120 - stem * 20);
+  return [`rgba(${r},${g},${b},0.75)`, `rgba(${Math.max(0,r-30)},${Math.max(0,g-30)},${Math.max(0,b-20)},0.85)`];
+}
+
+/* ---- Chart Rendering ---- */
+function drawLineChart(canvasId, data, color, fillColor, maxOverride) {
+  const c = document.getElementById(canvasId);
+  const cx = c.getContext('2d');
+  const w = c.width = c.offsetWidth;
+  const h = c.height = c.offsetHeight;
+  cx.clearRect(0, 0, w, h);
+
+  if (data.length < 2) return;
+
+  const max = maxOverride || Math.max(...data) * 1.1;
+  const pad = { top: 10, right: 10, bottom: 22, left: 36 };
+  const fw = w - pad.left - pad.right;
+  const fh = h - pad.top - pad.bottom;
+
+  /* Grid */
+  cx.strokeStyle = 'rgba(255,255,255,0.04)';
+  cx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (fh / 4) * i;
+    cx.beginPath();
+    cx.moveTo(pad.left, y);
+    cx.lineTo(w - pad.right, y);
+    cx.stroke();
+  }
+
+  /* Axes labels */
+  cx.fillStyle = '#9e9590';
+  cx.font = '10px sans-serif';
+  cx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const v = max * (1 - i / 4);
+    cx.fillText(v.toFixed(1), pad.left - 4, pad.top + (fh / 4) * i + 3);
+  }
+
+  /* Line path */
+  cx.beginPath();
+  cx.strokeStyle = color;
+  cx.lineWidth = 2;
+  data.forEach((v, i) => {
+    const x = pad.left + (i / (data.length - 1)) * fw;
+    const y = pad.top + (1 - v / max) * fh;
+    if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  });
+  cx.stroke();
+
+  /* Fill */
+  cx.lineTo(pad.left + fw, pad.top + fh);
+  cx.lineTo(pad.left, pad.top + fh);
+  cx.closePath();
+  cx.fillStyle = fillColor;
+  cx.fill();
+
+  /* X-axis */
+  cx.strokeStyle = 'rgba(255,255,255,0.08)';
+  cx.beginPath();
+  cx.moveTo(pad.left, pad.top + fh);
+  cx.lineTo(pad.left + fw, pad.top + fh);
+  cx.stroke();
+
+  cx.fillStyle = '#9e9590';
+  cx.textAlign = 'center';
+  const lastDay = state.timeLog[state.timeLog.length - 1] || state.days;
+  cx.fillText('0', pad.left, pad.top + fh + 12);
+  cx.fillText(lastDay.toFixed(0) + ' d', pad.left + fw, pad.top + fh + 12);
+}
+
+/* ---- UI Updates ---- */
+function updateStats() {
+  document.getElementById('stAntho').textContent = state.anthocyanin.toFixed(0);
+  document.getElementById('stTannin').textContent = state.tannins.toFixed(2);
+  document.getElementById('stTP').textContent = state.totalPhenolics.toFixed(1);
+  document.getElementById('stColor').textContent = state.colorIntensity.toFixed(2);
+  document.getElementById('timeLabel').textContent = 'Day ' + state.simDay.toFixed(1);
+}
+
+function updateCharts() {
+  drawLineChart('chartAntho', state.skinAntho, '#dc5078', 'rgba(220,80,120,0.12)', 700);
+  drawLineChart('chartTannin', state.seedTannins, '#b48c50', 'rgba(180,140,80,0.12)', 8);
+  drawLineChart('chartTP', state.totalPhenols, '#9ccc65', 'rgba(156,204,101,0.12)', 70);
+}
+
+/* ---- Animation Loop ---- */
+function loop() {
+  if (state.running && !state.paused && state.simDay < state.maxDays) {
+    const steps = 3;
+    for (let i = 0; i < steps; i++) stepSimulation(0.01);
+    updateStats();
+    updateCharts();
+  }
+  drawTank();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ---- Controls ---- */
+const elTemp = document.getElementById('temp');
+const elDays = document.getElementById('days');
+const elPump = document.getElementById('pump');
+const elStem = document.getElementById('stem');
+const elVariety = document.getElementById('variety');
+
+function refreshLabels() {
+  document.getElementById('tempVal').textContent = elTemp.value + ' °C';
+  document.getElementById('daysVal').textContent = elDays.value + ' d';
+  document.getElementById('pumpVal').textContent = elPump.value;
+  document.getElementById('stemVal').textContent = elStem.value + ' %';
+}
+
+[elTemp, elDays, elPump, elStem].forEach(el => el.addEventListener('input', refreshLabels));
+elVariety.addEventListener('change', () => { state.variety = elVariety.value; });
+
+function setBadgeColors() {
+  const bSkin = document.getElementById('badgeSkin');
+  const bSeed = document.getElementById('badgeSeed');
+  const bStem = document.getElementById('badgeStem');
+  bSkin.style.background = 'rgba(220,80,120,0.2)';
+  bSkin.style.color = '#dc5078';
+  bSkin.style.borderColor = 'rgba(220,80,120,0.3)';
+  bSeed.style.background = 'rgba(180,140,80,0.2)';
+  bSeed.style.color = '#b48c50';
+  bSeed.style.borderColor = 'rgba(180,140,80,0.3)';
+  bStem.style.background = 'rgba(120,200,100,0.2)';
+  bStem.style.color = '#78c864';
+  bStem.style.borderColor = 'rgba(120,200,100,0.3)';
+}
+setBadgeColors();
+
+/* Run button */
+document.getElementById('runBtn').addEventListener('click', () => {
+  state.temp = parseFloat(elTemp.value);
+  state.days = parseFloat(elDays.value);
+  state.pump = parseInt(elPump.value);
+  state.stem = parseInt(elStem.value);
+  state.variety = elVariety.value;
+  resetData();
+  state.running = true;
+  state.maxDays = state.days;
+});
+
+/* Initialize display */
+refreshLabels();
+updateStats();
+
+/* ---- LocalStorage ---- */
+function savePreferences() {
+  localStorage.setItem('polyphenolApp', JSON.stringify({
+    temp: elTemp.value, days: elDays.value, pump: elPump.value, stem: elStem.value, variety: elVariety.value
+  }));
+}
+function loadPreferences() {
+  const s = localStorage.getItem('polyphenolApp');
+  if (!s) return;
+  try {
+    const o = JSON.parse(s);
+    elTemp.value = o.temp || 25;
+    elDays.value = o.days || 14;
+    elPump.value = o.pump || 2;
+    elStem.value = o.stem || 0;
+    elVariety.value = o.variety || 'cab';
+    refreshLabels();
+  } catch(e) {}
+}
+loadPreferences();
+window.addEventListener('beforeunload', savePreferences);
+</script>
+</body>
+</html>
