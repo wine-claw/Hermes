@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vineyard Canopy & Light Interception Simulator</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #111820;
+    --surface: #1a2330;
+    --border: #2a3a50;
+    --accent: #f4a261;
+    --accent2: #2a9d8f;
+    --text: #e0e8f0;
+    --muted: #8090a8;
+    --sun: #e9c46a;
+    --shade: #264653;
+    --cluster: #9b2226;
+    --leaf: #588157;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+  }
+  #canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0f1b2e 0%, #1b2d45 40%, #2d4a1e 100%);
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #sidebar {
+    width: 340px;
+    min-width: 280px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 1.2rem;
+    gap: 1rem;
+  }
+  h1 { font-size: 1.05rem; color: var(--accent); margin-bottom: 0.3rem; letter-spacing: 0.02em; }
+  .subtitle { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
+
+  .control-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem;
+  }
+  .control-group h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent2);
+    margin-bottom: 0.7rem;
+  }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.15rem; margin-top: 0.5rem; }
+  label:first-of-type { margin-top: 0; }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+    margin-bottom: 0.15rem;
+  }
+  .val { float: right; font-size: 0.75rem; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .btn-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.4rem;
+  }
+  .btn {
+    flex: 1;
+    min-width: 70px;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .btn.active {
+    background: var(--accent);
+    color: #0a0e14;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+
+  .metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .metric:last-child { border-bottom: none; }
+  .metric-name { color: var(--muted); }
+  .metric-value { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .metric-value.good { color: #2a9d8f; }
+  .metric-value.warn { color: #e9c46a; }
+  .metric-value.bad { color: #e76f51; }
+
+  .bar-track {
+    width: 100%;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-top: 0.5rem;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .legend {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-top: 0.3rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Tooltip on canvas hover */
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(10, 14, 20, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.78rem;
+    color: var(--text);
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    max-width: 220px;
+    line-height: 1.4;
+  }
+
+  @media (max-width: 700px) {
+    #app { flex-direction: column; }
+    #sidebar { width: 100%; height: 45vh; border-left: none; border-top: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-wrap">
+    <canvas id="mainCanvas"></canvas>
+    <div id="tooltip"></div>
+  </div>
+
+  <div id="sidebar">
+    <div>
+      <h1>🍇 Canopy & Light Interception</h1>
+      <div class="subtitle">Interactive viticulture simulator for row architecture, sun exposure, and fruit-zone microclimate.</div>
+    </div>
+
+    <div class="control-group">
+      <h3>Training System</h3>
+      <div class="btn-row">
+        <div class="btn active" data-system="vsp">VSP</div>
+        <div class="btn" data-system="sprawl">Sprawl</div>
+        <div class="btn" data-system="dyson">Smart-Dyson</div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h3>Row Parameters</h3>
+      <label>Row Spacing <span class="val" id="v-spacing">2.5 m</span></label>
+      <input type="range" id="spacing" min="1.5" max="4.0" step="0.1" value="2.5">
+
+      <label>Vine Height <span class="val" id="v-height">1.4 m</span></label>
+      <input type="range" id="height" min="0.8" max="2.2" step="0.1" value="1.4">
+
+      <label>Canopy Width <span class="val" id="v-width">0.6 m</span></label>
+      <input type="range" id="cwidth" min="0.3" max="1.4" step="0.05" value="0.6">
+
+      <label>Leaf Area Index (LAI) <span class="val" id="v-lai">2.5</span></label>
+      <input type="range" id="lai" min="0.5" max="6.0" step="0.1" value="2.5">
+    </div>
+
+    <div class="control-group">
+      <h3>Environment</h3>
+      <label>Time of Day <span class="val" id="v-time">12:00</span></label>
+      <input type="range" id="time" min="6" max="19" step="0.1" value="12">
+
+      <label>Solar Intensity <span class="val" id="v-intensity">1000 W/m²</span></label>
+      <input type="range" id="intensity" min="200" max="1200" step="50" value="1000">
+
+      <label>Latitude <span class="val" id="v-lat">38.0° N</span></label>
+      <input type="range" id="lat" min="28" max="50" step="0.5" value="38">
+    </div>
+
+    <div class="control-group">
+      <h3>Live Metrics</h3>
+      <div class="metric">
+        <span class="metric-name">Photosynthetically Active Radiation (PAR)</span>
+        <span class="metric-value" id="m-par">0 μmol/m²s</span>
+      </div>
+      <div class="metric">
+        <span class="metric-name">Fruit Zone Light (%)</span>
+        <span class="metric-value" id="m-fruit">0%</span>
+      </div>
+      <div class="metric">
+        <span class="metric-name">Canopy Light Interception</span>
+        <span class="metric-value" id="m-interception">0%</span>
+      </div>
+      <div class="metric">
+        <span class="metric-name">Leaf Temperature</span>
+        <span class="metric-value" id="m-temp">— °C</span>
+      </div>
+      <div class="metric">
+        <span class="metric-name">Cluster Exposure Risk</span>
+        <span class="metric-value" id="m-risk">Low</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" id="b-interception" style="width:0%;background:var(--accent2)"></div></div>
+    </div>
+
+    <div class="control-group">
+      <h3>Visual Legend</h3>
+      <div class="legend">
+        <div class="legend-item"><div class="dot" style="background:var(--sun)"></div> Direct Sun</div>
+        <div class="legend-item"><div class="dot" style="background:var(--shade)"></div> Diffuse Shade</div>
+        <div class="legend-item"><div class="dot" style="background:var(--leaf)"></div> Leaf Canopy</div>
+        <div class="legend-item"><div class="dot" style="background:var(--cluster)"></div> Fruit Zone</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== STATE ===== */
+const state = {
+  system: 'vsp',
+  spacing: 2.5,
+  height: 1.4,
+  cwidth: 0.6,
+  lai: 2.5,
+  time: 12.0,
+  intensity: 1000,
+  lat: 38,
+  sunAngle: 0,
+  sunHeight: 0,
+  par: 0,
+  fruitLight: 0,
+  interception: 0,
+  leafTemp: 25,
+  risk: 'Low'
+};
+
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+let particles = [];
+let leaves = [];
+let rays = [];
+let clusters = [];
+let timeAccum = 0;
+let animId;
+
+/* ===== UTILS ===== */
+const DPR = () => window.devicePixelRatio || 1;
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * DPR();
+  canvas.height = rect.height * DPR();
+  ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function toScreen(x, y, z) {
+  // Pseudo-3D projection: x = across rows, z = depth along row, y = height
+  const cx = canvas.width / DPR() * 0.5;
+  const cy = canvas.height / DPR() * 0.78;
+  const scale = Math.min(canvas.width / DPR(), canvas.height / DPR()) / 3.5;
+  const sx = cx + x * scale + z * 0.15;
+  const sy = cy - y * scale + z * 0.08;
+  return { x: sx, y: sy, scale };
+}
+
+/* ===== SIMULATION ===== */
+function computeSunPosition() {
+  // Simplified solar elevation and azimuth for demo
+  const dayHour = state.time;
+  const solarNoon = 12;
+  const declination = 23.45 * Math.sin((284 + 120) / 365 * 2 * Math.PI); // approx for May
+  const latRad = state.lat * Math.PI / 180;
+  const decRad = declination * Math.PI / 180;
+  const hourAngle = (dayHour - solarNoon) * 15 * Math.PI / 180;
+
+  const sinAlt = Math.sin(latRad) * Math.sin(decRad) + Math.cos(latRad) * Math.cos(decRad) * Math.cos(hourAngle);
+  state.sunHeight = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
+  const cosAz = (Math.sin(decRad) - Math.sin(latRad) * sinAlt) / (Math.cos(latRad) * Math.cos(state.sunHeight));
+  state.sunAzimuth = Math.acos(Math.max(-1, Math.min(1, cosAz))) * (dayHour < solarNoon ? -1 : 1);
+}
+
+function computeMetrics() {
+  computeSunPosition();
+  const sinAlt = Math.sin(Math.max(0, state.sunHeight));
+
+  // Beer-Lambert light interception through canopy
+  const k = 0.7; // extinction coeff varies by system
+  const systemK = { vsp: 0.65, sprawl: 0.85, dyson: 0.55 };
+  const effK = systemK[state.system] || 0.7;
+  state.interception = (1 - Math.exp(-effK * state.lai)) * 100;
+
+  // PAR is roughly half of total solar irradiance * sin(altitude) * interception factor
+  state.par = Math.round(state.intensity * 0.5 * sinAlt * 2.02); // 1 W/m² ≈ 2.02 μmol/m²s for PAR
+
+  // Fruit zone light penetration depends on canopy porosity
+  const porosity = Math.max(0.05, 1 - state.lai / 5.5);
+  const fruitFactor = porosity * sinAlt * (state.system === 'vsp' ? 0.35 : state.system === 'dyson' ? 0.55 : 0.2);
+  state.fruitLight = Math.min(100, Math.round(fruitFactor * 100));
+
+  // Leaf temperature estimate
+  const airT = 22 + (state.time > 14 ? -1 : 1) * Math.abs(state.time - 14) * 0.8;
+  state.leafTemp = +(airT + (state.intensity / 1200) * 6 * sinAlt).toFixed(1);
+
+  // Cluster exposure risk
+  const exposure = state.fruitLight;
+  if (exposure > 35) state.risk = 'High (sunburn risk)';
+  else if (exposure > 18) state.risk = 'Moderate';
+  else state.risk = 'Low';
+}
+
+/* ===== GENERATE SCENE OBJECTS ===== */
+function generateScene() {
+  leaves = [];
+  clusters = [];
+  const { spacing, height, cwidth, system } = state;
+  const rows = 5;
+  const vinesPerRow = 8;
+
+  for (let r = -Math.floor(rows/2); r <= Math.floor(rows/2); r++) {
+    for (let v = 0; v < vinesPerRow; v++) {
+      const x = r * spacing;
+      const z = (v - vinesPerRow/2) * 0.7;
+
+      // Canopy shape per system
+      let canopyHeight, canopyWidth, canopyCenterY, shape;
+      if (system === 'vsp') {
+        canopyHeight = 0.5 + Math.random() * 0.15;
+        canopyWidth = cwidth;
+        canopyCenterY = height - 0.1;
+        shape = 'rect';
+      } else if (system === 'sprawl') {
+        canopyHeight = height * 0.55;
+        canopyWidth = cwidth * 1.6;
+        canopyCenterY = height * 0.6;
+        shape = 'ellipse';
+      } else { // dyson
+        canopyHeight = 0.7 + Math.random() * 0.2;
+        canopyWidth = cwidth * 1.2;
+        canopyCenterY = height * 0.5;
+        shape = 'hourglass';
+      }
+
+      // Generate leaf particles inside canopy volume
+      const leafCount = Math.floor(state.lai * 18);
+      for (let i = 0; i < leafCount; i++) {
+        let lx, ly;
+        if (shape === 'rect') {
+          lx = x + (Math.random() - 0.5) * canopyWidth;
+          ly = canopyCenterY + (Math.random() - 0.5) * canopyHeight;
+          ly = Math.max(0.1, Math.min(height + 0.3, ly));
+        } else if (shape === 'ellipse') {
+          const ang = Math.random() * Math.PI * 2;
+          const rad = Math.sqrt(Math.random());
+          lx = x + rad * Math.cos(ang) * canopyWidth * 0.5;
+          ly = canopyCenterY + rad * Math.sin(ang) * canopyHeight * 0.5;
+        } else {
+          const t = Math.random();
+          const wFactor = Math.sin(t * Math.PI) * canopyWidth;
+          lx = x + (Math.random() - 0.5) * wFactor;
+          ly = 0.4 + t * (height - 0.4);
+        }
+        const sz = 3 + Math.random() * 5;
+        const lit = Math.random() > 0.6;
+        leaves.push({ x: lx, y: ly, z, size: sz, lit, r: (Math.random()-0.5)*0.3, phase: Math.random()*Math.PI*2 });
+      }
+
+      // Fruit clusters in fruit zone
+      const clusterCount = 1 + Math.floor(Math.random() * 2);
+      for (let c = 0; c < clusterCount; c++) {
+        const cz = z + (Math.random()-0.5)*0.2;
+        const cy = system === 'vsp' ? height - 0.45 : system === 'dyson' ? height * 0.35 : height * 0.25;
+        clusters.push({ x: x + (Math.random()-0.5)*0.15, y: cy, z: cz, size: 5 + Math.random()*3, exposed: Math.random() > 0.5 });
+      }
+    }
+  }
+}
+
+/* ===== DRAWING ===== */
+function drawGround() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+
+  // Sky gradient already in CSS, but let's add horizon haze
+  ctx.fillStyle = 'rgba(45,74,30,0.3)';
+  ctx.fillRect(0, h*0.6, w, h*0.4);
+
+  // Ground rows
+  const rows = 7;
+  for (let r = -3; r <= 3; r++) {
+    const p1 = toScreen(r * state.spacing, 0, -3);
+    const p2 = toScreen(r * state.spacing, 0, 3);
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.strokeStyle = 'rgba(139, 169, 98, 0.25)';
+    ctx.lineWidth = 1 + Math.abs(r)*0.5;
+    ctx.stroke();
+  }
+}
+
+function drawVineStructure() {
+  const system = state.system;
+  const rows = 5;
+  const vinesPerRow = 8;
+
+  for (let r = -Math.floor(rows/2); r <= Math.floor(rows/2); r++) {
+    for (let v = 0; v < vinesPerRow; v++) {
+      const x = r * state.spacing;
+      const z = (v - vinesPerRow/2) * 0.7;
+      const trunkW = 0.04;
+      const trunkH = state.height * 0.3;
+
+      // Trunk
+      const base = toScreen(x, 0, z);
+      const mid = toScreen(x, trunkH, z);
+      ctx.beginPath();
+      ctx.moveTo(base.x, base.y);
+      ctx.lineTo(mid.x, mid.y);
+      ctx.strokeStyle = '#5a4a3a';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Cordons / arms
+      const armY = trunkH;
+      if (system === 'vsp') {
+        const armL = state.cwidth * 0.4;
+        const left = toScreen(x - armL, armY, z);
+        const right = toScreen(x + armL, armY, z);
+        const center = toScreen(x, armY, z);
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.strokeStyle = '#6b5a4a';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+
+        // Vertical shoots
+        const shootTop = toScreen(x, state.height, z);
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(shootTop.x, shootTop.y);
+        ctx.strokeStyle = '#4a6a3a';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // Catch wires
+        for (let wy of [armY + 0.3, armY + 0.55]) {
+          const wl = toScreen(x - 0.4, wy, z);
+          const wr = toScreen(x + 0.4, wy, z);
+          ctx.beginPath();
+          ctx.moveTo(wl.x, wl.y);
+          ctx.lineTo(wr.x, wr.y);
+          ctx.strokeStyle = 'rgba(180,180,180,0.3)';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      } else if (system === 'sprawl') {
+        const armL = state.cwidth * 0.7;
+        const left = toScreen(x - armL, armY, z);
+        const right = toScreen(x + armL, armY, z);
+        const center = toScreen(x, armY, z);
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.strokeStyle = '#6b5a4a';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        // Sprawling canes
+        for (let side of [-1, 1]) {
+          const sx = x + side * armL * 0.8;
+          const sy = armY + 0.15;
+          const ex = x + side * armL * 1.1;
+          const ey = armY + 0.35;
+          const s1 = toScreen(sx, sy, z);
+          const e1 = toScreen(ex, ey, z);
+          ctx.beginPath();
+          ctx.moveTo(s1.x, s1.y);
+          ctx.quadraticCurveTo((s1.x+e1.x)/2 + side*5, (s1.y+e1.y)/2 + 8, e1.x, e1.y);
+          ctx.strokeStyle = '#5a7a4a';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      } else { // dyson
+        const armL = state.cwidth * 0.5;
+        const left = toScreen(x - armL, armY, z);
+        const right = toScreen(x + armL, armY, z);
+        const center = toScreen(x, armY, z);
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.strokeStyle = '#6b5a4a';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        // Two panels
+        for (let side of [-1, 1]) {
+          const px = x + side * armL * 0.9;
+          const py = state.height * 0.75;
+          const ptop = toScreen(px, py, z);
+          const pbot = toScreen(px, armY + 0.1, z);
+          ctx.beginPath();
+          ctx.moveTo(center.x, center.y);
+          ctx.lineTo(ptop.x, ptop.y);
+          ctx.strokeStyle = '#4a6a3a';
+          ctx.lineWidth = 1.3;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+}
+
+function drawLeaves(time) {
+  // Sort by z for depth
+  leaves.sort((a,b) => a.z - b.z);
+  for (let leaf of leaves) {
+    const p = toScreen(leaf.x, leaf.y, leaf.z);
+    const age = Math.sin(time * 0.8 + leaf.phase) * 0.15 + 0.85;
+    const baseG = leaf.lit ? 130 : 88;
+    const r = Math.floor(40 * age);
+    const g = Math.floor(baseG * age);
+    const b = Math.floor(50 * age);
+    ctx.fillStyle = `rgba(${r},${g},${b},${0.6 + leaf.size*0.04})`;
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(leaf.r + Math.sin(time + leaf.phase)*0.05);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, leaf.size, leaf.size*0.6, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawClusters() {
+  for (let cl of clusters) {
+    const p = toScreen(cl.x, cl.y, cl.z);
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(p.x+2, p.y+3, cl.size, cl.size*0.7, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Berry cluster
+    const berryCount = 7;
+    for (let i = 0; i < berryCount; i++) {
+      const ang = (i / berryCount) * Math.PI * 2 + 0.3;
+      const dist = cl.size * 0.45;
+      const bx = p.x + Math.cos(ang) * dist;
+      const by = p.y + Math.sin(ang) * dist * 0.7;
+      const grad = ctx.createRadialGradient(bx-1, by-1, 1, bx, by, 4);
+      if (cl.exposed) {
+        grad.addColorStop(0, '#d44a55');
+        grad.addColorStop(1, '#7a1e24');
+      } else {
+        grad.addColorStop(0, '#6a2a32');
+        grad.addColorStop(1, '#3a1216');
+      }
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(bx, by, 3.5, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Center berry
+    const grad = ctx.createRadialGradient(p.x-1, p.y-1, 1, p.x, p.y, 4);
+    grad.addColorStop(0, cl.exposed ? '#e85d68' : '#5a2228');
+    grad.addColorStop(1, cl.exposed ? '#9b2226' : '#2a0e12');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3.8, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function spawnSunRays() {
+  if (state.sunHeight <= 0) { rays = []; return; }
+  // Spawn rays from sun position downward
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+
+  // Sun screen position (top opposite to azimuth)
+  const sunX = w * 0.5 - Math.sin(state.sunAzimuth) * w * 0.35;
+  const sunY = h * 0.12 - Math.sin(state.sunHeight) * h * 0.05;
+
+  const maxRays = 30;
+  while (rays.length < maxRays) {
+    rays.push({
+      x: sunX + (Math.random()-0.5) * w * 0.6,
+      y: sunY + (Math.random()-0.5) * 20,
+      vx: Math.sin(state.sunAzimuth) * (1 + Math.random()),
+      vy: 2 + Math.random() * 2,
+      life: 1,
+      len: 40 + Math.random() * 60
+    });
+  }
+}
+
+function drawRays() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  for (let i = rays.length - 1; i >= 0; i--) {
+    const r = rays[i];
+    r.x += r.vx;
+    r.y += r.vy;
+    r.life -= 0.008;
+    if (r.life <= 0 || r.y > rect.height) {
+      rays.splice(i, 1);
+      continue;
+    }
+    const alpha = r.life * 0.2;
+    ctx.strokeStyle = `rgba(255, 230, 180, ${alpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(r.x, r.y);
+    ctx.lineTo(r.x + r.vx * r.len * 0.5, r.y + r.vy * r.len * 0.5);
+    ctx.stroke();
+  }
+}
+
+function drawSun() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+  if (state.sunHeight <= 0) return;
+
+  const sunX = w * 0.5 - Math.sin(state.sunAzimuth) * w * 0.35;
+  const sunY = h * 0.12 - Math.sin(state.sunHeight) * h * 0.05;
+  const sunRadius = 18 + state.intensity / 80;
+
+  // Glow
+  const glow = ctx.createRadialGradient(sunX, sunY, sunRadius*0.4, sunX, sunY, sunRadius*3);
+  glow.addColorStop(0, 'rgba(233, 196, 106, 0.45)');
+  glow.addColorStop(0.5, 'rgba(233, 196, 106, 0.12)');
+  glow.addColorStop(1, 'rgba(233, 196, 106, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(sunX - sunRadius*3, sunY - sunRadius*3, sunRadius*6, sunRadius*6);
+
+  // Core
+  const core = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, sunRadius);
+  core.addColorStop(0, '#fff8e1');
+  core.addColorStop(0.3, '#e9c46a');
+  core.addColorStop(1, 'rgba(233, 196, 106, 0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunRadius, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawHeatShimmer() {
+  // Subtle heat particles rising from canopy
+  const rect = canvas.parentElement.getBoundingClientRect();
+  if (particles.length < 40) {
+    const rx = (Math.random() - 0.5) * state.spacing * 4;
+    const ry = state.height * 0.5 + Math.random() * 0.3;
+    const rz = (Math.random() - 0.5) * 3;
+    particles.push({ x: rx, y: ry, z: rz, vy: -0.3 - Math.random()*0.4, life: 1, size: 1 + Math.random()*2 });
+  }
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.y += p.vy * 0.02;
+    p.life -= 0.01;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    const sp = toScreen(p.x, p.y, p.z);
+    ctx.fillStyle = `rgba(255, 200, 150, ${p.life * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawOverlayInfo() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  ctx.fillStyle = 'rgba(10,14,20,0.75)';
+  ctx.fillRect(12, 12, 210, 90);
+  ctx.strokeStyle = 'rgba(42,58,80,0.8)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(12, 12, 210, 90);
+
+  ctx.fillStyle = '#e0e8f0';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('Canopy Simulator', 20, 30);
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.fillStyle = '#8b949e';
+  ctx.fillText(`${state.system.toUpperCase()} · ${state.lat}°N · ${formatTime(state.time)}`, 20, 46);
+  ctx.fillText(`Interception: ${state.interception.toFixed(1)}%`, 20, 62);
+  ctx.fillText(`Fruit Light: ${state.fruitLight}%`, 20, 78);
+  ctx.fillText(`PAR: ${state.par} μmol/m²s`, 20, 94);
+}
+
+function formatTime(t) {
+  const h = Math.floor(t);
+  const m = Math.floor((t - h) * 60);
+  return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+}
+
+function renderFrame(time) {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  computeMetrics();
+  drawGround();
+  drawSun();
+  spawnSunRays();
+  drawRays();
+  drawVineStructure();
+  drawLeaves(time / 1000);
+  drawClusters();
+  drawHeatShimmer();
+  drawOverlayInfo();
+
+  updateMetricsUI();
+  animId = requestAnimationFrame(renderFrame);
+}
+
+/* ===== UI UPDATES ===== */
+function updateMetricsUI() {
+  document.getElementById('m-par').textContent = `${state.par} μmol/m²s`;
+  document.getElementById('m-fruit').textContent = `${state.fruitLight}%`;
+  document.getElementById('m-interception').textContent = `${state.interception.toFixed(1)}%`;
+  document.getElementById('m-temp').textContent = `${state.leafTemp} °C`;
+  const riskEl = document.getElementById('m-risk');
+  riskEl.textContent = state.risk;
+  riskEl.className = 'metric-value' + (state.risk.startsWith('High') ? ' bad' : state.risk.startsWith('Moderate') ? ' warn' : ' good');
+  document.getElementById('b-interception').style.width = `${Math.min(100, state.interception)}%`;
+}
+
+/* ===== CONTROLS ===== */
+function bind(id, key, fmt) {
+  const el = document.getElementById(id);
+  const disp = document.getElementById('v-' + id);
+  el.addEventListener('input', () => {
+    state[key] = parseFloat(el.value);
+    disp.textContent = fmt(state[key]);
+    if (key === 'system') generateScene();
+  });
+}
+
+bind('spacing', 'spacing', v => `${v.toFixed(1)} m`);
+bind('height', 'height', v => `${v.toFixed(1)} m`);
+bind('cwidth', 'cwidth', v => `${v.toFixed(2)} m`);
+bind('lai', 'lai', v => v.toFixed(1));
+bind('time', 'time', v => formatTime(v));
+bind('intensity', 'intensity', v => `${Math.round(v)} W/m²`);
+bind('lat', 'lat', v => `${v.toFixed(1)}° N`);
+
+// Training system buttons
+const sysBtns = document.querySelectorAll('[data-system]');
+sysBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    sysBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.system = btn.dataset.system;
+    generateScene();
+  });
+});
+
+// Canvas interaction
+let hoverVine = null;
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // Simple hit test against leaves for tooltip
+  let found = null;
+  for (let leaf of leaves) {
+    const p = toScreen(leaf.x, leaf.y, leaf.z);
+    const dx = mx - p.x;
+    const dy = my - p.y;
+    if (dx*dx + dy*dy < 120) {
+      found = leaf;
+      break;
+    }
+  }
+  if (found) {
+    tooltip.style.opacity = 1;
+    tooltip.style.left = (mx + 14) + 'px';
+    tooltip.style.top = (my + 14) + 'px';
+    tooltip.innerHTML = `<strong>Leaf Node</strong><br>LAI contribution: ${(found.size/18).toFixed(2)}<br>Light class: ${found.lit ? 'Sunlit' : 'Shade'}`;
+  } else {
+    tooltip.style.opacity = 0;
+  }
+});
+
+/* ===== INIT ===== */
+generateScene();
+renderFrame(0);
+</script>
+</body>
+</html>
