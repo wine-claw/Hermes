@@ -334,24 +334,23 @@ function simulate(){
   // 60% → -0.03 MPa  40% → -0.07  20% → -0.34  10% → -1.5  5% → capped
   const psiSoil = -0.03 * Math.pow(60 / Math.max(sw, 2), 2.2);
 
-  // 2. Root uptake conductance (per unit leaf area, MPa-based)
-  // kRoot ~ 0.005–0.02 mol/m²/s/MPa for grapevine
-  const kRoot = kr * 0.008 * (sw/40);
+  // 2. Root uptake conductance (per unit leaf area)
+  const kRoot = kr * 0.005 * (sw / 40);
 
   // 3. Stomatal conductance (Jarvis + hydraulic feedback)
   let gsMax = 0.25;
-  if(!isDay) gsMax *= 0.05;
-  const fRad  = Math.min(1, rad/600);
-  const fTemp = Math.exp(-Math.pow((temp-28)/18,2));
-  const fVPD  = Math.exp(-vpd*0.8);
-  // CORRECTED sigmoid: opens when well hydrated (Ψ ≈ -0.2), closes below -1.2 MPa
-  const fPsi  = 1/(1+Math.exp(-(state.psi + 0.8)*4));
+  if (!isDay) gsMax *= 0.05;
+  const fRad  = Math.min(1, rad / 600);
+  const fTemp = Math.exp(-Math.pow((temp - 28) / 18, 2));
+  const fVPD  = Math.exp(-vpd * 0.3);                 // milder penalty
+  // CORRECTED sigmoid: opens when hydrated (Ψ ≈ -0.2), closes below -1.2 MPa
+  const fPsi  = 1 / (1 + Math.exp(-(state.psi + 0.8) * 4));
   let gs = gsMax * fRad * fTemp * fVPD * fPsi;
   gs = Math.max(0.001, gs);
 
-  // 4. Transpiration E = gs * VPD * molVol  (mmol/m²/s)
-  const molVol = 44.6 * (temp+273.15)/298.15; // temperature-corrected molar volume
-  const e = gs * vpd * molVol * 1000;          // convert mol→mmol
+  // 4. Transpiration E = gs * VPD * (1000 / P_atm)   [mmol/m²/s]
+  const P_atm = 101.3; // kPa
+  const e = gs * vpd * (1000 / P_atm);
 
   // 5. Leaf water potential from supply-demand balance
   // E (mmol/m²/s) = k (mol/m²/s/MPa) * 1000 * (Ψsoil - Ψleaf)
