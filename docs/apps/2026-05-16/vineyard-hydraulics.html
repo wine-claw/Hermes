@@ -128,7 +128,7 @@ resize();
 const state={
   sw:40, vpd:1.5, temp:25, rad:800, isDay:true,
   kr:1.0, lai:3.0, c:8,
-  psi:-0.8, stem:-0.6, e:4.2, gs:0.18, safety:82,
+  psi:-0.95, stem:-0.80, e:3.8, gs:0.058, safety:43,
   history:[]
 };
 
@@ -326,43 +326,61 @@ function drawVine(c,t){
 }
 
 /* ===== PHYSICS MODEL ===== */
+let targetPsi = -0.95;
 function simulate(){
   const {sw,vpd,temp,rad,isDay,kr,lai,c}=state;
-  // Soil water potential (simplified)
-  const psiSoil=-0.01 * (1-sw/60)*5; // MPa, more negative as soil dries
-  // Root uptake conductance
-  const kRoot=kr*0.015*(sw/40); // mol/m²/s/MPa scaled
-  // Transpiration driven by VPD, radiation, gs
-  // Stomatal conductance model (Jarvis-type + hydraulic feedback)
-  let gsMax=0.25; // mol/m²/s
-  if(!isDay) gsMax*=0.08;
-  const fRad=Math.min(1,rad/800);
-  const fTemp=Math.exp(-Math.pow((temp-28)/18,2));
-  const fVPD=Math.exp(-vpd*0.8);
-  // Hydraulic signal: gs drops as leaf water potential falls
-  const fPsi=1/(1+Math.exp((state.psi+1.4)*6)); // sigmoid, closes below -1.2
-  let gs=gsMax*fRad*fTemp*fVPD*fPsi;
-  gs=Math.max(0.002,gs);
-  const e=gs*vpd*44.6; // mmol/m²/s approx
-  // Leaf water potential (supply-demand balance)
-  // E = k * (psiSoil - psiLeaf) => psiLeaf = psiSoil - E/k
-  const kTotal=kRoot*lai;
-  let psiLeaf=psiSoil - (e/1000)/Math.max(0.001,kTotal);
-  psiLeaf=Math.max(-4.5,Math.min(-0.05,psiLeaf));
-  // Stem is less negative than leaf (resistance)
-  const psiStem=psiLeaf+0.15;
-  // Hydraulic safety margin (% of cavitation threshold ~ -1.6 MPa for grapevine)
-  const threshold=-1.6;
-  const safety=Math.max(0,Math.min(100,(psiLeaf-threshold)/(-0.1-threshold)*100));
 
-  state.psi=psiLeaf;
-  state.stem=psiStem;
-  state.e=e;
-  state.gs=gs;
-  state.safety=safety;
+  // 1. Soil water potential (power-law, realistic for clay-loam vineyard soil)
+  // 60% → -0.03 MPa  40% → -0.07  20% → -0.34  10% → -1.5  5% → capped
+  const psiSoil = -0.03 * Math.pow(60 / Math.max(sw, 2), 2.2);
+
+  // 2. Root uptake conductance (per unit leaf area, MPa-based)
+  // kRoot ~ 0.005–0.02 mol/m²/s/MPa for grapevine
+  const kRoot = kr * 0.008 * (sw/40);
+
+  // 3. Stomatal conductance (Jarvis + hydraulic feedback)
+  let gsMax = 0.25;
+  if(!isDay) gsMax *= 0.05;
+  const fRad  = Math.min(1, rad/600);
+  const fTemp = Math.exp(-Math.pow((temp-28)/18,2));
+  const fVPD  = Math.exp(-vpd*0.8);
+  // CORRECTED sigmoid: opens when well hydrated (Ψ ≈ -0.2), closes below -1.2 MPa
+  const fPsi  = 1/(1+Math.exp(-(state.psi + 0.8)*4));
+  let gs = gsMax * fRad * fTemp * fVPD * fPsi;
+  gs = Math.max(0.001, gs);
+
+  // 4. Transpiration E = gs * VPD * molVol  (mmol/m²/s)
+  const molVol = 44.6 * (temp+273.15)/298.15; // temperature-corrected molar volume
+  const e = gs * vpd * molVol * 1000;          // convert mol→mmol
+
+  // 5. Leaf water potential from supply-demand balance
+  // E (mmol/m²/s) = k (mol/m²/s/MPa) * 1000 * (Ψsoil - Ψleaf)
+  // → Ψleaf = Ψsoil - E/(1000*k)
+  const kTotal = kRoot;
+  const rawPsi = psiSoil - e/(1000 * Math.max(0.0005, kTotal));
+
+  // 6. Capacitance: higher C = slower response (RC-like lag)
+  // c slider 2–20 mm.  Time constant τ ∝ c
+  const tau = 0.5 + c * 0.15;   // seconds
+  const alpha = 1 - Math.exp(-0.016/tau);  // per frame @ 60fps
+  targetPsi += (rawPsi - targetPsi) * alpha;
+  let psiLeaf = Math.max(-4.5, Math.min(-0.03, targetPsi));
+
+  // 7. Stem slightly less negative than leaf (xylem resistance)
+  const psiStem = psiLeaf + 0.15 * (1 + vpd/3);
+
+  // 8. Hydraulic safety margin vs cavitation threshold (-1.6 MPa typical for Vitis vinifera)
+  const threshold = -1.6;
+  const safety = Math.max(0, Math.min(100, (psiLeaf - threshold)/(-0.05 - threshold)*100));
+
+  state.psi = psiLeaf;
+  state.stem = psiStem;
+  state.e = e;
+  state.gs = gs;
+  state.safety = safety;
 
   // History for graph
-  state.history.push({psi:psiLeaf,stem:psiStem,gs:gs});
+  state.history.push({psi:psiLeaf, stem:psiStem, gs:gs});
   if(state.history.length>200) state.history.shift();
 }
 
