@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vineyard Hydraulic Architecture Simulator</title>
+<style>
+  :root{ --bg:#0b0f14; --surface:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#3fb950; --warn:#d29922; --danger:#f85149; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; overflow:hidden; }
+  #wrap{ display:flex; height:100vh; }
+  canvas{ display:block; background:radial-gradient(ellipse at 50% 100%,#0f1a0f 0%,#0b0f14 70%); }
+  #sidebar{ width:340px; min-width:340px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
+  #sidebar h1{ font-size:1.05rem; padding:1rem; border-bottom:1px solid var(--border); color:var(--accent); }
+  .panel{ padding:1rem; border-bottom:1px solid var(--border); }
+  .panel h2{ font-size:0.85rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:0.75rem; }
+  .ctrl{ margin-bottom:0.7rem; }
+  .ctrl label{ display:flex; justify-content:space-between; font-size:0.82rem; margin-bottom:0.25rem; }
+  .ctrl input[type="range"]{ width:100%; accent-color:var(--accent); }
+  .ctrl .val{ color:var(--accent); font-weight:600; }
+  .metric{ display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0; border-bottom:1px solid #1f2937; font-size:0.82rem; }
+  .metric:last-child{ border:none; }
+  .metric .num{ font-variant-numeric:tabular-nums; font-weight:700; }
+  .status{ padding:0.6rem 0.8rem; border-radius:6px; font-size:0.8rem; font-weight:700; text-align:center; margin-top:0.5rem; }
+  .status.ok{ background:rgba(63,185,80,0.12); color:var(--accent2); border:1px solid rgba(63,185,80,0.25); }
+  .status.warn{ background:rgba(210,153,34,0.12); color:var(--warn); border:1px solid rgba(210,153,34,0.25); }
+  .status.crit{ background:rgba(248,81,73,0.12); color:var(--danger); border:1px solid rgba(248,81,73,0.25); }
+  .legend{ display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem; font-size:0.75rem; color:var(--muted); }
+  .legend span{ display:flex; align-items:center; gap:0.3rem; }
+  .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .toggle{ display:flex; gap:0.5rem; }
+  .toggle button{ flex:1; padding:0.4rem; background:#1f2937; border:1px solid var(--border); color:var(--text); border-radius:4px; font-size:0.8rem; cursor:pointer; }
+  .toggle button.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  #graph{ width:100%; height:90px; background:#0d1117; border:1px solid var(--border); border-radius:6px; margin-top:0.5rem; }
+  .note{ font-size:0.75rem; color:var(--muted); margin-top:0.5rem; line-height:1.4; }
+  @media(max-width:800px){ #sidebar{ position:absolute; right:0; top:0; height:100%; transform:translateX(100%); transition:transform .25s; } #sidebar.open{ transform:translateX(0); } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="vine"></canvas>
+  <div id="sidebar">
+    <h1>🍇 Hydraulic Architecture</h1>
+
+    <div class="panel">
+      <h2>Soil & Environment</h2>
+      <div class="ctrl">
+        <label>Soil Moisture (%) <span class="val" id="v-sw">40%</span></label>
+        <input type="range" id="sw" min="5" max="60" value="40">
+      </div>
+      <div class="ctrl">
+        <label>VPD (kPa) <span class="val" id="v-vpd">1.5</span></label>
+        <input type="range" id="vpd" min="0.2" max="4.5" step="0.1" value="1.5">
+      </div>
+      <div class="ctrl">
+        <label>Air Temperature (°C) <span class="val" id="v-temp">25</span></label>
+        <input type="range" id="temp" min="10" max="45" value="25">
+      </div>
+      <div class="ctrl">
+        <label>Solar Radiation (W/m²) <span class="val" id="v-rad">800</span></label>
+        <input type="range" id="rad" min="0" max="1200" step="50" value="800">
+      </div>
+      <div class="ctrl">
+        <label>Time of Day</label>
+        <div class="toggle">
+          <button class="active" data-t="day">Day</button>
+          <button data-t="night">Night</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Plant & Rootstock</h2>
+      <div class="ctrl">
+        <label>Root Hydraulic Conductance <span class="val" id="v-kr">1.0</span></label>
+        <input type="range" id="kr" min="0.2" max="3.0" step="0.1" value="1.0">
+      </div>
+      <div class="ctrl">
+        <label>Leaf Area Index <span class="val" id="v-lai">3.0</span></label>
+        <input type="range" id="lai" min="0.5" max="6.0" step="0.1" value="3.0">
+      </div>
+      <div class="ctrl">
+        <label>Vine Water Storage (mm) <span class="val" id="v-c">8</span></label>
+        <input type="range" id="c" min="2" max="20" step="1" value="8">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Live Metrics</h2>
+      <div class="metric"><span>Leaf Water Potential (Ψleaf)</span><span class="num" id="m-psi">-0.8</span> <span style="color:var(--muted);font-size:0.75rem;">MPa</span></div>
+      <div class="metric"><span>Stem Water Potential (Ψstem)</span><span class="num" id="m-stem">-0.6</span> <span style="color:var(--muted);font-size:0.75rem;">MPa</span></div>
+      <div class="metric"><span>Transpiration Rate (E)</span><span class="num" id="m-e">4.2</span> <span style="color:var(--muted);font-size:0.75rem;">mmol/m²/s</span></div>
+      <div class="metric"><span>Stomatal Conductance (gs)</span><span class="num" id="m-gs">0.18</span> <span style="color:var(--muted);font-size:0.75rem;">mol/m²/s</span></div>
+      <div class="metric"><span>Xylem Tension Safety</span><span class="num" id="m-safety">82</span> <span style="color:var(--muted);font-size:0.75rem;">%</span></div>
+      <div id="status" class="status ok">Well hydrated — optimal gas exchange</div>
+    </div>
+
+    <div class="panel">
+      <h2>Ψleaf History</h2>
+      <canvas id="graph"></canvas>
+      <div class="legend">
+        <span><span class="dot" style="background:#58a6ff"></span> Ψleaf</span>
+        <span><span class="dot" style="background:#f85149"></span> Ψstem</span>
+        <span><span class="dot" style="background:#3fb950"></span> gs</span>
+      </div>
+      <div class="note">Particles show water molecules traversing the soil–plant–atmosphere continuum. Stomatal aperture responds to Ψleaf via a sigmoidal hydraulic signal.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== SIMULATION STATE ===== */
+const canvas=document.getElementById('vine');
+const ctx=canvas.getContext('2d');
+const gCanvas=document.getElementById('graph');
+const gCtx=gCanvas.getContext('2d');
+
+let W,H;
+function resize(){
+  W=canvas.width=canvas.parentElement.clientWidth;
+  H=canvas.height=canvas.parentElement.clientHeight;
+  gCanvas.width=gCanvas.clientWidth*2;
+  gCanvas.height=gCanvas.clientHeight*2;
+}
+window.addEventListener('resize',resize);
+resize();
+
+const state={
+  sw:40, vpd:1.5, temp:25, rad:800, isDay:true,
+  kr:1.0, lai:3.0, c:8,
+  psi:-0.8, stem:-0.6, e:4.2, gs:0.18, safety:82,
+  history:[]
+};
+
+/* ===== PARTICLE SYSTEM ===== */
+class Particle{
+  constructor(zone){
+    this.zone=zone; // 'soil','root','trunk','shoot','leaf','atmos'
+    this.reset();
+  }
+  reset(){
+    const r=()=>Math.random();
+    switch(this.zone){
+      case 'soil':
+        this.x=W*0.45+r()*W*0.1; this.y=H*0.88+r()*H*0.1;
+        this.vx=(r()-0.5)*0.3; this.vy=-(0.2+r()*0.4);
+        break;
+      case 'root':
+        this.x=W*0.48+r()*W*0.04; this.y=H*0.78+r()*H*0.06;
+        this.vx=(r()-0.5)*0.2; this.vy=-(0.4+r()*0.5);
+        break;
+      case 'trunk':
+        this.x=W*0.49+r()*W*0.02; this.y=H*0.72-r()*H*0.06;
+        this.vx=(r()-0.5)*0.1; this.vy=-(0.5+r()*0.6);
+        break;
+      case 'shoot':
+        this.x=W*0.49+r()*W*0.02; this.y=H*0.55-r()*H*0.1;
+        this.vx=(r()-0.5)*0.3; this.vy=-(0.4+r()*0.5);
+        break;
+      case 'leaf':
+        this.x=W*0.49+r()*W*0.02; this.y=H*0.38-r()*H*0.08;
+        this.vx=(r()-0.5)*0.4; this.vy=-(0.3+r()*0.3);
+        break;
+      case 'atmos':
+        this.x=W*0.48+r()*W*0.04; this.y=H*0.25-r()*H*0.15;
+        this.vx=(r()-0.5)*1.2; this.vy=-(0.5+r()*1.5);
+        break;
+    }
+    this.life=1.0; this.maxLife=0.7+r()*0.6;
+    this.size=0.8+r()*1.8;
+  }
+  update(dt,flowFactor){
+    this.x+=this.vx*dt*60;
+    this.y+=this.vy*dt*60*flowFactor;
+    this.life-=dt/this.maxLife;
+    if(this.life<=0) this.reset();
+    // Zone transitions
+    if(this.zone==='soil' && this.y<H*0.76) this.zone='root';
+    if(this.zone==='root' && this.y<H*0.66) this.zone='trunk';
+    if(this.zone==='trunk' && this.y<H*0.48) this.zone='shoot';
+    if(this.zone==='shoot' && this.y<H*0.35) this.zone='leaf';
+    if(this.zone==='leaf' && this.y<H*0.22) this.zone='atmos';
+    if(this.zone==='atmos' && (this.y<0 || this.x<0 || this.x>W)) this.reset();
+  }
+  draw(c){
+    const alpha=this.life;
+    const s=this.size;
+    c.globalAlpha=alpha*0.6;
+    c.fillStyle='#58a6ff';
+    c.beginPath();
+    c.arc(this.x,this.y,s,0,Math.PI*2);
+    c.fill();
+    c.globalAlpha=1;
+  }
+}
+
+const particles=[];
+for(let i=0;i<350;i++) particles.push(new Particle('soil'));
+
+/* ===== VINE GEOMETRY ===== */
+function drawVine(c,t){
+  const cx=W*0.5, ground=H*0.85;
+  // Soil block
+  const soilGrad=c.createLinearGradient(0,ground,0,H);
+  soilGrad.addColorStop(0,'#1a1208');
+  soilGrad.addColorStop(1,'#0f0a04');
+  c.fillStyle=soilGrad;
+  c.fillRect(0,ground,W,H-ground);
+  // Soil moisture gradient
+  const moistAlpha=state.sw/60;
+  const moistGrad=c.createRadialGradient(cx,ground+40,10,cx,ground+60,180);
+  moistGrad.addColorStop(0,`rgba(88,166,255,${moistAlpha*0.25})`);
+  moistGrad.addColorStop(1,'rgba(88,166,255,0)');
+  c.fillStyle=moistGrad;
+  c.fillRect(0,ground,W,H-ground);
+
+  // Roots (fractal-ish)
+  c.strokeStyle='#5a4a3a';
+  c.lineWidth=2;
+  function root(x,y,len,ang,depth){
+    if(depth<=0) return;
+    const x2=x+Math.cos(ang)*len;
+    const y2=y+Math.sin(ang)*len;
+    c.beginPath(); c.moveTo(x,y); c.lineTo(x2,y2); c.stroke();
+    root(x2,y2,len*0.7,ang-0.4,depth-1);
+    root(x2,y2,len*0.7,ang+0.4,depth-1);
+  }
+  root(cx,ground,40,Math.PI*1.5,4);
+  root(cx-15,ground,30,Math.PI*1.4,3);
+  root(cx+15,ground,30,Math.PI*1.6,3);
+
+  // Trunk
+  const trunkGrad=c.createLinearGradient(cx-15,0,cx+15,0);
+  trunkGrad.addColorStop(0,'#3a2818');
+  trunkGrad.addColorStop(0.5,'#5a3a20');
+  trunkGrad.addColorStop(1,'#3a2818');
+  c.fillStyle=trunkGrad;
+  c.beginPath();
+  c.moveTo(cx-10,ground-10);
+  c.lineTo(cx-8,ground-120);
+  c.lineTo(cx+8,ground-120);
+  c.lineTo(cx+10,ground-10);
+  c.closePath();
+  c.fill();
+
+  // Xylem vessels inside trunk (colored by tension)
+  const tensionColor=(p)=>{
+    if(p>-0.6) return '#3fb950';
+    if(p>-1.2) return '#58a6ff';
+    if(p>-1.8) return '#d29922';
+    return '#f85149';
+  };
+  const xc=tensionColor(state.psi);
+  c.strokeStyle=xc;
+  c.lineWidth=2.5;
+  for(let i=0;i<6;i++){
+    const off=(i-2.5)*3;
+    c.beginPath();
+    c.moveTo(cx+off,ground-15);
+    c.lineTo(cx+off+off*0.2,ground-115);
+    c.stroke();
+  }
+
+  // Canopy / leaves
+  const leafAlpha=Math.max(0.3,state.gs/0.3);
+  const leafColor=state.isDay?'#2d5a27':'#1a3a17';
+  c.fillStyle=leafColor;
+  c.globalAlpha=leafAlpha;
+  function drawLeaf(x,y,scale,rot){
+    c.save();
+    c.translate(x,y); c.rotate(rot); c.scale(scale,scale);
+    c.beginPath();
+    c.moveTo(0,0); c.bezierCurveTo(20,-15,40,-5,50,0);
+    c.bezierCurveTo(40,8,20,12,0,0);
+    c.fill();
+    c.restore();
+  }
+  // Left side
+  drawLeaf(cx-25,ground-130,1.2,-0.3+t*0.02);
+  drawLeaf(cx-45,ground-140,0.9,-0.5+t*0.015);
+  drawLeaf(cx-60,ground-120,1.0,-0.7+t*0.01);
+  // Right side
+  drawLeaf(cx+25,ground-130,1.2,0.3-t*0.02);
+  drawLeaf(cx+45,ground-140,0.9,0.5-t*0.015);
+  drawLeaf(cx+60,ground-120,1.0,0.7-t*0.01);
+  // Top
+  drawLeaf(cx,ground-150,1.1,0);
+  c.globalAlpha=1;
+
+  // Stomata on leaf underside (tiny pores)
+  const stomaOpen=Math.max(0.05,state.gs/0.3);
+  c.fillStyle='rgba(200,220,255,0.4)';
+  for(let i=0;i<12;i++){
+    const sx=cx-50+i*9+Math.sin(t*2+i)*2;
+    const sy=ground-125+Math.cos(t*1.5+i)*3;
+    const ow=2+stomaOpen*4;
+    c.beginPath();
+    c.ellipse(sx,sy,ow,1+stomaOpen,0,0,Math.PI*2);
+    c.fill();
+  }
+
+  // Sun / moon
+  if(state.isDay){
+    const sunY=60+Math.sin(t*0.5)*10;
+    const sunGrad=c.createRadialGradient(W-80,sunY,8,W-80,sunY,50);
+    sunGrad.addColorStop(0,'rgba(255,220,120,0.9)');
+    sunGrad.addColorStop(0.5,'rgba(255,180,60,0.3)');
+    sunGrad.addColorStop(1,'rgba(255,180,60,0)');
+    c.fillStyle=sunGrad;
+    c.beginPath(); c.arc(W-80,sunY,50,0,Math.PI*2); c.fill();
+  } else {
+    c.fillStyle='rgba(200,210,230,0.8)';
+    c.beginPath(); c.arc(W-80,60,18,0,Math.PI*2); c.fill();
+    c.fillStyle='rgba(200,210,230,0.15)';
+    c.beginPath(); c.arc(W-80,60,35,0,Math.PI*2); c.fill();
+  }
+
+  // Labels
+  c.fillStyle='rgba(139,148,158,0.7)';
+  c.font='11px system-ui';
+  c.fillText('Soil matrix',20,ground+20);
+  c.fillText('Root system',20,ground-15);
+  c.fillText('Trunk xylem',cx+18,ground-60);
+  c.fillText('Canopy / stomata',cx+45,ground-145);
+  c.fillText('Atmosphere',20,40);
+}
+
+/* ===== PHYSICS MODEL ===== */
+function simulate(){
+  const {sw,vpd,temp,rad,isDay,kr,lai,c}=state;
+  // Soil water potential (simplified)
+  const psiSoil=-0.01 * (1-sw/60)*5; // MPa, more negative as soil dries
+  // Root uptake conductance
+  const kRoot=kr*0.015*(sw/40); // mol/m²/s/MPa scaled
+  // Transpiration driven by VPD, radiation, gs
+  // Stomatal conductance model (Jarvis-type + hydraulic feedback)
+  let gsMax=0.25; // mol/m²/s
+  if(!isDay) gsMax*=0.08;
+  const fRad=Math.min(1,rad/800);
+  const fTemp=Math.exp(-Math.pow((temp-28)/18,2));
+  const fVPD=Math.exp(-vpd*0.8);
+  // Hydraulic signal: gs drops as leaf water potential falls
+  const fPsi=1/(1+Math.exp((state.psi+1.4)*6)); // sigmoid, closes below -1.2
+  let gs=gsMax*fRad*fTemp*fVPD*fPsi;
+  gs=Math.max(0.002,gs);
+  const e=gs*vpd*44.6; // mmol/m²/s approx
+  // Leaf water potential (supply-demand balance)
+  // E = k * (psiSoil - psiLeaf) => psiLeaf = psiSoil - E/k
+  const kTotal=kRoot*lai;
+  let psiLeaf=psiSoil - (e/1000)/Math.max(0.001,kTotal);
+  psiLeaf=Math.max(-4.5,Math.min(-0.05,psiLeaf));
+  // Stem is less negative than leaf (resistance)
+  const psiStem=psiLeaf+0.15;
+  // Hydraulic safety margin (% of cavitation threshold ~ -1.6 MPa for grapevine)
+  const threshold=-1.6;
+  const safety=Math.max(0,Math.min(100,(psiLeaf-threshold)/(-0.1-threshold)*100));
+
+  state.psi=psiLeaf;
+  state.stem=psiStem;
+  state.e=e;
+  state.gs=gs;
+  state.safety=safety;
+
+  // History for graph
+  state.history.push({psi:psiLeaf,stem:psiStem,gs:gs});
+  if(state.history.length>200) state.history.shift();
+}
+
+function updateStatus(){
+  const el=document.getElementById('status');
+  const p=state.psi;
+  if(p>-0.9){ el.className='status ok'; el.textContent='Well hydrated — optimal gas exchange'; }
+  else if(p>-1.6){ el.className='status warn'; el.textContent='Moderate stress — stomata partially closed'; }
+  else{ el.className='status crit'; el.textContent='Severe water deficit — risk of cavitation & yield loss'; }
+}
+
+function drawGraph(){
+  const w=gCanvas.width, h=gCanvas.height;
+  gCtx.clearRect(0,0,w,h);
+  gCtx.fillStyle='#0d1117'; gCtx.fillRect(0,0,w,h);
+  const hist=state.history;
+  if(hist.length<2) return;
+  // Y ranges
+  const minP=-3.0, maxP=0;
+  const minG=0, maxG=0.3;
+  function yP(v){ return h - ((v-minP)/(maxP-minP))*(h-20)-10; }
+  function yG(v){ return h - ((v-minG)/(maxG-minG))*(h-20)-10; }
+  function x(i){ return (i/(hist.length-1))*(w-20)+10; }
+
+  // Grid lines
+  gCtx.strokeStyle='#1f2937'; gCtx.lineWidth=1;
+  for(let i=0;i<=3;i++){
+    const yy=yP(-i);
+    gCtx.beginPath(); gCtx.moveTo(0,yy); gCtx.lineTo(w,yy); gCtx.stroke();
+  }
+
+  // Psi leaf
+  gCtx.strokeStyle='#58a6ff'; gCtx.lineWidth=2;
+  gCtx.beginPath();
+  for(let i=0;i<hist.length;i++){
+    const px=x(i), py=yP(hist[i].psi);
+    if(i===0) gCtx.moveTo(px,py); else gCtx.lineTo(px,py);
+  }
+  gCtx.stroke();
+
+  // Psi stem
+  gCtx.strokeStyle='#f85149'; gCtx.lineWidth=1.5;
+  gCtx.beginPath();
+  for(let i=0;i<hist.length;i++){
+    const px=x(i), py=yP(hist[i].stem);
+    if(i===0) gCtx.moveTo(px,py); else gCtx.lineTo(px,py);
+  }
+  gCtx.stroke();
+
+  // gs
+  gCtx.strokeStyle='#3fb950'; gCtx.lineWidth=1.5;
+  gCtx.beginPath();
+  for(let i=0;i<hist.length;i++){
+    const px=x(i), py=yG(hist[i].gs);
+    if(i===0) gCtx.moveTo(px,py); else gCtx.lineTo(px,py);
+  }
+  gCtx.stroke();
+}
+
+/* ===== RENDER LOOP ===== */
+let last=performance.now();
+function frame(now){
+  const dt=Math.min((now-last)/1000,0.05);
+  last=now;
+  const t=now/1000;
+
+  simulate();
+  updateStatus();
+
+  // Update DOM metrics
+  document.getElementById('m-psi').textContent=state.psi.toFixed(2);
+  document.getElementById('m-stem').textContent=state.stem.toFixed(2);
+  document.getElementById('m-e').textContent=state.e.toFixed(1);
+  document.getElementById('m-gs').textContent=state.gs.toFixed(3);
+  document.getElementById('m-safety').textContent=Math.round(state.safety);
+
+  ctx.clearRect(0,0,W,H);
+  drawVine(ctx,t);
+
+  // Flow factor from E
+  const flowFactor=0.5+state.e/8;
+  particles.forEach(p=>p.update(dt,flowFactor));
+  particles.forEach(p=>p.draw(ctx));
+
+  drawGraph();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ===== CONTROLS ===== */
+function bind(id,key,fmt){
+  const el=document.getElementById(id);
+  const disp=document.getElementById('v-'+id);
+  el.addEventListener('input',()=>{
+    let v=parseFloat(el.value);
+    state[key]=v;
+    disp.textContent=fmt?fmt(v):v;
+  });
+}
+bind('sw','sw',v=>v+'%');
+bind('vpd','vpd');
+bind('temp','temp',v=>v+'°C');
+bind('rad','rad',v=>v+' W/m²');
+bind('kr','kr');
+bind('lai','lai');
+bind('c','c',v=>v+' mm');
+
+document.querySelectorAll('.toggle button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.toggle button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.isDay=btn.dataset.t==='day';
+    if(!state.isDay){ state.rad=0; document.getElementById('rad').value=0; document.getElementById('v-rad').textContent='0 W/m²'; }
+    else{ state.rad=800; document.getElementById('rad').value=800; document.getElementById('v-rad').textContent='800 W/m²'; }
+  });
+});
+</script>
+</body>
+</html>
