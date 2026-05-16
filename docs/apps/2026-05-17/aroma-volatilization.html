@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Aroma Volatilization &amp; Sensory Mapping Simulator</title>
+<style>
+  :root{ --bg:#0a0c10; --surface:#11151c; --panel:#161b24; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#a371f7; --warn:#f0883e; --good:#3fb950; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ font-size:16px; }
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
+  header{ padding:0.6rem 1rem; border-bottom:1px solid var(--border); background:var(--surface); display:flex; align-items:center; gap:0.8rem; flex-shrink:0; z-index:10; }
+  header h1{ font-size:1.05rem; font-weight:700; background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  header .subtitle{ font-size:0.78rem; color:var(--muted); margin-left:auto; }
+  #main{ flex:1; display:flex; overflow:hidden; }
+  #canvas-wrap{ flex:1; position:relative; background:radial-gradient(ellipse at 50% 80%,#0f131a 0%,#06080a 70%); }
+  canvas{ display:block; width:100%; height:100%; }
+  #overlay-stats{ position:absolute; top:0.6rem; left:0.8rem; display:flex; flex-direction:column; gap:0.35rem; pointer-events:none; }
+  .stat-pill{ background:rgba(16,22,32,0.85); border:1px solid var(--border); border-radius:8px; padding:0.35rem 0.7rem; font-size:0.72rem; color:var(--muted); display:flex; align-items:center; gap:0.4rem; }
+  .stat-pill .val{ color:var(--text); font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat-pill .dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+
+  #sidebar{ width:340px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; flex-shrink:0; }
+  @media(max-width:900px){ #sidebar{ width:280px; } }
+  @media(max-width:720px){ #sidebar{ position:absolute; right:0; top:0; bottom:0; transform:translateX(100%); transition:transform .25s; z-index:20; } #sidebar.open{ transform:translateX(0); } #menu-toggle{ display:block!important; } }
+  #menu-toggle{ display:none; position:absolute; top:0.5rem; right:0.5rem; z-index:21; background:var(--surface); border:1px solid var(--border); color:var(--text); width:36px; height:36px; border-radius:8px; cursor:pointer; font-size:1.1rem; }
+
+  .section-title{ font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); padding:0.7rem 1rem 0.3rem; border-bottom:1px solid var(--border); margin-bottom:0.4rem; }
+  .controls{ padding:0.5rem 1rem; display:flex; flex-direction:column; gap:0.7rem; overflow-y:auto; flex:1; }
+  .ctrl-row{ display:flex; flex-direction:column; gap:0.25rem; }
+  .ctrl-row label{ font-size:0.78rem; color:var(--muted); display:flex; justify-content:space-between; }
+  .ctrl-row label span.val{ color:var(--text); font-weight:600; font-variant-numeric:tabular-nums; }
+  input[type="range"]{ -webkit-appearance:none; appearance:none; width:100%; height:6px; background:#1f2937; border-radius:3px; outline:none; }
+  input[type="range"]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; background:var(--accent); border-radius:50%; cursor:pointer; border:2px solid var(--bg); }
+  input[type="range"]::-moz-range-thumb{ width:16px; height:16px; background:var(--accent); border-radius:50%; cursor:pointer; border:2px solid var(--bg); }
+
+  .compound-legend{ display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; padding:0 1rem 0.6rem; }
+  .legend-item{ display:flex; align-items:center; gap:0.4rem; font-size:0.72rem; color:var(--muted); }
+  .legend-swatch{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+  .aroma-wheel-wrap{ padding:0.6rem 1rem; border-top:1px solid var(--border); flex-shrink:0; }
+  .aroma-wheel-wrap h3{ font-size:0.78rem; color:var(--muted); margin-bottom:0.4rem; }
+  #aroma-wheel{ width:100%; height:180px; position:relative; }
+  .wheel-seg{ position:absolute; transform-origin:center; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.6); transition:opacity .3s,transform .3s; }
+
+  .actions{ padding:0.6rem 1rem; border-top:1px solid var(--border); display:flex; gap:0.5rem; flex-shrink:0; }
+  button{ flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:0.5rem 0.6rem; font-size:0.78rem; font-weight:600; cursor:pointer; transition:background .15s,border-color .15s; }
+  button:hover{ background:#1c2330; border-color:var(--accent); }
+  button.primary{ background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; color:#fff; }
+  button.primary:hover{ opacity:0.92; }
+
+  .peak-readout{ padding:0.4rem 1rem; font-size:0.72rem; color:var(--muted); border-top:1px solid var(--border); }
+  .peak-readout b{ color:var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Wine Aroma Volatilization Simulator</h1>
+  <span class="subtitle">Fickian diffusion · Henry's law · Sensory mapping</span>
+</header>
+<button id="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="sim"></canvas>
+    <div id="overlay-stats">
+      <div class="stat-pill">Particles <span class="val" id="p-count">0</span></div>
+      <div class="stat-pill">Vapor mg/L <span class="val" id="vapor-mgl">0.00</span></div>
+      <div class="stat-pill">Temp °C <span class="val" id="temp-disp">20</span></div>
+    </div>
+  </div>
+  <aside id="sidebar">
+    <div class="section-title">Process Parameters</div>
+    <div class="controls">
+      <div class="ctrl-row">
+        <label>Temperature <span class="val" id="t-val">20 °C</span></label>
+        <input type="range" id="temp" min="5" max="45" value="20" step="0.5">
+      </div>
+      <div class="ctrl-row">
+        <label>Ethanol % v/v <span class="val" id="e-val">13.5 %</span></label>
+        <input type="range" id="ethanol" min="8" max="18" value="13.5" step="0.1">
+      </div>
+      <div class="ctrl-row">
+        <label>Surface area <span class="val" id="s-val">50 cm²</span></label>
+        <input type="range" id="surface" min="10" max="120" value="50" step="1">
+      </div>
+      <div class="ctrl-row">
+        <label>Agitation (swirl) <span class="val" id="a-val">0 %</span></label>
+        <input type="range" id="agitation" min="0" max="100" value="0" step="1">
+      </div>
+      <div class="ctrl-row">
+        <label>Wine age / oxidation <span class="val" id="o-val">0 yr</span></label>
+        <input type="range" id="oxidation" min="0" max="20" value="0" step="0.5">
+      </div>
+    </div>
+
+    <div class="section-title">Aroma Compound Classes</div>
+    <div class="compound-legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:#58a6ff"></span>Terpenes (floral)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#3fb950"></span>Esters (fruity)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#f0883e"></span>Thiols (varietal)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#a371f7"></span>Pyrazines (herbaceous)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#e3b341"></span>Aldehydes (nutty)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#ff6b6b"></span>Phenolics (spicy)</div>
+    </div>
+
+    <div class="aroma-wheel-wrap">
+      <h3>Live Aroma Dominance</h3>
+      <div id="aroma-wheel"></div>
+    </div>
+
+    <div class="peak-readout">Peak dominant: <b id="peak-note">—</b></div>
+
+    <div class="actions">
+      <button onclick="resetSim()">Reset</button>
+      <button class="primary" onclick="triggerSwirl()">Swirl Glass</button>
+    </div>
+  </aside>
+</div>
+
+<script>
+// ====== Physics & compound definitions ======
+const COMPOUNDS = [
+  { key:'terpenes',   name:'Terpenes',     color:'#58a6ff', baseP:0.55, mw:136, threshold:0.015, note:'Floral / Citrus' },
+  { key:'esters',     name:'Esters',       color:'#3fb950', baseP:0.75, mw:130, threshold:0.010, note:'Fruity / Tropical' },
+  { key:'thiols',     name:'Thiols',       color:'#f0883e', baseP:0.40, mw:116, threshold:0.0008, note:'Varietal / Passion' },
+  { key:'pyrazines',  name:'Pyrazines',    color:'#a371f7', baseP:0.25, mw:124, threshold:0.002, note:'Herbaceous / Green' },
+  { key:'aldehydes',  name:'Aldehydes',    color:'#e3b341', baseP:0.35, mw:142, threshold:0.005, note:'Nutty / Oxidative' },
+  { key:'phenolics',  name:'Phenolics',    color:'#ff6b6b', baseP:0.20, mw:152, threshold:0.020, note:'Spicy / Smoky' },
+];
+
+// State
+let tempC = 20, ethanolPct = 13.5, surfaceCm2 = 50, agitationPct = 0, oxidationYr = 0;
+let particles = [], lastTime = performance.now(), vaporMass = {};
+let aromaHistory = []; // {time, masses}
+let swirlBoost = 0; // temporary boost after swirl
+
+// Canvas setup
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+let W, H, glassX, glassY, glassW, glassH, surfaceY;
+
+function resize(){
+  const wrap = document.getElementById('canvas-wrap');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = wrap.clientWidth; H = wrap.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  glassW = Math.min(W * 0.35, 260);
+  glassH = glassW * 1.2;
+  glassX = (W - glassW) / 2;
+  glassY = H - glassH - 30;
+  surfaceY = glassY + glassH * 0.45; // wine surface line
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Particle class
+class Particle {
+  constructor(typeKey){
+    const cmp = COMPOUNDS.find(c => c.key === typeKey);
+    this.type = typeKey;
+    this.color = cmp.color;
+    this.mw = cmp.mw;
+    this.threshold = cmp.threshold;
+    this.life = 1.0;
+    this.decay = 0.0005 + Math.random() * 0.0015;
+    // Spawn near wine surface inside glass
+    this.x = glassX + glassW * 0.2 + Math.random() * glassW * 0.6;
+    this.y = surfaceY + (Math.random() - 0.5) * 6;
+    this.vx = (Math.random() - 0.5) * 1.2;
+    this.vy = -1.5 - Math.random() * 2.5;
+    this.radius = 1.5 + Math.random() * 2.5;
+    this.phase = Math.random() * Math.PI * 2;
+    this.wobbleSpeed = 1.5 + Math.random() * 2.5;
+    this.escaped = false;
+  }
+  update(dt, T, agi, swirl){
+    // Temperature effect on upward velocity (Arrhenius-like)
+    const Tkel = T + 273.15;
+    const kT = Math.exp(- (this.mw * 80) / (8.314 * Tkel) ); // simplified
+    const tempBoost = Math.pow(T / 20, 1.6); // superlinear
+    const agiBoost = 1 + (agi / 100) * 1.8 + swirl * 3.0;
+
+    this.vy -= 0.15 * tempBoost * agiBoost * dt * 60; // buoyancy / evaporation drive
+    this.vx += (Math.random() - 0.5) * 0.3 * agiBoost * dt * 60;
+
+    // Brownian wobble
+    this.phase += this.wobbleSpeed * dt;
+    this.x += this.vx * dt * 60 + Math.sin(this.phase) * 0.4 * agiBoost;
+    this.y += this.vy * dt * 60;
+
+    // Horizontal containment while inside glass
+    const left = glassX + glassW * 0.12;
+    const right = glassX + glassW * 0.88;
+    if (this.y > surfaceY && this.x < left) { this.x = left + 1; this.vx *= -0.5; }
+    if (this.y > surfaceY && this.x > right) { this.x = right - 1; this.vx *= -0.5; }
+
+    // Life decay
+    this.life -= this.decay * dt * 60;
+
+    // Escaped flag when above glass rim
+    const rimY = glassY + glassH * 0.12;
+    if (!this.escaped && this.y < rimY) {
+      this.escaped = true;
+      vaporMass[this.type] = (vaporMass[this.type] || 0) + (this.radius * 0.002);
+    }
+  }
+}
+
+function spawnParticles(){
+  // Spawn rate depends on temp, surface area, ethanol, agitation
+  const baseRate = 2;
+  const Tfactor = Math.pow(tempC / 20, 2.0);
+  const ethanolFactor = 0.8 + (ethanolPct / 13.5) * 0.5; // ethanol co-solvent
+  const surfaceFactor = surfaceCm2 / 50;
+  const agiFactor = 1 + (agitationPct / 100) * 2.0 + swirlBoost * 5.0;
+  const totalRate = baseRate * Tfactor * ethanolFactor * surfaceFactor * agiFactor;
+
+  const n = Math.floor(totalRate) + (Math.random() < (totalRate % 1) ? 1 : 0);
+  for (let i = 0; i < n; i++){
+    // Weighted random compound based on base volatility and oxidation effects
+    const weights = COMPOUNDS.map(c => {
+      let w = c.baseP;
+      // Oxidation shifts profile: esters down, aldehydes & phenolics up
+      if (c.key === 'esters') w *= Math.max(0.3, 1 - oxidationYr * 0.06);
+      if (c.key === 'aldehydes') w *= (1 + oxidationYr * 0.12);
+      if (c.key === 'phenolics') w *= (1 + oxidationYr * 0.08);
+      // Temp enhances lighter volatiles more
+      if (c.mw < 125) w *= Math.pow(tempC / 20, 0.6);
+      return w;
+    });
+    const totalW = weights.reduce((a,b)=>a+b,0);
+    let r = Math.random() * totalW;
+    let chosen = COMPOUNDS[0].key;
+    for (let j = 0; j < COMPOUNDS.length; j++){
+      r -= weights[j];
+      if (r <= 0) { chosen = COMPOUNDS[j].key; break; }
+    }
+    particles.push(new Particle(chosen));
+  }
+}
+
+function updatePhysics(dt){
+  spawnParticles();
+  for (let i = particles.length - 1; i >= 0; i--){
+    const p = particles[i];
+    p.update(dt, tempC, agitationPct, swirlBoost);
+    if (p.life <= 0 || p.y < -50 || p.y > H + 50 || p.x < -50 || p.x > W + 50){
+      particles.splice(i, 1);
+    }
+  }
+  // Decay swirl boost
+  swirlBoost *= Math.exp(-dt * 3.0);
+  if (swirlBoost < 0.001) swirlBoost = 0;
+
+  // Record history every ~0.5s
+  aromaHistory.push({ time: performance.now(), masses: {...vaporMass} });
+  if (aromaHistory.length > 300) aromaHistory.shift();
+}
+
+// ====== Rendering ======
+function drawGlass(){
+  const x = glassX, y = glassY, w = glassW, h = glassH;
+  const rimY = y + h * 0.12;
+  const bowlBottom = y + h * 0.92;
+  const stemW = w * 0.08;
+  const baseW = w * 0.35;
+  const baseH = h * 0.06;
+
+  ctx.save();
+  // Wine liquid
+  const gradWine = ctx.createLinearGradient(x, surfaceY, x + w, bowlBottom);
+  gradWine.addColorStop(0, '#2a0a1a');
+  gradWine.addColorStop(0.5, '#4a0e2e');
+  gradWine.addColorStop(1, '#2a0a1a');
+  ctx.fillStyle = gradWine;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.10, surfaceY);
+  ctx.lineTo(x + w * 0.90, surfaceY);
+  ctx.quadraticCurveTo(x + w * 0.95, bowlBottom, x + w * 0.50, bowlBottom);
+  ctx.quadraticCurveTo(x + w * 0.05, bowlBottom, x + w * 0.10, surfaceY);
+  ctx.fill();
+
+  // Wine surface highlight
+  ctx.fillStyle = 'rgba(180,80,100,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, surfaceY, w * 0.38, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Glass outline
+  ctx.strokeStyle = 'rgba(200,210,230,0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  // Left bowl
+  ctx.moveTo(x + w * 0.10, rimY);
+  ctx.quadraticCurveTo(x - w * 0.02, y + h * 0.55, x + w * 0.50, bowlBottom);
+  // Right bowl
+  ctx.moveTo(x + w * 0.90, rimY);
+  ctx.quadraticCurveTo(x + w * 1.02, y + h * 0.55, x + w * 0.50, bowlBottom);
+  // Rim
+  ctx.moveTo(x + w * 0.10, rimY);
+  ctx.quadraticCurveTo(x + w * 0.50, rimY - h * 0.04, x + w * 0.90, rimY);
+  // Stem
+  ctx.moveTo(x + w * 0.50, bowlBottom);
+  ctx.lineTo(x + w * 0.50, y + h * 0.98);
+  // Base
+  ctx.moveTo(x + w * 0.50 - baseW / 2, y + h * 0.98);
+  ctx.quadraticCurveTo(x + w * 0.50, y + h * 1.02, x + w * 0.50 + baseW / 2, y + h * 0.98);
+  ctx.stroke();
+
+  // Glass shine
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.18, rimY + h * 0.08);
+  ctx.quadraticCurveTo(x + w * 0.08, y + h * 0.50, x + w * 0.40, bowlBottom - h * 0.04);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawParticles(){
+  ctx.save();
+  for (const p of particles){
+    const alpha = Math.max(0, p.life) * (p.escaped ? 0.7 : 0.9);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+    // Glow for larger particles
+    if (p.radius > 2.5){
+      ctx.globalAlpha = alpha * 0.25;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawBackground(){
+  // Subtle ambient vapor haze based on dominant aroma
+  const dom = getDominant();
+  if (dom && dom.intensity > 0.3){
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.12, dom.intensity * 0.06);
+    const g = ctx.createRadialGradient(glassX + glassW/2, surfaceY - 40, 10, glassX + glassW/2, surfaceY - 80, Math.min(W, H)/2);
+    g.addColorStop(0, dom.color);
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+}
+
+function getDominant(){
+  let best = null, bestScore = 0;
+  for (const c of COMPOUNDS){
+    const m = vaporMass[c.key] || 0;
+    const score = m / c.threshold; // relative to sensory threshold
+    if (score > bestScore){ bestScore = score; best = { key:c.key, name:c.name, note:c.note, color:c.color, intensity:Math.min(1, score/5) }; }
+  }
+  return best;
+}
+
+function updateStats(){
+  document.getElementById('p-count').textContent = particles.length;
+  let totalMgl = 0;
+  for (const c of COMPOUNDS) totalMgl += (vaporMass[c.key] || 0) * 100;
+  document.getElementById('vapor-mgl').textContent = totalMgl.toFixed(2);
+  document.getElementById('temp-disp').textContent = tempC.toFixed(1);
+}
+
+function updateAromaWheel(){
+  const container = document.getElementById('aroma-wheel');
+  const W2 = container.clientWidth;
+  const H2 = container.clientHeight;
+  if (!W2 || !H2) return;
+
+  // Compute intensities
+  const vals = COMPOUNDS.map(c => {
+    const m = vaporMass[c.key] || 0;
+    return { key:c.key, name:c.name, color:c.color, note:c.note, score: m / c.threshold };
+  });
+  const maxScore = Math.max(...vals.map(v=>v.score), 0.01);
+  const totalScore = vals.reduce((s,v)=>s+v.score,0);
+
+  // Build wedges
+  const cx = W2 / 2, cy = H2 / 2;
+  const maxR = Math.min(W2, H2) / 2 - 8;
+  let html = '';
+  let angle = -Math.PI / 2;
+  for (const v of vals){
+    const frac = totalScore > 0 ? v.score / totalScore : 1 / vals.length;
+    const sweep = frac * Math.PI * 2;
+    const r = maxR * Math.min(1, 0.25 + 0.75 * (v.score / maxScore));
+    const mid = angle + sweep / 2;
+    const x1 = cx + Math.cos(angle) * (r * 0.35);
+    const y1 = cy + Math.sin(angle) * (r * 0.35);
+    const x2 = cx + Math.cos(angle + sweep) * (r * 0.35);
+    const y2 = cy + Math.sin(angle + sweep) * (r * 0.35);
+    const xo1 = cx + Math.cos(angle) * r;
+    const yo1 = cy + Math.sin(angle) * r;
+    const xo2 = cx + Math.cos(angle + sweep) * r;
+    const yo2 = cy + Math.sin(angle + sweep) * r;
+    const large = sweep > Math.PI ? 1 : 0;
+
+    const path = `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${xo1.toFixed(1)} ${yo1.toFixed(1)} A ${r.toFixed(1)} ${r.toFixed(1)} 0 ${large} 1 ${xo2.toFixed(1)} ${yo2.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)} A ${(r*0.35).toFixed(1)} ${(r*0.35).toFixed(1)} 0 ${large} 0 ${x1.toFixed(1)} ${y1.toFixed(1)} Z`;
+
+    const lx = cx + Math.cos(mid) * (r * 0.65);
+    const ly = cy + Math.sin(mid) * (r * 0.65);
+    const op = Math.max(0.25, Math.min(1, 0.3 + 0.7 * (v.score / maxScore)));
+
+    html += `<svg style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;">
+      <path d="${path}" fill="${v.color}" fill-opacity="${op.toFixed(2)}" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+      <text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="10" font-weight="700" font-family="system-ui,sans-serif" style="text-shadow:0 1px 3px rgba(0,0,0,0.7);">${v.name}</text>
+    </svg>`;
+    angle += sweep;
+  }
+  container.innerHTML = html;
+
+  // Peak note
+  const peak = vals.reduce((a,b)=>a.score>b.score?a:b, vals[0]);
+  document.getElementById('peak-note').textContent = peak.score > 0.05 ? `${peak.note} (${peak.name})` : '—';
+}
+
+// ====== Main loop ======
+function frame(now){
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawGlass();
+  updatePhysics(dt);
+  drawParticles();
+  updateStats();
+  updateAromaWheel();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ====== UI bindings ======
+const $ = id => document.getElementById(id);
+function bind(id, varName, fmt){
+  const el = $(id);
+  el.addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    window[varName] = v;
+    const label = e.target.parentElement.querySelector('.val');
+    if (label) label.textContent = fmt(v);
+  });
+}
+bind('temp',       'tempC',       v => v.toFixed(1) + ' °C');
+bind('ethanol',    'ethanolPct',  v => v.toFixed(1) + ' %');
+bind('surface',    'surfaceCm2',  v => Math.round(v) + ' cm²');
+bind('agitation',  'agitationPct',v => Math.round(v) + ' %');
+bind('oxidation',  'oxidationYr', v => v.toFixed(1) + ' yr');
+
+function resetSim(){
+  particles = [];
+  vaporMass = {};
+  aromaHistory = [];
+  swirlBoost = 0;
+  $('temp').value = 20; tempC = 20; $('t-val').textContent = '20 °C';
+  $('ethanol').value = 13.5; ethanolPct = 13.5; $('e-val').textContent = '13.5 %';
+  $('surface').value = 50; surfaceCm2 = 50; $('s-val').textContent = '50 cm²';
+  $('agitation').value = 0; agitationPct = 0; $('a-val').textContent = '0 %';
+  $('oxidation').value = 0; oxidationYr = 0; $('o-val').textContent = '0 yr';
+}
+
+function triggerSwirl(){
+  swirlBoost = 1.0;
+}
+
+// Auto-swirl hint on load
+setTimeout(() => { if (swirlBoost === 0 && particles.length < 50) triggerSwirl(); }, 1500);
+</script>
+</body>
+</html>

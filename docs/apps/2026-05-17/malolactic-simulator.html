@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Malolactic Fermentation Simulator</title>
+<style>
+  :root{ --bg:#0b0f14; --panel:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; --purple:#a371f7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow:hidden; }
+  #wrap{ display:grid; grid-template-columns: 320px 1fr; grid-template-rows:1fr 220px; height:100vh; }
+  @media(max-width:960px){ #wrap{ grid-template-columns:1fr; grid-template-rows:auto 1fr auto; } }
+  #sidebar{ background:var(--panel); border-right:1px solid var(--border); padding:1.1rem; overflow-y:auto; display:flex; flex-direction:column; gap:0.8rem; }
+  h1{ font-size:1.15rem; background:linear-gradient(90deg,var(--accent),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  h2{ font-size:0.8rem; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); margin-top:0.2rem; }
+  .field{ display:flex; flex-direction:column; gap:0.25rem; }
+  .field label{ font-size:0.82rem; color:var(--muted); }
+  .field input[type=range]{ width:100%; accent-color:var(--accent); }
+  .field .val{ font-size:0.78rem; color:var(--accent); font-variant-numeric:tabular-nums; }
+  .field select{ background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.35rem; font-size:0.82rem; }
+  .btn{ background:linear-gradient(90deg,var(--accent),var(--purple)); color:#fff; border:none; border-radius:8px; padding:0.6rem 0.8rem; font-size:0.85rem; font-weight:600; cursor:pointer; }
+  .btn:hover{ filter:brightness(1.1); }
+  .btn-secondary{ background:var(--bg); border:1px solid var(--border); color:var(--text); }
+  .btn-secondary:hover{ border-color:var(--accent); }
+  .readout{ display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:0.6rem; }
+  .readout-item{ text-align:center; }
+  .readout-item .num{ font-size:1.1rem; font-weight:700; }
+  .readout-item .lbl{ font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .legend{ display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.2rem; }
+  .legend span{ font-size:0.72rem; padding:0.15rem 0.4rem; border-radius:4px; background:var(--bg); border:1px solid var(--border); }
+
+  #main{ position:relative; background:#070a0e; }
+  #canvas{ position:absolute; inset:0; width:100%; height:100%; }
+  #overlay{ position:absolute; top:0.5rem; left:0.5rem; pointer-events:none; }
+  .badge{ font-size:0.7rem; padding:0.2rem 0.5rem; border-radius:4px; background:var(--panel); border:1px solid var(--border); color:var(--muted); }
+
+  #bottom{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.6rem; background:var(--panel); border-top:1px solid var(--border); padding:0.6rem 0.8rem; }
+  @media(max-width:960px){ #bottom{ grid-template-columns:1fr 1fr; } }
+  .chart-wrap{ background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:0.4rem; display:flex; flex-direction:column; }
+  .chart-wrap h3{ font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.2rem; }
+  .chart-wrap canvas{ flex:1; width:100%; height:100%; min-height:0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <aside id="sidebar">
+    <h1>Malolactic Fermentation</h1>
+    <h2>Process Controls</h2>
+    <div class="field">
+      <label>Bacterial Strain</label>
+      <select id="strain">
+        <option value="oenococcus">Oenococcus oeni (classic)</option>
+        <option value="lactobacillus">Lactobacillus plantarum</option>
+        <option value="pediococcus">Pediococcus parvulus</option>
+        <option value="blend">Commercial blend</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Temperature <span id="tempVal" class="val">20 °C</span></label>
+      <input type="range" id="temp" min="10" max="30" step="0.5" value="20">
+    </div>
+    <div class="field">
+      <label>Initial pH <span id="phVal" class="val">3.4</span></label>
+      <input type="range" id="ph" min="2.9" max="3.8" step="0.05" value="3.4">
+    </div>
+    <div class="field">
+      <label>Initial Malic Acid (g/L) <span id="malicVal" class="val">5.0</span></label>
+      <input type="range" id="malic" min="1" max="10" step="0.1" value="5.0">
+    </div>
+    <div class="field">
+      <label>SO₂ (mg/L) <span id="so2Val" class="val">20</span></label>
+      <input type="range" id="so2" min="0" max="80" step="1" value="20">
+    </div>
+    <div class="field">
+      <label>Ethanol (% v/v) <span id="ethanolVal" class="val">13.0</span></label>
+      <input type="range" id="ethanol" min="9" max="16" step="0.1" value="13.0">
+    </div>
+    <div class="field">
+      <label>Simulation Speed <span id="speedVal" class="val">1x</span></label>
+      <input type="range" id="speed" min="0.2" max="5" step="0.1" value="1">
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:auto;">
+      <button class="btn" id="btnRun">Start / Restart</button>
+      <button class="btn btn-secondary" id="btnPause">Pause</button>
+    </div>
+    <div class="legend">
+      <span style="color:var(--green)">● Active ML bacteria</span>
+      <span style="color:var(--yellow)">● Diacetyl</span>
+      <span style="color:var(--accent)">● Lactic acid</span>
+      <span style="color:var(--red)">● Malic acid</span>
+    </div>
+  </aside>
+
+  <section id="main">
+    <canvas id="canvas"></canvas>
+    <div id="overlay">
+      <div class="badge" id="statusBadge">Status: Ready</div>
+      <div class="badge" id="timeBadge">Day 0.0</div>
+    </div>
+    <div class="readout" style="position:absolute; bottom:0.5rem; left:0.5rem; right:0.5rem; pointer-events:none;">
+      <div class="readout-item"><div class="num" id="rMalic" style="color:var(--red)">5.0</div><div class="lbl">Malic (g/L)</div></div>
+      <div class="readout-item"><div class="num" id="rLactic" style="color:var(--accent)">0.0</div><div class="lbl">Lactic (g/L)</div></div>
+      <div class="readout-item"><div class="num" id="rDiacetyl" style="color:var(--yellow)">0.0</div><div class="lbl">Diacetyl (mg/L)</div></div>
+      <div class="readout-item"><div class="num" id="rBacteria" style="color:var(--green)">0</div><div class="lbl">Bacteria (×10⁶/mL)</div></div>
+      <div class="readout-item"><div class="num" id="rPh" style="color:var(--purple)">3.40</div><div class="lbl">Live pH</div></div>
+      <div class="readout-item"><div class="num" id="rProgress" style="color:var(--text)">0%</div><div class="lbl">MLF Progress</div></div>
+    </div>
+  </section>
+
+  <section id="bottom" style="grid-column:1 / -1;">
+    <div class="chart-wrap"><h3>Substrate & Product Concentration</h3><canvas id="chartChem"></canvas></div>
+    <div class="chart-wrap"><h3>Bacterial Population Growth</h3><canvas id="chartPop"></canvas></div>
+    <div class="chart-wrap"><h3>pH & Diacetyl Over Time</h3><canvas id="chartPh"></canvas></div>
+  </section>
+</div>
+
+<script>
+/* ---------- simulation state ---------- */
+let running=false, paused=false, t=0, dt=0.05, speed=1;
+let malic0=5, malic=5, lactic=0, diacetyl=0, bacteria=0.05e6;
+let temp=20, ph=3.4, so2=20, ethanol=13;
+let strain='oenococcus';
+let history=[]; // {t, malic, lactic, diacetyl, bacteria, ph}
+let particles=[];
+
+/* ---------- constants ---------- */
+const STRAINS={
+  oenococcus:{muMax:0.45, Ks:0.4, Yxs:1e8, mD:0.015, Topt:22, pHmin:2.8, pHopt:4.0, diacetylYield:0.3, lagHours:24, color:'#3fb950'},
+  lactobacillus:{muMax:0.55, Ks:0.35, Yxs:1.2e8, mD:0.018, Topt:25, pHmin:3.0, pHopt:4.2, diacetylYield:0.5, lagHours:18, color:'#79c0ff'},
+  pediococcus:{muMax:0.35, Ks:0.5, Yxs:8e7, mD:0.012, Topt:20, pHmin:3.1, pHopt:3.9, diacetylYield:0.2, lagHours:30, color:'#ff7b72'},
+  blend:{muMax:0.5, Ks:0.38, Yxs:1.1e8, mD:0.016, Topt:23, pHmin:2.9, pHopt:4.1, diacetylYield:0.35, lagHours:12, color:'#d2a8ff'}
+};
+
+/* ---------- helpers ---------- */
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function sigmoid(x,k,x0){ return 1/(1+Math.exp(-k*(x-x0))); }
+function tempFactor(T, Topt){ const spread=8; return Math.exp(-Math.pow(T-Topt,2)/(2*spread*spread)); }
+function phFactor(pH, pHmin, pHopt){ if(pH<=pHmin) return 0; return (pH-pHmin)/(pHopt-pHmin); }
+function ethanolFactor(E){ return Math.exp(-0.12*(E-11)); }
+function so2Factor(S){ return Math.exp(-S/35); }
+function stressFactor(){ const tf=tempFactor(temp, STRAINS[strain].Topt); const pf=phFactor(ph, STRAINS[strain].pHmin, STRAINS[strain].pHopt); const ef=ethanolFactor(ethanol); const sf=so2Factor(so2); return tf*pf*ef*sf; }
+function muSpecific(){ return STRAINS[strain].muMax * stressFactor(); }
+
+/* ---------- control bindings ---------- */
+const $=id=>document.getElementById(id);
+const set=(id,txt)=>$(id).textContent=txt;
+$('temp').addEventListener('input',e=>{ temp=+e.target.value; set('tempVal',temp.toFixed(1)+' °C'); });
+$('ph').addEventListener('input',e=>{ ph=+e.target.value; set('phVal',ph.toFixed(2)); });
+$('malic').addEventListener('input',e=>{ malic0=+e.target.value; set('malicVal',malic0.toFixed(1)); });
+$('so2').addEventListener('input',e=>{ so2=+e.target.value; set('so2Val',so2.toFixed(0)); });
+$('ethanol').addEventListener('input',e=>{ ethanol=+e.target.value; set('ethanolVal',ethanol.toFixed(1)); });
+$('speed').addEventListener('input',e=>{ speed=+e.target.value; set('speedVal',speed.toFixed(1)+'x'); });
+$('strain').addEventListener('change',e=>{ strain=e.target.value; if(running) restart(); });
+$('btnRun').addEventListener('click',()=>{ restart(); });
+$('btnPause').addEventListener('click',()=>{ paused=!paused; $('btnPause').textContent=paused?'Resume':'Pause'; });
+
+/* ---------- init ---------- */
+const canvas=$('canvas'); const ctx=canvas.getContext('2d');
+const chartChem=$('chartChem'); const ctxChem=chartChem.getContext('2d');
+const chartPop=$('chartPop'); const ctxPop=chartPop.getContext('2d');
+const chartPh=$('chartPh'); const ctxPh=chartPh.getContext('2d');
+
+function resize(){
+  canvas.width=canvas.parentElement.clientWidth;
+  canvas.height=canvas.parentElement.clientHeight;
+  [chartChem, chartPop, chartPh].forEach(c=>{ c.width=c.parentElement.clientWidth; c.height=c.parentElement.clientHeight-24; });
+}
+window.addEventListener('resize',resize); resize();
+
+function restart(){
+  running=true; paused=false; t=0;
+  malic=malic0; lactic=0; diacetyl=0; bacteria=0.05e6;
+  history=[];
+  particles=[];
+  for(let i=0;i<120;i++) particles.push(makeParticle());
+  $('btnPause').textContent='Pause';
+}
+
+function makeParticle(){
+  return {
+    x:Math.random()*canvas.width, y:Math.random()*canvas.height,
+    vx:(Math.random()-0.5)*0.8, vy:(Math.random()-0.5)*0.8,
+    r:2+Math.random()*3,
+    phase:Math.random()*Math.PI*2,
+    type:Math.random()<0.6?'bacteria':(Math.random()<0.5?'malic':'lactic'),
+    life:1,
+  };
+}
+
+/* ---------- simulation step ---------- */
+function step(){
+  if(!running||paused) return;
+  const dtSim=dt*speed;
+  t+=dtSim;
+  const s=STRAINS[strain];
+  const mu=muSpecific();
+  const stress=stressFactor();
+
+  // Monod-like kinetics for malic acid
+  const qMalic = mu * malic/(malic+s.Ks); // specific consumption rate (g/g/h approximate)
+  const dMalic = -qMalic * (bacteria/1e9) * dtSim * 0.1; // scale factor
+  const dLactic = -dMalic * 0.9; // stoichiometry: malic -> lactic + CO2
+  const dDiacetyl = Math.max(0, -dMalic * s.diacetylYield * 30 - 0.002*diacetyl*dtSim); // production & slight reduction
+
+  malic=Math.max(0,malic+dMalic);
+  lactic+=dLactic;
+  diacetyl+=dDiacetyl;
+
+  // Bacterial growth: logistic-like with lag
+  const lagFactor = t < s.lagHours/24 ? Math.pow(t/(s.lagHours/24),2) : 1;
+  const growth = mu * bacteria * (1 - bacteria/(2e9*stress)) * lagFactor * dtSim;
+  const death = s.mD * bacteria * (1-stress) * dtSim + (malic<0.1?0.05*mu*bacteria*dtSim:0);
+  bacteria = Math.max(1e3, bacteria + growth - death);
+
+  // pH shifts upward slightly as malic (stronger diprotic) converts to lactic (monoprotic)
+  const dPh = (-dMalic*0.015 + (diacetyl>2.5? -0.0002*diacetyl*dtSim:0)) * (ph<3.0?0.5:1);
+  ph = clamp(ph + dPh, 2.85, 4.5);
+
+  // record every ~0.2 day
+  if(history.length===0 || t-history[history.length-1].t > 0.15){
+    history.push({t, malic, lactic, diacetyl, bacteria: bacteria/1e6, ph});
+  }
+
+  // update readouts
+  set('rMalic',malic.toFixed(2));
+  set('rLactic',lactic.toFixed(2));
+  set('rDiacetyl',diacetyl.toFixed(2));
+  set('rBacteria',(bacteria/1e6).toFixed(2));
+  set('rPh',ph.toFixed(2));
+  const prog = malic0>0 ? ((1 - malic/malic0)*100) : 0;
+  set('rProgress', prog.toFixed(1)+'%');
+  set('timeBadge','Day '+t.toFixed(1));
+  if(prog>=99.5) set('statusBadge','Status: MLF Complete');
+  else if(t < s.lagHours/24) set('statusBadge','Status: Lag Phase');
+  else set('statusBadge','Status: Active Fermentation');
+}
+
+/* ---------- render particles ---------- */
+function drawParticles(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // draw "wine" background based on progress
+  const progress = malic0>0 ? (1 - malic/malic0) : 0;
+  const w = canvas.width, h = canvas.height;
+  const grd = ctx.createLinearGradient(0,0,0,h);
+  const r=Math.floor(60+progress*60), g=Math.floor(10+progress*10), b=Math.floor(25+progress*10);
+  grd.addColorStop(0, `rgb(${r},${g},${b})`);
+  grd.addColorStop(1, `rgb(${Math.floor(r*0.6)},${Math.floor(g*0.6)},${Math.floor(b*0.6)})`);
+  ctx.fillStyle=grd; ctx.fillRect(0,0,w,h);
+
+  // ambient bubbles
+  ctx.save();
+  for(let i=0;i<particles.length;i++){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.phase+=0.03;
+    if(p.x<0||p.x>w) p.vx*=-1; if(p.y<0||p.y>h) p.vy*=-1;
+    const alpha = 0.3+0.3*Math.sin(p.phase);
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    if(p.type==='bacteria') ctx.fillStyle=`rgba(63,185,80,${alpha})`; // green
+    else if(p.type==='malic') ctx.fillStyle=`rgba(248,81,73,${alpha})`; // red
+    else ctx.fillStyle=`rgba(88,166,255,${alpha})`; // blue
+    ctx.fill();
+
+    // link nearby same-type
+    for(let j=i+1;j<particles.length;j++){
+      const q=particles[j];
+      if(p.type!==q.type) continue;
+      const dx=p.x-q.x, dy=p.y-q.y; const d2=dx*dx+dy*dy;
+      if(d2<2500){
+        ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y);
+        ctx.strokeStyle=p.type==='bacteria'?`rgba(63,185,80,${0.08*(1-d2/2500)})`:(p.type==='malic'?`rgba(248,81,73,${0.08*(1-d2/2500)})`:`rgba(88,166,255,${0.08*(1-d2/2500)})`);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+
+  // central colony glow
+  const cx=w/2, cy=h/2;
+  const colonyR = 30 + 60*Math.min(1, bacteria/2e8);
+  const cg = ctx.createRadialGradient(cx,cy,2,cx,cy,colonyR);
+  cg.addColorStop(0, 'rgba(63,185,80,0.35)');
+  cg.addColorStop(1, 'rgba(63,185,80,0)');
+  ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(cx,cy,colonyR,0,Math.PI*2); ctx.fill();
+
+  // floating text
+  ctx.fillStyle='rgba(201,209,217,0.18)';
+  ctx.font='12px system-ui';
+  ctx.fillText('CO₂ micro-bubbles', w-120, h-20);
+}
+
+/* ---------- chart rendering ---------- */
+function drawChart(cvs, ctx2, datasets, yMax, labels){
+  const w=cvs.width, h=cvs.height;
+  ctx2.clearRect(0,0,w,h);
+  const pad={l:28,r:8,t:8,b:18};
+  const plotW=w-pad.l-pad.r, plotH=h-pad.t-pad.b;
+  if(history.length<2) return;
+  const tMax=Math.max(history[history.length-1].t, 1);
+
+  // grid
+  ctx2.strokeStyle='#1f2937'; ctx2.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=pad.t + plotH*(i/4);
+    ctx2.beginPath(); ctx2.moveTo(pad.l,y); ctx2.lineTo(w-pad.r,y); ctx2.stroke();
+    ctx2.fillStyle='#8b949e'; ctx2.font='10px system-ui'; ctx2.textAlign='right';
+    ctx2.fillText((yMax*(1-i/4)).toFixed(1), pad.l-4, y+3);
+  }
+  for(let i=0;i<=5;i++){
+    const x=pad.l + plotW*(i/5);
+    ctx2.beginPath(); ctx2.moveTo(x,pad.t); ctx2.lineTo(x,h-pad.b); ctx2.stroke();
+    ctx2.fillStyle='#8b949e'; ctx2.textAlign='center';
+    ctx2.fillText((tMax*(i/5)).toFixed(1)+'d', x, h-4);
+  }
+
+  datasets.forEach(ds=>{
+    ctx2.beginPath(); ctx2.strokeStyle=ds.color; ctx2.lineWidth=2;
+    history.forEach((pt,i)=>{
+      const x=pad.l + (pt.t/tMax)*plotW;
+      const y=(h-pad.b) - (clamp(pt[ds.key],0,yMax)/yMax)*plotH;
+      if(i===0) ctx2.moveTo(x,y); else ctx2.lineTo(x,y);
+    });
+    ctx2.stroke();
+  });
+
+  // labels
+  ctx2.fillStyle='#c9d1d9'; ctx2.font='10px system-ui'; ctx2.textAlign='left';
+  let ly=14;
+  datasets.forEach((ds,i)=>{ ctx2.fillStyle=ds.color; ctx2.fillText(ds.label, pad.l+4, ly); ly+=13; });
+}
+
+function drawAll(){
+  drawParticles();
+  const y1=Math.max(malic0, 1);
+  drawChart(chartChem, ctxChem, [{key:'malic',label:'Malic',color:'#f85149'},{key:'lactic',label:'Lactic',color:'#58a6ff'}], y1*1.2);
+  drawChart(chartPop, ctxPop, [{key:'bacteria',label:'Bacteria (M/mL)',color:'#3fb950'}], Math.max(50,Math.ceil(bacteria/1e6*1.2)));
+  drawChart(chartPh, ctxPh, [{key:'ph',label:'pH',color:'#a371f7'},{key:'diacetyl',label:'Diacetyl (mg/L)',color:'#d29922'}], Math.max(3.8,Math.ceil(diacetyl*1.2)));
+}
+
+/* ---------- loop ---------- */
+function loop(){ step(); drawAll(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+restart();
+</script>
+</body>
+</html>
