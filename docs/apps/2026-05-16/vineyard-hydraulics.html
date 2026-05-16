@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Vineyard Hydraulic Architecture Simulator</title>
 <style>
   :root{ --bg:#0b0f14; --surface:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#3fb950; --warn:#d29922; --danger:#f85149; }
@@ -128,41 +131,46 @@ resize();
 const state={
   sw:40, vpd:1.5, temp:25, rad:800, isDay:true,
   kr:1.0, lai:3.0, c:8,
-  psi:-0.8, stem:-0.6, e:4.2, gs:0.18, safety:82,
+  psi:-0.85, stem:-0.70, e:3.0, gs:0.060, safety:60,
   history:[]
 };
 
 /* ===== PARTICLE SYSTEM ===== */
 class Particle{
   constructor(zone){
-    this.zone=zone; // 'soil','root','trunk','shoot','leaf','atmos'
+    this.zone=zone; // 'soil','root','trunk','cordon','shoot','leaf','atmos'
     this.reset();
   }
   reset(){
     const r=()=>Math.random();
+    const cx=W*0.5, ground=H*0.85;
     switch(this.zone){
       case 'soil':
-        this.x=W*0.45+r()*W*0.1; this.y=H*0.88+r()*H*0.1;
+        this.x=cx-30+r()*60; this.y=ground+5+r()*H*0.1;
         this.vx=(r()-0.5)*0.3; this.vy=-(0.2+r()*0.4);
         break;
       case 'root':
-        this.x=W*0.48+r()*W*0.04; this.y=H*0.78+r()*H*0.06;
+        this.x=cx-8+r()*16; this.y=ground-2-r()*H*0.1;
         this.vx=(r()-0.5)*0.2; this.vy=-(0.4+r()*0.5);
         break;
       case 'trunk':
-        this.x=W*0.49+r()*W*0.02; this.y=H*0.72-r()*H*0.06;
+        this.x=cx-3+r()*6; this.y=ground-15-r()*H*0.1;
         this.vx=(r()-0.5)*0.1; this.vy=-(0.5+r()*0.6);
         break;
+      case 'cordon':
+        this.x=cx-8+r()*16; this.y=ground-118-r()*H*0.02;
+        this.vx=(r()-0.5)*0.3; this.vy=-(0.3+r()*0.3);
+        break;
       case 'shoot':
-        this.x=W*0.49+r()*W*0.02; this.y=H*0.55-r()*H*0.1;
+        this.x=cx-20+r()*40; this.y=ground-140-r()*H*0.04;
         this.vx=(r()-0.5)*0.3; this.vy=-(0.4+r()*0.5);
         break;
       case 'leaf':
-        this.x=W*0.49+r()*W*0.02; this.y=H*0.38-r()*H*0.08;
+        this.x=cx-50+r()*100; this.y=ground-165-r()*H*0.04;
         this.vx=(r()-0.5)*0.4; this.vy=-(0.3+r()*0.3);
         break;
       case 'atmos':
-        this.x=W*0.48+r()*W*0.04; this.y=H*0.25-r()*H*0.15;
+        this.x=cx-50+r()*100; this.y=ground-185-r()*H*0.1;
         this.vx=(r()-0.5)*1.2; this.vy=-(0.5+r()*1.5);
         break;
     }
@@ -174,12 +182,14 @@ class Particle{
     this.y+=this.vy*dt*60*flowFactor;
     this.life-=dt/this.maxLife;
     if(this.life<=0) this.reset();
-    // Zone transitions
-    if(this.zone==='soil' && this.y<H*0.76) this.zone='root';
-    if(this.zone==='root' && this.y<H*0.66) this.zone='trunk';
-    if(this.zone==='trunk' && this.y<H*0.48) this.zone='shoot';
-    if(this.zone==='shoot' && this.y<H*0.35) this.zone='leaf';
-    if(this.zone==='leaf' && this.y<H*0.22) this.zone='atmos';
+    // Zone transitions matching the visible architecture
+    const ground=H*0.85;
+    if(this.zone==='soil' && this.y<ground-2) this.zone='root';
+    if(this.zone==='root' && this.y<ground-12) this.zone='trunk';
+    if(this.zone==='trunk' && this.y<ground-115) this.zone='cordon';
+    if(this.zone==='cordon' && this.y<ground-138) this.zone='shoot';
+    if(this.zone==='shoot' && this.y<ground-168) this.zone='leaf';
+    if(this.zone==='leaf' && this.y<ground-182) this.zone='atmos';
     if(this.zone==='atmos' && (this.y<0 || this.x<0 || this.x>W)) this.reset();
   }
   draw(c){
@@ -200,6 +210,7 @@ for(let i=0;i<350;i++) particles.push(new Particle('soil'));
 /* ===== VINE GEOMETRY ===== */
 function drawVine(c,t){
   const cx=W*0.5, ground=H*0.85;
+
   // Soil block
   const soilGrad=c.createLinearGradient(0,ground,0,H);
   soilGrad.addColorStop(0,'#1a1208');
@@ -243,7 +254,26 @@ function drawVine(c,t){
   c.closePath();
   c.fill();
 
-  // Xylem vessels inside trunk (colored by tension)
+  // Cordon arms (bilateral VSP)
+  c.strokeStyle='#4a3520';
+  c.lineWidth=3;
+  c.beginPath();
+  c.moveTo(cx, ground-120);
+  c.quadraticCurveTo(cx-25, ground-132, cx-60, ground-138);
+  c.stroke();
+  c.beginPath();
+  c.moveTo(cx, ground-120);
+  c.quadraticCurveTo(cx+25, ground-132, cx+60, ground-138);
+  c.stroke();
+
+  // Shoots rising from cordons toward canopy
+  c.strokeStyle='#5a4025';
+  c.lineWidth=2;
+  c.beginPath(); c.moveTo(cx-60, ground-138); c.lineTo(cx-58, ground-172); c.stroke();
+  c.beginPath(); c.moveTo(cx+60, ground-138); c.lineTo(cx+58, ground-172); c.stroke();
+  c.beginPath(); c.moveTo(cx,   ground-120);   c.lineTo(cx,   ground-168); c.stroke();
+
+  // Xylem vessels inside trunk (coloured by tension)
   const tensionColor=(p)=>{
     if(p>-0.6) return '#3fb950';
     if(p>-1.2) return '#58a6ff';
@@ -260,6 +290,11 @@ function drawVine(c,t){
     c.lineTo(cx+off+off*0.2,ground-115);
     c.stroke();
   }
+  // Hydraulic junction cap at trunk top
+  c.fillStyle='#c55a11';
+  c.beginPath();
+  c.ellipse(cx, ground-120, 8, 3, 0, 0, Math.PI*2);
+  c.fill();
 
   // Canopy / leaves
   const leafAlpha=Math.max(0.3,state.gs/0.3);
@@ -275,29 +310,41 @@ function drawVine(c,t){
     c.fill();
     c.restore();
   }
-  // Left side
-  drawLeaf(cx-25,ground-130,1.2,-0.3+t*0.02);
-  drawLeaf(cx-45,ground-140,0.9,-0.5+t*0.015);
-  drawLeaf(cx-60,ground-120,1.0,-0.7+t*0.01);
-  // Right side
-  drawLeaf(cx+25,ground-130,1.2,0.3-t*0.02);
-  drawLeaf(cx+45,ground-140,0.9,0.5-t*0.015);
-  drawLeaf(cx+60,ground-120,1.0,0.7-t*0.01);
-  // Top
-  drawLeaf(cx,ground-150,1.1,0);
+  // Left cluster
+  drawLeaf(cx-58,ground-172,1.2,-0.3+t*0.02);
+  drawLeaf(cx-68,ground-168,0.9,-0.5+t*0.015);
+  drawLeaf(cx-52,ground-178,1.0,-0.7+t*0.01);
+  // Right cluster
+  drawLeaf(cx+58,ground-172,1.2,0.3-t*0.02);
+  drawLeaf(cx+68,ground-168,0.9,0.5-t*0.015);
+  drawLeaf(cx+52,ground-178,1.0,0.7-t*0.01);
+  // Top cluster
+  drawLeaf(cx,  ground-178,1.1,0);
+  drawLeaf(cx-12,ground-174,0.85,-0.4);
+  drawLeaf(cx+12,ground-174,0.85,0.4);
   c.globalAlpha=1;
 
-  // Stomata on leaf underside (tiny pores)
+  // Stomata on leaf underside (tiny pores) — positioned at canopy level
   const stomaOpen=Math.max(0.05,state.gs/0.3);
   c.fillStyle='rgba(200,220,255,0.4)';
   for(let i=0;i<12;i++){
     const sx=cx-50+i*9+Math.sin(t*2+i)*2;
-    const sy=ground-125+Math.cos(t*1.5+i)*3;
+    const sy=ground-168+Math.cos(t*1.5+i)*3;
     const ow=2+stomaOpen*4;
     c.beginPath();
     c.ellipse(sx,sy,ow,1+stomaOpen,0,0,Math.PI*2);
     c.fill();
   }
+
+  // Water-potential reference line (soil → canopy)
+  c.setLineDash([5, 5]);
+  c.strokeStyle='rgba(139,148,158,0.25)';
+  c.lineWidth=1;
+  c.beginPath();
+  c.moveTo(30, ground-5);
+  c.quadraticCurveTo(cx*0.5, ground-90, cx, ground-182);
+  c.stroke();
+  c.setLineDash([]);
 
   // Sun / moon
   if(state.isDay){
@@ -321,48 +368,65 @@ function drawVine(c,t){
   c.fillText('Soil matrix',20,ground+20);
   c.fillText('Root system',20,ground-15);
   c.fillText('Trunk xylem',cx+18,ground-60);
-  c.fillText('Canopy / stomata',cx+45,ground-145);
+  c.fillText('Canopy / stomata',cx+45,ground-185);
   c.fillText('Atmosphere',20,40);
 }
 
 /* ===== PHYSICS MODEL ===== */
+let targetPsi = -0.85;
 function simulate(){
   const {sw,vpd,temp,rad,isDay,kr,lai,c}=state;
-  // Soil water potential (simplified)
-  const psiSoil=-0.01 * (1-sw/60)*5; // MPa, more negative as soil dries
-  // Root uptake conductance
-  const kRoot=kr*0.015*(sw/40); // mol/m²/s/MPa scaled
-  // Transpiration driven by VPD, radiation, gs
-  // Stomatal conductance model (Jarvis-type + hydraulic feedback)
-  let gsMax=0.25; // mol/m²/s
-  if(!isDay) gsMax*=0.08;
-  const fRad=Math.min(1,rad/800);
-  const fTemp=Math.exp(-Math.pow((temp-28)/18,2));
-  const fVPD=Math.exp(-vpd*0.8);
-  // Hydraulic signal: gs drops as leaf water potential falls
-  const fPsi=1/(1+Math.exp((state.psi+1.4)*6)); // sigmoid, closes below -1.2
-  let gs=gsMax*fRad*fTemp*fVPD*fPsi;
-  gs=Math.max(0.002,gs);
-  const e=gs*vpd*44.6; // mmol/m²/s approx
-  // Leaf water potential (supply-demand balance)
-  // E = k * (psiSoil - psiLeaf) => psiLeaf = psiSoil - E/k
-  const kTotal=kRoot*lai;
-  let psiLeaf=psiSoil - (e/1000)/Math.max(0.001,kTotal);
-  psiLeaf=Math.max(-4.5,Math.min(-0.05,psiLeaf));
-  // Stem is less negative than leaf (resistance)
-  const psiStem=psiLeaf+0.15;
-  // Hydraulic safety margin (% of cavitation threshold ~ -1.6 MPa for grapevine)
-  const threshold=-1.6;
-  const safety=Math.max(0,Math.min(100,(psiLeaf-threshold)/(-0.1-threshold)*100));
 
-  state.psi=psiLeaf;
-  state.stem=psiStem;
-  state.e=e;
-  state.gs=gs;
-  state.safety=safety;
+  // 1. Soil water potential (power-law, realistic for clay-loam vineyard soil)
+  // 60% → -0.03 MPa  40% → -0.07  20% → -0.34  10% → -1.5  5% → capped
+  const psiSoil = -0.03 * Math.pow(60 / Math.max(sw, 2), 2.2);
+
+  // 2. Root uptake conductance (per unit leaf area)
+  const kRoot = kr * 0.0015 * (sw / 40);
+
+  // 3. Stomatal conductance (Jarvis + hydraulic feedback)
+  let gsMax = 0.25;
+  if (!isDay) gsMax *= 0.05;
+  const fRad  = Math.min(1, rad / 600);
+  const fTemp = Math.exp(-Math.pow((temp - 28) / 18, 2));
+  const fVPD  = Math.exp(-vpd * 0.3);                 // milder penalty
+  // CORRECTED sigmoid: opens when hydrated (Ψ ≈ -0.2), closes below -1.2 MPa
+  const fPsi  = 1 / (1 + Math.exp(-(state.psi + 0.8) * 4));
+  let gs = gsMax * fRad * fTemp * fVPD * fPsi;
+  gs = Math.max(0.001, gs);
+
+  // 4. Transpiration E = gs * VPD * (1000 / P_atm)   [mmol/m²/s]
+  const P_atm = 101.3; // kPa
+  const e = gs * vpd * (1000 / P_atm);
+
+  // 5. Leaf water potential from supply-demand balance
+  // E (mmol/m²/s) = k (mol/m²/s/MPa) * 1000 * (Ψsoil - Ψleaf)
+  // → Ψleaf = Ψsoil - E/(1000*k)
+  const kTotal = kRoot;
+  const rawPsi = psiSoil - e/(1000 * Math.max(0.0003, kTotal));
+
+  // 6. Capacitance: higher C = slower response (RC-like lag)
+  // c slider 2–20 mm.  Time constant τ ∝ c
+  const tau = 0.5 + c * 0.15;   // seconds
+  const alpha = 1 - Math.exp(-0.016/tau);  // per frame @ 60fps
+  targetPsi += (rawPsi - targetPsi) * alpha;
+  let psiLeaf = Math.max(-4.5, Math.min(-0.03, targetPsi));
+
+  // 7. Stem slightly less negative than leaf (xylem resistance)
+  const psiStem = psiLeaf + 0.15 * (1 + vpd/3);
+
+  // 8. Hydraulic safety margin vs cavitation threshold (-1.6 MPa typical for Vitis vinifera)
+  const threshold = -1.6;
+  const safety = Math.max(0, Math.min(100, (psiLeaf - threshold)/(-0.05 - threshold)*100));
+
+  state.psi = psiLeaf;
+  state.stem = psiStem;
+  state.e = e;
+  state.gs = gs;
+  state.safety = safety;
 
   // History for graph
-  state.history.push({psi:psiLeaf,stem:psiStem,gs:gs});
+  state.history.push({psi:psiLeaf, stem:psiStem, gs:gs});
   if(state.history.length>200) state.history.shift();
 }
 
