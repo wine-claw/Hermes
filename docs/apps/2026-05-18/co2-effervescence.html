@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sparkling Wine CO₂ Effervescence Dynamics</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0a0a10;font-family:'Segoe UI',system-ui,sans-serif;color:#e8e8f0}
+
+  .disclaimer{background:#141a22;border-bottom:1px solid #2a3441;color:#8b949e;padding:0.6rem 1rem;text-align:center;font-size:0.78rem;font-family:system-ui,sans-serif;position:sticky;top:0;z-index:100}
+  .disclaimer strong{color:#d29922;font-weight:600}
+
+  #app{display:flex;width:100vw;height:100vh}
+  #canvas-wrap{flex:1;position:relative;overflow:hidden}
+  canvas{display:block;width:100%;height:100%}
+
+  /* Overlay labels */
+  .overlay-label{position:absolute;pointer-events:none;font-size:0.72rem;color:rgba(200,210,255,0.5);font-weight:500;letter-spacing:0.03em}
+  .label-bulk{top:12px;left:12px}
+  .label-surface{top:12px;right:12px;text-align:right}
+  .label-henry{bottom:12px;left:12px}
+
+  #panel{width:320px;background:linear-gradient(180deg,#12121a 0%,#0d0d14 100%);border-left:1px solid #222236;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+  #panel h1{font-size:1.05rem;padding:1rem 1.2rem 0.3rem;color:#c9d1f0;font-weight:600;letter-spacing:-0.02em}
+  #panel .subtitle{font-size:0.78rem;padding:0 1.2rem 1rem;color:#6b7190;border-bottom:1px solid #1a1a2e}
+
+  .section{padding:0.9rem 1.2rem;border-bottom:1px solid #1a1a2e}
+  .section h3{font-size:0.8rem;color:#8b93b0;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.75rem;font-weight:700}
+
+  .control{margin-bottom:0.9rem}
+  .control label{display:flex;justify-content:space-between;font-size:0.82rem;color:#a0a8c8;margin-bottom:0.35rem}
+  .control label span.value{color:#58d0ff;font-weight:600;min-width:3.5em;text-align:right}
+  .control input[type="range"]{width:100%;margin:0.15rem 0;-webkit-appearance:none;height:5px;border-radius:3px;background:#1e1e30;outline:none;cursor:pointer}
+  .control input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;height:15px;width:15px;border-radius:50%;background:#58d0ff;box-shadow:0 0 8px rgba(88,208,255,0.4);cursor:pointer}
+  .control input[type="range"]::-moz-range-thumb{height:15px;width:15px;border-radius:50%;background:#58d0ff;border:none;cursor:pointer}
+
+  .row{display:flex;gap:0.5rem}
+  .row .control{flex:1}
+
+  .btn-group{display:flex;gap:0.4rem;flex-wrap:wrap}
+  .btn-group button{flex:1;min-width:70px;padding:0.45rem 0.6rem;border:1px solid #2a2a45;border-radius:7px;background:#161625;color:#8b93b0;font-size:0.78rem;cursor:pointer;transition:all 0.15s;font-family:inherit}
+  .btn-group button:hover{border-color:#4a5a80;background:#1e1e35}
+  .btn-group button.active{background:#58d0ff1a;border-color:#58d0ff;color:#58d0ff;box-shadow:0 0 8px rgba(88,208,255,0.12)}
+
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem}
+  .stat{background:#161625;border:1px solid #1e1e30;border-radius:8px;padding:0.55rem 0.7rem}
+  .stat .val{font-size:1.05rem;font-weight:700;color:#58d0ff;line-height:1.2}
+  .stat .unit{font-size:0.65rem;color:#6b7190;font-weight:500}
+  .stat .name{font-size:0.7rem;color:#8b93b0;margin-top:0.1rem}
+
+  .meter{height:6px;border-radius:3px;background:#1e1e30;margin-top:0.5rem;overflow:hidden}
+  .meter-fill{height:100%;border-radius:3px;transition:width 0.3s ease,background 0.3s ease}
+
+  .equation{background:#111118;border:1px solid #222236;border-radius:8px;padding:0.7rem;margin-top:0.4rem;font-size:0.75rem;color:#8b93b0;font-family:'SF Mono','Fira Code',monospace;line-height:1.5}
+  .equation .k{ color:#58d0ff}
+  .equation .v{ color:#a0d080}
+  .equation .s{ color:#e8a060}
+
+  /* Fullscreen toggle */
+  #fs-btn{position:absolute;bottom:10px;right:10px;background:rgba(10,10,20,0.7);border:1px solid #2a2a45;color:#8b93b0;width:34px;height:34px;border-radius:8px;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
+  #fs-btn:hover{border-color:#58d0ff;color:#58d0ff}
+
+  #panel-toggle{display:none;position:absolute;top:10px;right:10px;z-index:20;background:rgba(10,10,20,0.8);border:1px solid #2a2a45;color:#8b93b0;width:38px;height:38px;border-radius:8px;font-size:1.1rem;cursor:pointer}
+
+  @media(max-width:800px){
+    #panel{width:260px}
+  }
+  @media(max-width:680px){
+    #app{flex-direction:column}
+    #panel{position:absolute;right:-280px;top:0;bottom:0;width:260px;z-index:30;transition:right 0.3s;box-shadow:-5px 0 25px rgba(0,0,0,0.3)}
+    #panel.open{right:0}
+    #panel-toggle{display:flex;align-items:center;justify-content:center}
+  }
+</style>
+</head>
+<body>
+
+<div class="disclaimer">
+  <strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.
+</div>
+
+<div id="app">
+  <div id="canvas-wrap">
+    <canvas id="sim"></canvas>
+    <button id="panel-toggle" title="Toggle panel">☰</button>
+    <div class="overlay-label label-bulk">BULK LIQUID — convective flow field</div>
+    <div class="overlay-label label-surface">FREE SURFACE — gas exchange zone</div>
+    <div class="overlay-label label-henry">Henry's Law: C = kH · P(CO₂) / T</div>
+  </div>
+
+  <div id="panel">
+    <h1>CO₂ Effervescence</h1>
+    <div class="subtitle">Sparkling wine bubble nucleation &amp; rising dynamics</div>
+
+    <div class="section">
+      <h3>Glass Geometry</h3>
+      <div class="btn-group" id="glass-btns">
+        <button data-shape="flute" class="active">Flute</button>
+        <button data-shape="coupe">Coupe</button>
+        <button data-shape="tulip">Tulip</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Operating Conditions</h3>
+      <div class="control">
+        <label>Temperature <span class="value" id="temp-val">12 °C</span></label>
+        <input type="range" id="temp" min="0" max="25" step="0.5" value="12">
+      </div>
+      <div class="control">
+        <label>Bottle Pressure <span class="value" id="pressure-val">6.0 atm</span></label>
+        <input type="range" id="pressure" min="1" max="12" step="0.1" value="6">
+      </div>
+      <div class="control">
+        <label>Fill Height <span class="value" id="fill-val">85 %</span></label>
+        <input type="range" id="fill" min="30" max="98" step="1" value="85">
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Physics</h3>
+      <div class="row">
+        <div class="control">
+          <label>Nucleation <span class="value" id="nuc-val">120</span></label>
+          <input type="range" id="nuc" min="10" max="500" step="10" value="120">
+        </div>
+        <div class="control">
+          <label>Viscosity <span class="value" id="visc-val">1.2</span></label>
+          <input type="range" id="visc" min="0.8" max="3.0" step="0.1" value="1.2">
+        </div>
+      </div>
+      <div class="control">
+        <label>Solubility Coefficient (kH) <span class="value" id="kh-val">0.034</span></label>
+        <input type="range" id="kh" min="0.010" max="0.070" step="0.001" value="0.034">
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Live Metrics</h3>
+      <div class="stats" id="stats">
+        <div class="stat"><div class="val" id="st-bubbles">0</div><div class="unit">bubbles</div><div class="name">Active</div></div>
+        <div class="stat"><div class="val" id="st-rate">0</div><div class="unit">/ sec</div><div class="name">Nucleation</div></div>
+        <div class="stat"><div class="val" id="st-henry">—</div><div class="unit">mol/L</div><div class="name">Dissolved CO₂</div></div>
+        <div class="stat"><div class="val" id="st-flux">—</div><div class="unit">mg/s</div><div class="name">Surface Flux</div></div>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.72rem;color:#6b7190">
+        Saturation fraction:
+        <div class="meter"><div class="meter-fill" id="sat-meter" style="width:0%;background:#58d0ff"></div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Henry's Law</h3>
+      <div class="equation">
+        <span class="k">C</span> <span class="s">=</span> <span class="v">kH</span> <span class="s">·</span> <span class="k">P</span><span class="s">/</span><span class="k">T</span><br>
+        where <span class="v">kH</span> <span class="s">=</span> 0.034 mol/(L·atm) at 298K<br>
+        <span class="k">P</span> <span class="s">=</span> CO₂ partial pressure (atm)<br>
+        <span class="k">T</span> <span class="s">=</span> absolute temperature (K)
+      </div>
+      <div style="margin-top:0.6rem;font-size:0.72rem;color:#8b93b0;line-height:1.4">
+        At <span id="calc-temp">12</span>°C and <span id="calc-p">6.0</span> atm:<br>
+        <span style="color:#a0d080;font-size:0.85rem;font-weight:600" id="calc-result">C ≈ 0.069 mol/L</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   Sparkling Wine CO₂ Effervescence Dynamics
+   Full particle-based nucleation and rising simulation
+========================================================= */
+
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+let W, H, DPR;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.parentElement.clientWidth;
+  H = canvas.parentElement.clientHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ---- Parameters ---- */
+const PARAMS = {
+  temp: 12,      // °C
+  pressure: 6.0, // atm
+  fill: 85,      // %
+  nucleation: 120,
+  viscosity: 1.2,
+  kH: 0.034,
+  shape: 'flute'
+};
+
+/* ---- State ---- */
+let bubbles = [];
+let nucleationSites = [];
+let frameCount = 0;
+let activeBubbles = 0;
+let nucleationRate = 0;
+let surfaceFlux = 0;
+let wakeParticles = [];
+let time = 0;
+
+/* ---- Glass Shapes ---- */
+const GLASS = {
+  flute:   { rim: 0.28, base: 0.32, height: 0.95, curve: 0.02, stemH: 0.12, stemW: 0.06, footR: 0.18 },
+  coupe:   { rim: 0.42, base: 0.10, height: 0.55, curve: 0.35, stemH: 0.18, stemW: 0.05, footR: 0.18 },
+  tulip:   { rim: 0.32, base: 0.30, height: 0.80, curve: -0.08, stemH: 0.14, stemW: 0.06, footR: 0.18 }
+};
+
+function getGlassRadius(y){
+  const g = GLASS[PARAMS.shape];
+  const liquidTop = H * (1 - g.height * 0.5 * PARAMS.fill / 100);
+  const liquidBottom = H * (1 - g.height * 0.5);
+  const rel = Math.max(0, Math.min(1, (y - liquidBottom) / (liquidTop - liquidBottom)));
+  // Quadratic profile for the bowl
+  const t = rel;
+  const rNorm = g.base + (g.rim - g.base) * t + g.curve * 4 * t * (1 - t);
+  return Math.max(0.08, Math.min(0.48, rNorm)) * Math.min(W, H);
+}
+
+function initNucleationSites(){
+  nucleationSites = [];
+  const g = GLASS[PARAMS.shape];
+  const liquidTop = H * (1 - g.height * 0.5 * PARAMS.fill / 100);
+  const liquidBottom = H * (1 - g.height * 0.5);
+  // Nucleation sites follow inner glass wall at random vertical positions
+  const count = PARAMS.nucleation;
+  for(let i = 0; i < count; i++){
+    const rel = Math.random();
+    const y = liquidBottom + rel * (liquidTop - liquidBottom);
+    // Find radius at this height
+    const r = getGlassRadius(y);
+    // Position on inner wall — slight inward offset to be "inside" liquid
+    const angle = Math.random() * Math.PI * 2;
+    const x = W/2 + Math.cos(angle) * r * 0.92;
+    const z = r * 0.92 * Math.sin(angle); // pseudo-depth for 3D feel
+    const activity = 0.3 + Math.random() * 0.7; // 0.3-1.0 site activity
+    nucleationSites.push({ x, y, z, r, rel, activity, lastSpawn: Math.random() * 120 });
+  }
+}
+
+/* ---- Bubble Class ---- */
+class Bubble {
+  constructor(x, y, z, rInit){
+    this.x = x;
+    this.y = y;
+    this.z = z; // depth for 3D
+    this.r = rInit || (1.5 + Math.random() * 2.5);
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = -0.3 - Math.random() * 0.5; // rising
+    this.wobblePhase = Math.random() * Math.PI * 2;
+    this.wobbleSpeed = 0.02 + Math.random() * 0.04;
+    this.wobbleAmp = 0.1 + Math.random() * 0.3;
+    this.growthRate = 0.006 + Math.random() * 0.012;
+    this.drag = 0.015 / PARAMS.viscosity;
+    this.opacity = 0.6 + Math.random() * 0.4;
+    this.trail = [];
+    this.age = 0;
+    this.maxAge = 200 + Math.random() * 300;
+    this.collided = false;
+  }
+  update(){
+    const g = GLASS[PARAMS.shape];
+    const liquidTop = H * (1 - g.height * 0.5 * PARAMS.fill / 100);
+
+    this.age++;
+    this.r += this.growthRate;
+    this.wobblePhase += this.wobbleSpeed;
+    
+    // Rising velocity increases with bubble size (Stokes + pressure drop)
+    const buoyancy = (0.3 + this.r * 0.03) / PARAMS.viscosity;
+    this.vy = -buoyancy;
+    
+    // Horizontal drift due to shape constriction
+    const wallR = getGlassRadius(this.y);
+    const centerDist = this.x - W/2;
+    const inwardForce = -centerDist * 0.0008 * (1 - Math.abs(centerDist) / (wallR + 1));
+    this.vx += inwardForce + Math.sin(this.wobblePhase) * this.wobbleAmp * 0.008;
+    this.vx *= 0.98; // viscous damping
+    
+    // Coalescence attraction to nearby bubbles
+    for(let other of bubbles){
+      if(other === this) continue;
+      const dx = other.x - this.x;
+      const dy = other.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist < this.r + other.r + 5 && dist > 1){
+        const f = 0.003 * (this.r + other.r) / (dist * dist);
+        this.vx += dx / dist * f;
+        this.vy += dy / dist * f * 0.2;
+        // If very close, merge potential
+        if(dist < this.r + other.r - 1 && other !== this){
+          if(this.r >= other.r){
+            this.r = Math.sqrt(this.r*this.r + other.r*other.r * 0.8);
+            this.vy -= 0.3;
+            other.dead = true;
+          }
+        }
+      }
+    }
+
+    // Convective flow field from larger bubbles
+    for(let other of bubbles){
+      if(other === this || other.r < this.r) continue;
+      const dx = this.x - other.x;
+      const dy = this.y - other.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist < other.r * 6 && dist > 1){
+        const wakeStrength = other.r * 0.5 / Math.pow(dist * 0.1, 1.4);
+        this.vy -= wakeStrength * 0.15;
+        this.vx += (Math.random()-0.5) * wakeStrength * 0.05;
+      }
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+    this.z *= 0.999; // slowly drift toward center depth
+
+    // Wall constraint
+    const wr = getGlassRadius(this.y);
+    const cxDist = Math.abs(this.x - W/2);
+    if(cxDist > wr * 0.88){
+      this.x = W/2 + (cxDist > 0 ? 1 : -1) * wr * 0.87;
+      this.vx *= -0.3;
+    }
+
+    // Trail
+    this.trail.push({x:this.x, y:this.y, r:this.r, a:this.opacity});
+    if(this.trail.length > 12) this.trail.shift();
+    
+    // Wake particles behind large bubbles
+    if(this.r > 4 && Math.random() < 0.15){
+      wakeParticles.push({
+        x: this.x + (Math.random()-0.5)*this.r,
+        y: this.y + this.r * 0.5,
+        vx: (Math.random()-0.5)*0.2,
+        vy: (Math.random()-0.5)*0.2 + 0.1,
+        life: 1,
+        decay: 0.02 + Math.random()*0.02,
+        size: 0.5 + Math.random()
+      });
+    }
+
+    return this.y > liquidTop || this.age > this.maxAge;
+  }
+  draw(ctx){
+    const px = this.x;
+    const py = this.y;
+    const pr = this.r;
+    const depthAlpha = 0.7 + 0.3 * Math.cos(time * 0.001 + this.z * 0.5);
+    const a = this.opacity * depthAlpha;
+
+    // Draw trail
+    for(let i = 0; i < this.trail.length; i++){
+      const t = this.trail[i];
+      const ta = (i / this.trail.length) * a * 0.25;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.r * 0.6, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(180,210,255,${ta})`;
+      ctx.fill();
+    }
+
+    // Draw bubble with refraction-like effect
+    const grad = ctx.createRadialGradient(px - pr*0.25, py - pr*0.3, 0, px, py, pr*1.3);
+    grad.addColorStop(0, `rgba(220,240,255,${a * 0.9})`);
+    grad.addColorStop(0.3, `rgba(150,200,255,${a * 0.5})`);
+    grad.addColorStop(0.7, `rgba(80,160,255,${a * 0.2})`);
+    grad.addColorStop(1, `rgba(40,100,200,${a * 0.05})`);
+    ctx.beginPath();
+    ctx.arc(px, py, pr, 0, Math.PI*2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Rim highlight
+    ctx.beginPath();
+    ctx.arc(px, py, pr, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(200,230,255,${a * 0.4})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Specular highlight
+    ctx.beginPath();
+    ctx.ellipse(px - pr*0.3, py - pr*0.35, pr*0.2, pr*0.12, -0.3, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${a * 0.6})`;
+    ctx.fill();
+  }
+}
+
+/* ---- Wake particles ---- */
+function updateWake(){
+  for(let i = wakeParticles.length - 1; i >= 0; i--){
+    const p = wakeParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= p.decay;
+    if(p.life <= 0) wakeParticles.splice(i, 1);
+  }
+}
+
+/* ---- Surface bubble burst ---- */
+let burstParticles = [];
+function spawnBurst(x, y, r){
+  const count = Math.floor(r * 2) + 2;
+  for(let i = 0; i < count; i++){
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+    const speed = 0.3 + Math.random() * 1.2;
+    burstParticles.push({
+      x: x + Math.cos(angle) * r * 0.5,
+      y: y,
+      vx: Math.cos(angle) * speed,
+      vy: -Math.random() * 0.5 - speed * 0.8,
+      life: 1,
+      decay: 0.015 + Math.random() * 0.02,
+      size: r * 0.15 + Math.random() * 1.5,
+    });
+  }
+}
+
+function updateBursts(){
+  for(let i = burstParticles.length - 1; i >= 0; i--){
+    const p = burstParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy -= 0.008; // slight upward accel
+    p.vx *= 0.98;
+    p.life -= p.decay;
+    if(p.life <= 0) burstParticles.splice(i, 1);
+  }
+}
+
+/* ---- Glass Drawing ---- */
+function drawGlass(){
+  const g = GLASS[PARAMS.shape];
+  const cx = W/2;
+  const liquidBottom = H * (1 - g.height * 0.5);
+  const liquidTop = H * (1 - g.height * 0.5 * PARAMS.fill / 100);
+  const bowlTop = H * (1 - g.height * 0.5);
+  
+  // Draw full glass silhouette first (back)
+  ctx.save();
+  ctx.beginPath();
+  // Build glass profile
+  const steps = 60;
+  for(let i = 0; i <= steps; i++){
+    const t = i / steps;
+    const y = liquidBottom + t * (bowlTop - liquidBottom);
+    const rNorm = g.base + (g.rim - g.base) * t + g.curve * 4 * t * (1 - t);
+    const r = Math.max(0.08, Math.min(0.48, rNorm)) * Math.min(W, H);
+    if(i === 0) ctx.moveTo(cx + r, y);
+    else ctx.lineTo(cx + r, y);
+  }
+  // Liquid surface line across
+  const topR = getGlassRadius(liquidTop) * 1.02;
+  ctx.lineTo(cx + topR, liquidTop);
+  ctx.lineTo(cx - topR, liquidTop);
+  for(let i = steps; i >= 0; i--){
+    const t = i / steps;
+    const y = liquidBottom + t * (bowlTop - liquidBottom);
+    const rNorm = g.base + (g.rim - g.base) * t + g.curve * 4 * t * (1 - t);
+    const r = Math.max(0.08, Math.min(0.48, rNorm)) * Math.min(W, H);
+    ctx.lineTo(cx - r, y);
+  }
+  ctx.closePath();
+  
+  // Glass fill (liquid) — gradient with champagne color
+  const liquidGrad = ctx.createLinearGradient(cx, liquidBottom, cx, liquidTop);
+  liquidGrad.addColorStop(0, 'rgba(215,190,110,0.25)');
+  liquidGrad.addColorStop(0.5, 'rgba(230,205,130,0.18)');
+  liquidGrad.addColorStop(1, 'rgba(245,220,150,0.12)');
+  ctx.fillStyle = liquidGrad;
+  ctx.fill();
+  
+  // Glass edge glow
+  ctx.strokeStyle = 'rgba(180,200,230,0.08)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+
+  // Stem and base
+  ctx.save();
+  const stemY = H * (1 - g.height * 0.5);
+  const footY = H - 10;
+  const footW = g.footR * Math.min(W, H);
+  ctx.beginPath();
+  ctx.ellipse(cx, footY, footW, footW * 0.15, 0, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(180,200,230,0.06)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(180,200,230,0.12)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  ctx.beginPath();
+  ctx.moveTo(cx - g.stemW * Math.min(W, H), stemY);
+  ctx.lineTo(cx - g.stemW * Math.min(W, H) * 0.7, footY);
+  ctx.lineTo(cx + g.stemW * Math.min(W, H) * 0.7, footY);
+  ctx.lineTo(cx + g.stemW * Math.min(W, H), stemY);
+  ctx.fillStyle = 'rgba(180,200,230,0.05)';
+  ctx.fill();
+  ctx.restore();
+
+  // Liquid surface shimmer
+  ctx.save();
+  ctx.beginPath();
+  const surfR = getGlassRadius(liquidTop);
+  ctx.ellipse(cx, liquidTop, surfR * 0.95, surfR * 0.12, 0, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(240,230,180,0.08)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,250,220,0.15)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  // Convective flow arrows in liquid (thin)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(200,210,255,0.03)';
+  ctx.lineWidth = 0.5;
+  const flowTime = time * 0.0005;
+  for(let i = 0; i < 8; i++){
+    const fx = cx + Math.sin(flowTime + i * 0.8) * surfR * 0.5;
+    const fy = liquidBottom + (liquidTop - liquidBottom) * (0.2 + i * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(fx, fy + 15);
+    ctx.lineTo(fx + Math.sin(flowTime + i) * 5, fy - 5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ---- Nucleation site sparkles ---- */
+function drawNucleationSites(){
+  if(frameCount % 3 !== 0) return; // subtle
+  ctx.save();
+  for(let site of nucleationSites){
+    if(site.activity < 0.5) continue;
+    const flicker = 0.15 + 0.1 * Math.sin(time * 0.005 + site.rel * 30);
+    ctx.beginPath();
+    ctx.arc(site.x, site.y, 1.2, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(180,210,255,${flicker * site.activity})`;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ---- Simulation Loop ---- */
+function update(){
+  time = performance.now();
+  frameCount++;
+
+  // Nucleate new bubbles
+  const g = GLASS[PARAMS.shape];
+  const liquidTop = H * (1 - g.height * 0.5 * PARAMS.fill / 100);
+  const liquidBottom = H * (1 - g.height * 0.5);
+  
+  // Higher pressure + lower temp = supersaturation = more nucleation
+  const supersat = (PARAMS.pressure * PARAMS.temp + 50) / 300;
+  const spawnInterval = Math.max(1, Math.floor(8 / supersat / (PARAMS.nucleation / 120)));
+  
+  let spawnedThisFrame = 0;
+  for(let site of nucleationSites){
+    if(spawnedThisFrame > 5) break;
+    site.lastSpawn++;
+    const interval = Math.max(20, 150 / site.activity / supersat);
+    if(site.lastSpawn > interval){
+      site.lastSpawn = 0;
+      const initR = 1.2 + Math.random() * 1.5;
+      bubbles.push(new Bubble(
+        site.x + (Math.random()-0.5) * 3,
+        site.y + Math.random() * 5,
+        site.z,
+        initR
+      ));
+      spawnedThisFrame++;
+    }
+  }
+
+  // Update bubbles
+  activeBubbles = 0;
+  let burstThisFrame = 0;
+  for(let i = bubbles.length - 1; i >= 0; i--){
+    const b = bubbles[i];
+    if(b.dead){
+      bubbles.splice(i, 1);
+      continue;
+    }
+    if(b.update()){
+      // Bubble has reached surface
+      if(burstThisFrame < 5){
+        spawnBurst(b.x, liquidTop, b.r);
+        burstThisFrame++;
+      }
+      bubbles.splice(i, 1);
+    } else {
+      activeBubbles++;
+    }
+  }
+
+  updateWake();
+  updateBursts();
+
+  nucleationRate = spawnedThisFrame * 60;
+  surfaceFlux = burstThisFrame * 60 * 0.044; // rough mg CO2 per burst
+}
+
+function draw(){
+  ctx.clearRect(0, 0, W, H);
+
+  // Background gradient
+  const bg = ctx.createRadialGradient(W/2, H*0.7, 0, W/2, H*0.5, W);
+  bg.addColorStop(0, '#10101a');
+  bg.addColorStop(1, '#06060b');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw glass behind
+  drawGlass();
+
+  // Nucleation site visualization (subtle pins)
+  drawNucleationSites();
+
+  // Draw wake particles
+  ctx.save();
+  for(let p of wakeParticles){
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(160,200,255,${p.life * 0.15})`;
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Draw bubbles
+  for(let b of bubbles){
+    b.draw(ctx);
+  }
+
+  // Draw burst particles (surface)
+  ctx.save();
+  for(let p of burstParticles){
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(220,240,255,${p.life * 0.7})`;
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Draw foam on surface (small bubbles accumulating)
+  const g = GLASS[PARAMS.shape];
+  const liquidTop = H * (1 - g.height * 0.5 * PARAMS.fill / 100);
+  const foamCount = Math.min(40, Math.floor(activeBubbles / 15));
+  const surfR = getGlassRadius(liquidTop) * 0.9;
+  ctx.save();
+  for(let i = 0; i < foamCount; i++){
+    const angle = (Math.PI * 2 * i) / foamCount + time * 0.0003;
+    const rOff = surfR * (0.7 + 0.3 * Math.sin(angle * 3 + time * 0.002));
+    const fx = W/2 + Math.cos(angle) * rOff;
+    const fy = liquidTop - 1 - Math.random() * 2;
+    ctx.beginPath();
+    ctx.arc(fx, fy, 1 + Math.random() * 2, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${0.15 + Math.random()*0.15})`;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function loop(){
+  update();
+  draw();
+  updateStats();
+  requestAnimationFrame(loop);
+}
+
+/* ---- Stats ---- */
+let lastStatsUpdate = 0;
+let smoothRate = 0;
+let smoothFlux = 0;
+function updateStats(){
+  if(performance.now() - lastStatsUpdate < 150) return;
+  lastStatsUpdate = performance.now();
+  
+  document.getElementById('st-bubbles').textContent = activeBubbles;
+  smoothRate = smoothRate * 0.9 + nucleationRate * 0.1;
+  document.getElementById('st-rate').textContent = Math.round(smoothRate);
+  
+  // Henry's law dissolved CO2
+  const T_K = PARAMS.temp + 273.15;
+  const C_dissolved = PARAMS.kH * PARAMS.pressure / T_K * 298; // normalized
+  document.getElementById('st-henry').textContent = C_dissolved.toFixed(3);
+  
+  smoothFlux = smoothFlux * 0.9 + surfaceFlux * 0.1;
+  document.getElementById('st-flux').textContent = smoothFlux.toFixed(2);
+  
+  // Saturation meter
+  const saturation = Math.min(100, (PARAMS.pressure * PARAMS.temp) / 120 * 100);
+  document.getElementById('sat-meter').style.width = saturation + '%';
+  if(saturation > 80) document.getElementById('sat-meter').style.background = '#ff6b6b';
+  else if(saturation > 50) document.getElementById('sat-meter').style.background = '#ffd166';
+  else document.getElementById('sat-meter').style.background = '#58d0ff';
+
+  // Calc update
+  document.getElementById('calc-temp').textContent = PARAMS.temp;
+  document.getElementById('calc-p').textContent = PARAMS.pressure.toFixed(1);
+  document.getElementById('calc-result').textContent = `C ≈ ${C_dissolved.toFixed(3)} mol/L`;
+}
+
+/* ---- UI Bindings ---- */
+function bind(id, key, fmt){
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(id + '-val');
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    PARAMS[key] = v;
+    if(fmt) valEl.textContent = fmt(v);
+    else valEl.textContent = v;
+    if(key === 'nucleation') initNucleationSites();
+    if(key === 'shape') { initNucleationSites(); bubbles = []; }
+    if(key === 'temp' || key === 'pressure') bubbles = []; // clear on major change
+    if(key === 'fill') { bubbles = []; initNucleationSites(); }
+  });
+}
+
+bind('temp', 'temp', v => v.toFixed(1) + ' °C');
+bind('pressure', 'pressure', v => parseFloat(v).toFixed(1) + ' atm');
+bind('fill', 'fill', v => v + ' %');
+bind('nuc', 'nucleation', v => v);
+bind('visc', 'viscosity', v => parseFloat(v).toFixed(1));
+bind('kh', 'kH', v => parseFloat(v).toFixed(3));
+
+document.querySelectorAll('#glass-btns button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#glass-btns button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    PARAMS.shape = btn.dataset.shape;
+    initNucleationSites();
+    bubbles = [];
+  });
+});
+
+/* Mobile panel toggle */
+document.getElementById('panel-toggle').addEventListener('click', () => {
+  document.getElementById('panel').classList.toggle('open');
+});
+
+/* ---- Init ---- */
+initNucleationSites();
+loop();
+</script>
+</body>
+</html>
