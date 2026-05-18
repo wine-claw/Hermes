@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Botrytis Cinerea — Noble Rot Progression Simulator</title>
+<script>
+// Disable p5-style friendly errors equivalent — strict mode + no console in hot path
+"use strict";
+</script>
+<style>
+  :root {
+    --bg: #0f110d;
+    --surface: #1a1c16;
+    --border: #2d3226;
+    --text: #d5dcc9;
+    --muted: #8a9478;
+    --accent: #c4a43a;
+    --accent2: #7cb342;
+    --warn: #8b6914;
+    --danger: #8b4513;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+  }
+  #disclaimer {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: linear-gradient(90deg, #2a1a08, #1f1508);
+    border-bottom: 1px solid #5a3a14;
+    color: #e8c080;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    font-size: 0.78rem;
+    z-index: 9999;
+    letter-spacing: 0.02em;
+  }
+  #app-wrap {
+    display: flex;
+    height: 100vh;
+    padding-top: 34px;
+    box-sizing: border-box;
+  }
+  #canvas-container {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #ui-panel {
+    width: 320px;
+    min-width: 280px;
+    max-width: 360px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 1rem;
+    box-sizing: border-box;
+    gap: 1rem;
+  }
+  #ui-panel h2 {
+    font-size: 1.05rem;
+    margin: 0;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  #ui-panel .subtitle {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: -0.4rem;
+    margin-bottom: 0.3rem;
+  }
+  .control-group {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem;
+  }
+  .control-group h3 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 0.6rem 0;
+    font-weight: 600;
+  }
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.7rem;
+  }
+  .slider-row:last-child { margin-bottom: 0; }
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text);
+  }
+  .slider-label .val {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: #2d3226;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  .metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .metric {
+    background: rgba(0,0,0,0.25);
+    border-radius: 6px;
+    padding: 0.5rem;
+    text-align: center;
+  }
+  .metric .num {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+  }
+  .metric .label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .stage-indicator {
+    display: flex;
+    gap: 0.3rem;
+    margin-top: 0.3rem;
+  }
+  .stage-dot {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: #2d3226;
+    transition: background 0.3s;
+  }
+  .stage-dot.active { background: var(--accent); }
+  .stage-dot.danger { background: var(--danger); }
+  .btn-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+  button {
+    flex: 1;
+    background: var(--accent);
+    color: #1a1c16;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 0.7rem;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button.secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.secondary:hover { color: var(--text); border-color: var(--muted); }
+  #legend {
+    font-size: 0.7rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  #legend span { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.3rem; vertical-align: middle; }
+  @media (max-width: 800px) {
+    #app-wrap { flex-direction: column; }
+    #ui-panel { width: 100%; max-width: 100%; border-left: none; border-top: 1px solid var(--border); height: 240px; min-height: 240px; }
+  }
+</style>
+</head>
+<body>
+<div id="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="app-wrap">
+  <div id="canvas-container"><canvas id="mainCanvas"></canvas></div>
+  <div id="ui-panel">
+    <div>
+      <h2>Botrytis Cinerea</h2>
+      <div class="subtitle">Noble Rot Progression Simulator</div>
+    </div>
+
+    <div class="control-group">
+      <h3>Environment</h3>
+      <div class="slider-row">
+        <div class="slider-label"><span>Humidity</span><span class="val" id="lbl-humidity">85%</span></div>
+        <input type="range" id="humidity" min="60" max="99" value="85">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Temperature</span><span class="val" id="lbl-temp">18°C</span></div>
+        <input type="range" id="temp" min="5" max="30" value="18">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Sunlight / UV</span><span class="val" id="lbl-uv">40%</span></div>
+        <input type="range" id="uv" min="0" max="100" value="40">
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h3>Grape Traits</h3>
+      <div class="slider-row">
+        <div class="slider-label"><span>Skin Thickness</span><span class="val" id="lbl-skin">Medium</span></div>
+        <input type="range" id="skin" min="1" max="5" value="3">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Initial Brix</span><span class="val" id="lbl-brix">22°Bx</span></div>
+        <input type="range" id="brix" min="15" max="28" value="22" step="0.5">
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h3>Timeline</h3>
+      <div class="slider-row">
+        <div class="slider-label"><span>Days Elapsed</span><span class="val" id="lbl-days">Day 0</span></div>
+        <input type="range" id="days" min="0" max="30" value="0">
+      </div>
+      <div class="btn-row">
+        <button id="btn-play">▶ Play</button>
+        <button id="btn-reset" class="secondary">Reset</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h3>Metrics</h3>
+      <div class="metric-grid">
+        <div class="metric"><span class="num" id="m-brix">22.0</span><span class="label">Brix °Bx</span></div>
+        <div class="metric"><span class="num" id="m-water">100</span><span class="label">Water %</span></div>
+        <div class="metric"><span class="num" id="m-infection">0</span><span class="label">Infection %</span></div>
+        <div class="metric"><span class="num" id="m-spores">0</span><span class="label">Spore Count</span></div>
+      </div>
+      <div style="margin-top:0.6rem; font-size:0.7rem; color:var(--muted);">
+        Stage: <span id="stage-text" style="color:var(--accent2); font-weight:700;">Healthy</span>
+      </div>
+      <div class="stage-indicator">
+        <div class="stage-dot" id="st0"></div>
+        <div class="stage-dot" id="st1"></div>
+        <div class="stage-dot" id="st2"></div>
+        <div class="stage-dot" id="st3"></div>
+        <div class="stage-dot" id="st4"></div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h3>Legend</h3>
+      <div id="legend">
+        <div><span style="background:#4a7c31;"></span>Healthy tissue</div>
+        <div><span style="background:#c4a43a;"></span>Early infection (spore landing)</div>
+        <div><span style="background:#cd7f32;"></span>Noble rot (mycelial spread)</div>
+        <div><span style="background:#a08060;"></span>Advanced desiccation</div>
+        <div><span style="background:#6b6b6b;"></span>Grey rot (spoilage)</div>
+        <div><span style="background:#e8e0d0;"></span>Sugar crystals</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, dpr;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.parentElement.getBoundingClientRect();
+    W = Math.floor(rect.width);
+    H = Math.floor(rect.height);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ============================
+  // Seeded RNG (Mulberry32)
+  // ============================
+  let SEED = 12345;
+  function mulberry32(a) {
+    return function() {
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  let rng = mulberry32(SEED);
+  function random() { return rng(); }
+  function randomRange(a, b) { return a + random() * (b - a); }
+  function noise2D(x, y) {
+    const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function fbm(x, y, octaves) {
+    let val = 0, amp = 1, freq = 1, sum = 0;
+    for (let i = 0; i < octaves; i++) {
+      val += noise2D(x * freq, y * freq) * amp;
+      sum += amp;
+      amp *= 0.5;
+      freq *= 2;
+    }
+    return val / sum;
+  }
+
+  // ============================
+  // Config
+  // ============================
+  const CONFIG = {
+    humidity: 85,
+    temp: 18,
+    uv: 40,
+    skin: 3,
+    initialBrix: 22,
+    days: 0,
+    paused: true,
+    speed: 0.05,
+  };
+
+  // ============================
+  // Color System
+  // ============================
+  const PALETTE = {
+    healthy: { h: 100, s: 45, l: 35 },
+    early: { h: 45, s: 55, l: 50 },
+    noble: { h: 30, s: 50, l: 50 },
+    advanced: { h: 25, s: 25, l: 50 },
+    grey: { h: 0, s: 0, l: 45 },
+    sugar: { h: 45, s: 10, l: 88 },
+    mycelium: { h: 40, s: 30, l: 75 },
+    spore: { h: 55, s: 40, l: 70 },
+    background: '#0f110d',
+  };
+
+  function hsl(h, s, l, a) {
+    return `hsla(${h % 360},${s}%,${l}%,${a ?? 1})`;
+  }
+
+  function lerpColor(c1, c2, t) {
+    return {
+      h: c1.h + (c2.h - c1.h) * t,
+      s: c1.s + (c2.s - c1.s) * t,
+      l: c1.l + (c2.l - c1.l) * t,
+    };
+  }
+
+  function colorForStage(stage) {
+    // stage 0=healthy, 1=early, 2=noble, 3=advanced, 4=grey
+    if (stage <= 0) return PALETTE.healthy;
+    if (stage <= 0.5) return lerpColor(PALETTE.healthy, PALETTE.early, stage * 2);
+    if (stage <= 1) return lerpColor(PALETTE.early, PALETTE.noble, (stage - 0.5) * 2);
+    if (stage <= 2) return lerpColor(PALETTE.noble, PALETTE.advanced, stage - 1);
+    if (stage <= 3) return lerpColor(PALETTE.advanced, PALETTE.grey, stage - 2);
+    return PALETTE.grey;
+  }
+
+  // ============================
+  // Grape Berry Class
+  // ============================
+  class Berry {
+    constructor(x, y, r, initialStage) {
+      this.x = x;
+      this.y = y;
+      this.r = r;
+      this.baseR = r;
+      this.stage = initialStage || 0; // 0-4+ infection stage
+      this.infectionProgress = 0; // 0-1 within current stage
+      this.brix = CONFIG.initialBrix;
+      this.water = 100;
+      this.hyphae = [];
+      this.pores = [];
+      this.sugars = [];
+      this.surfacePoints = [];
+      // Generate surface detail points
+      const n = 24;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const rr = r * (0.92 + random() * 0.16);
+        this.surfacePoints.push({ a, r: rr, x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr });
+      }
+      // Init hyphae entry points
+      const entries = 2 + Math.floor(random() * 3);
+      for (let i = 0; i < entries; i++) {
+        const a = random() * Math.PI * 2;
+        const hr = r * (0.3 + random() * 0.5);
+        this.hyphae.push({
+          x: x + Math.cos(a) * hr,
+          y: y + Math.sin(a) * hr,
+          angle: a,
+          len: 0,
+          maxLen: randomRange(20, 60),
+          width: randomRange(0.3, 1.2),
+          branches: [],
+          alive: true,
+        });
+      }
+    }
+
+    update(dt, envFactor) {
+      const oldStage = this.stage;
+      // Advance infection based on env
+      const humidityBoost = (CONFIG.humidity - 60) / 40; // 0-1
+      const tempBoost = 1 - Math.abs(CONFIG.temp - 20) / 20; // optimal at ~20C
+      const skinResist = CONFIG.skin / 5; // thicker skin slows infection
+      const uvInhibit = CONFIG.uv / 200;
+
+      const growthRate = Math.max(0, humidityBoost * tempBoost * (1 - skinResist) - uvInhibit) * 0.003 * dt;
+      this.infectionProgress += growthRate * envFactor;
+
+      if (this.infectionProgress >= 1) {
+        this.infectionProgress = 0;
+        this.stage += 0.5;
+      }
+      if (this.stage > 4) this.stage = 4;
+
+      // Water loss accelerates with infection
+      const waterLossRate = (this.stage * 0.02 + 0.001) * (1 + CONFIG.uv / 100) * dt;
+      this.water = Math.max(20, this.water - waterLossRate * 0.5);
+      // Brix rises inversely with water
+      this.brix = CONFIG.initialBrix * (100 / this.water);
+
+      // Berry shriveling
+      const shrivel = Math.min(1, this.stage / 4);
+      this.r = this.baseR * (1 - shrivel * 0.35);
+
+      // Grow hyphae
+      if (this.stage > 0) {
+        this.hyphae.forEach(h => {
+          if (!h.alive) return;
+          h.len += growthRate * 40;
+          if (h.len > h.maxLen) h.alive = false;
+          // Branch occasionally
+          if (random() < 0.02 * dt && h.branches.length < 3) {
+            h.branches.push({
+              angle: h.angle + randomRange(-0.8, 0.8),
+              len: 0,
+              maxLen: h.maxLen * randomRange(0.3, 0.7),
+              width: h.width * 0.7,
+              alive: true,
+            });
+          }
+          h.branches.forEach(b => {
+            if (!b.alive) return;
+            b.len += growthRate * 30;
+            if (b.len > b.maxLen) b.alive = false;
+          });
+        });
+      }
+
+      // Spawn sugar crystals in advanced stages
+      if (this.stage >= 2 && random() < 0.01 * dt) {
+        const a = random() * Math.PI * 2;
+        const d = random() * this.r * 0.8;
+        this.sugars.push({
+          x: this.x + Math.cos(a) * d,
+          y: this.y + Math.sin(a) * d,
+          size: randomRange(0.5, 2.5),
+          age: 0,
+        });
+      }
+      this.sugars.forEach(s => s.age += dt);
+    }
+
+    draw(ctx) {
+      const col = colorForStage(this.stage + this.infectionProgress * 0.5);
+
+      // Draw main berry body
+      ctx.save();
+      ctx.beginPath();
+      // Organic blob shape using surface points
+      const sp = this.surfacePoints;
+      if (sp.length) {
+        const shrivel = Math.min(1, this.stage / 4);
+        const first = sp[0];
+        let fx = this.x + Math.cos(first.a) * first.r * (1 - shrivel * 0.35);
+        let fy = this.y + Math.sin(first.a) * first.r * (1 - shrivel * 0.35);
+        // Add noise-based wobble
+        const wobble = shrivel * 8;
+        fx += Math.sin(Date.now() * 0.001 + first.a) * wobble * 0.3;
+        ctx.moveTo(fx, fy);
+        for (let i = 1; i <= sp.length; i++) {
+          const idx = i % sp.length;
+          const pt = sp[idx];
+          const rmod = pt.r * (1 - shrivel * 0.35);
+          const px = this.x + Math.cos(pt.a) * rmod + Math.sin(Date.now() * 0.001 + pt.a * 3) * wobble * 0.2;
+          const py = this.y + Math.sin(pt.a) * rmod + Math.cos(Date.now() * 0.001 + pt.a * 3) * wobble * 0.2;
+          const prev = sp[(idx - 1 + sp.length) % sp.length];
+          const rmodPrev = prev.r * (1 - shrivel * 0.35);
+          const ppx = this.x + Math.cos(prev.a) * rmodPrev;
+          const ppy = this.y + Math.sin(prev.a) * rmodPrev;
+          const cpx = (ppx + px) / 2 + Math.sin(pt.a * 2 + Date.now() * 0.0005) * wobble * 0.3;
+          const cpy = (ppy + py) / 2 + Math.cos(pt.a * 2 + Date.now() * 0.0005) * wobble * 0.3;
+          ctx.quadraticCurveTo(cpx, cpy, px, py);
+        }
+      }
+      ctx.closePath();
+
+      // Radial gradient fill
+      const grad = ctx.createRadialGradient(
+        this.x - this.r * 0.2, this.y - this.r * 0.3, this.r * 0.1,
+        this.x, this.y, this.r * 1.1
+      );
+      const highlight = { h: col.h + 10, s: Math.min(100, col.s + 10), l: Math.min(85, col.l + 25) };
+      const shadow = { h: col.h - 5, s: Math.max(0, col.s - 10), l: Math.max(15, col.l - 20) };
+      grad.addColorStop(0, hsl(highlight.h, highlight.s, highlight.l));
+      grad.addColorStop(0.6, hsl(col.h, col.s, col.l));
+      grad.addColorStop(1, hsl(shadow.h, shadow.s, shadow.l));
+
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Subtle outer glow for infected berries
+      if (this.stage > 0.5) {
+        ctx.strokeStyle = hsl(col.h, col.s * 0.8, Math.min(90, col.l + 30), 0.15 + this.stage * 0.1);
+        ctx.lineWidth = 2 + this.stage;
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Draw mycelial network
+      if (this.stage > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.stage / 3 + 0.2);
+        this.hyphae.forEach(h => {
+          if (h.len <= 0) return;
+          const ex = h.x + Math.cos(h.angle) * h.len;
+          const ey = h.y + Math.sin(h.angle) * h.len;
+          ctx.beginPath();
+          ctx.moveTo(h.x, h.y);
+          // Slight curve
+          const cx = (h.x + ex) / 2 + Math.sin(h.angle + 1) * 5;
+          const cy = (h.y + ey) / 2 + Math.cos(h.angle + 1) * 5;
+          ctx.quadraticCurveTo(cx, cy, ex, ey);
+          ctx.strokeStyle = hsl(PALETTE.mycelium.h + randomRange(-5, 5), PALETTE.mycelium.s, PALETTE.mycelium.l, 0.6);
+          ctx.lineWidth = h.width * (1 + this.stage * 0.3);
+          ctx.stroke();
+
+          h.branches.forEach(b => {
+            if (b.len <= 0) return;
+            const bx = ex + Math.cos(b.angle) * b.len;
+            const by = ey + Math.sin(b.angle) * b.len;
+            ctx.beginPath();
+            ctx.moveTo(ex, ey);
+            ctx.lineTo(bx, by);
+            ctx.strokeStyle = hsl(PALETTE.mycelium.h, PALETTE.mycelium.s, PALETTE.mycelium.l, 0.4);
+            ctx.lineWidth = b.width;
+            ctx.stroke();
+          });
+        });
+        ctx.restore();
+      }
+
+      // Draw sugar crystals on surface
+      this.sugars.forEach(s => {
+        if (s.age < 0) return;
+        const alpha = Math.min(1, s.age / 30);
+        ctx.fillStyle = hsl(PALETTE.sugar.h, PALETTE.sugar.s, PALETTE.sugar.l, alpha * 0.7);
+        const rot = s.age * 0.05;
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(rot);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          const rr = s.size * (i % 2 === 0 ? 1 : 0.5);
+          ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // Occasional surface pore (stomata-like)
+      if (this.stage > 0.5 && random() < 0.3) {
+        const a = random() * Math.PI * 2;
+        const d = this.r * 0.85;
+        ctx.fillStyle = hsl(col.h, col.s * 0.6, Math.max(10, col.l - 25), 0.25);
+        ctx.beginPath();
+        ctx.ellipse(this.x + Math.cos(a) * d, this.y + Math.sin(a) * d, 2, 1.5, a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // ============================
+  // Spore Particle System
+  // ============================
+  class SporeSystem {
+    constructor() {
+      this.spores = [];
+      for (let i = 0; i < 80; i++) this.spawn();
+    }
+    spawn() {
+      this.spores.push({
+        x: random() * W,
+        y: random() * H,
+        vx: randomRange(-0.3, 0.3),
+        vy: randomRange(-0.2, 0.4),
+        size: randomRange(0.5, 2.5),
+        life: randomRange(100, 400),
+        maxLife: 400,
+      });
+    }
+    update(dt) {
+      const humidityFactor = CONFIG.humidity / 100;
+      this.spores.forEach((s, i) => {
+        s.x += s.vx * dt + Math.sin(Date.now() * 0.001 + i) * 0.2;
+        s.y += s.vy * dt * humidityFactor;
+        s.life -= dt;
+        if (s.life <= 0 || s.x < -10 || s.x > W + 10 || s.y > H + 10) {
+          s.x = random() * W;
+          s.y = random() * -5;
+          s.life = s.maxLife;
+        }
+      });
+    }
+    draw(ctx) {
+      ctx.save();
+      this.spores.forEach(s => {
+        const alpha = Math.min(1, s.life / s.maxLife) * (0.3 + (CONFIG.humidity / 200));
+        ctx.fillStyle = hsl(PALETTE.spore.h, PALETTE.spore.s, PALETTE.spore.l, alpha);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+  }
+
+  // ============================
+  // Atmospheric Mist / Dust
+  // ============================
+  class MistLayer {
+    constructor() {
+      this.particles = [];
+      for (let i = 0; i < 60; i++) {
+        this.particles.push({
+          x: random() * W,
+          y: random() * H,
+          r: randomRange(20, 80),
+          vx: randomRange(-0.1, 0.1),
+          vy: randomRange(-0.05, 0.05),
+        });
+      }
+    }
+    update(dt) {
+      this.particles.forEach(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.x < -100) p.x = W + 100;
+        if (p.x > W + 100) p.x = -100;
+        if (p.y < -100) p.y = H + 100;
+        if (p.y > H + 100) p.y = -100;
+      });
+    }
+    draw(ctx) {
+      ctx.save();
+      this.particles.forEach(p => {
+        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+        grad.addColorStop(0, 'rgba(140,160,120,0.015)');
+        grad.addColorStop(1, 'rgba(140,160,120,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+  }
+
+  // ============================
+  // Initialize Scene
+  // ============================
+  const sporeSystem = new SporeSystem();
+  const mistLayer = new MistLayer();
+  let berries = [];
+
+  function initBerries() {
+    berries = [];
+    // Cluster of grapes
+    const cx = W * 0.42;
+    const cy = H * 0.48;
+    const berryR = Math.min(W, H) * 0.055;
+
+    // Central bunch
+    const positions = [
+      { x: 0, y: 0, r: 1 },
+      { x: 1.05, y: 0.1, r: 0.92 },
+      { x: -1.05, y: 0.15, r: 0.9 },
+      { x: 0.55, y: -0.9, r: 0.88 },
+      { x: -0.55, y: -0.85, r: 0.85 },
+      { x: 0.1, y: 1.0, r: 0.82 },
+      { x: 1.55, y: -0.65, r: 0.78 },
+      { x: -1.5, y: -0.6, r: 0.8 },
+      { x: 0.9, y: 0.95, r: 0.75 },
+      { x: -0.9, y: 1.0, r: 0.72 },
+      { x: 0.05, y: -1.7, r: 0.7 },
+      { x: 1.3, y: 0.55, r: 0.68 },
+      { x: -1.25, y: 0.55, r: 0.7 },
+      { x: 0.55, y: -1.75, r: 0.65 },
+      { x: -0.5, y: -1.7, r: 0.65 },
+      { x: 0.5, y: 1.7, r: 0.6 },
+      { x: -0.45, y: 1.75, r: 0.58 },
+      { x: 1.9, y: -0.15, r: 0.55 },
+      { x: -1.85, y: -0.1, r: 0.55 },
+      { x: 0, y: 2.3, r: 0.5 },
+      { x: 0.85, y: -2.3, r: 0.48 },
+      { x: -0.8, y: -2.3, r: 0.48 },
+    ];
+
+    positions.forEach((p, idx) => {
+      const x = cx + p.x * berryR * 1.6;
+      const y = cy + p.y * berryR * 1.7;
+      const r = berryR * p.r;
+      // Slight random offset
+      const rx = x + randomRange(-5, 5);
+      const ry = y + randomRange(-5, 5);
+      berries.push(new Berry(rx, ry, r, 0));
+    });
+  }
+  initBerries();
+
+  // ============================
+  // Background / Vignette
+  // ============================
+  function drawBackground(ctx) {
+    ctx.fillStyle = PALETTE.background;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle organic noise background
+    ctx.save();
+    for (let y = 0; y < H; y += 4) {
+      const ny = y / H;
+      const bright = 10 + fbm(ny * 3, Date.now() * 0.00002, 3) * 8;
+      ctx.fillStyle = `rgba(30,35,25,${0.3})`;
+      const wave = Math.sin(ny * 8 + Date.now() * 0.0003) * 20;
+      ctx.fillRect(0, y, W, 2);
+    }
+    ctx.restore();
+
+    // Vignette
+    const vig = ctx.createRadialGradient(W / 2, H / 2, W * 0.15, W / 2, H / 2, W * 0.65);
+    vig.addColorStop(0, 'rgba(15,17,13,0)');
+    vig.addColorStop(1, 'rgba(5,6,4,0.85)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // ============================
+  // UI Data Update
+  // ============================
+  function updateMetrics() {
+    let totalInfection = 0;
+    let totalBrix = 0;
+    let totalWater = 0;
+    let maxStage = 0;
+
+    berries.forEach(b => {
+      const effStage = Math.min(4, b.stage + b.infectionProgress);
+      totalInfection += effStage;
+      totalBrix += b.brix;
+      totalWater += b.water;
+      maxStage = Math.max(maxStage, effStage);
+    });
+
+    const avgInfection = (totalInfection / berries.length / 4) * 100;
+    const avgBrix = totalBrix / berries.length;
+    const avgWater = totalWater / berries.length;
+
+    document.getElementById('m-brix').textContent = avgBrix.toFixed(1);
+    document.getElementById('m-water').textContent = avgWater.toFixed(0);
+    document.getElementById('m-infection').textContent = Math.min(100, avgInfection).toFixed(0);
+    document.getElementById('m-spores').textContent = Math.floor(CONFIG.days * 150 + avgInfection * 20);
+
+    // Stage text
+    const stText = document.getElementById('stage-text');
+    const dots = [0,1,2,3,4].map(i => document.getElementById('st' + i));
+    dots.forEach(d => { d.className = 'stage-dot'; });
+
+    if (maxStage < 0.3) {
+      stText.textContent = 'Healthy';
+      stText.style.color = 'var(--accent2)';
+      dots[0].classList.add('active');
+    } else if (maxStage < 1) {
+      stText.textContent = 'Early Infection';
+      stText.style.color = '#c4a43a';
+      dots[0].classList.add('active');
+      dots[1].classList.add('active');
+    } else if (maxStage < 2) {
+      stText.textContent = 'Noble Rot';
+      stText.style.color = '#cd7f32';
+      dots[0].classList.add('active');
+      dots[1].classList.add('active');
+      dots[2].classList.add('active');
+    } else if (maxStage < 3) {
+      stText.textContent = 'Advanced Desiccation';
+      stText.style.color = '#a08060';
+      dots[0].classList.add('active');
+      dots[1].classList.add('active');
+      dots[2].classList.add('active');
+      dots[3].classList.add('active');
+    } else {
+      stText.textContent = 'Grey Rot / Spoilage';
+      stText.style.color = '#8b4513';
+      dots.forEach(d => d.classList.add('danger'));
+    }
+  }
+
+  // ============================
+  // Main Loop
+  // ============================
+  let lastTime = performance.now();
+  let simulatedDays = 0;
+
+  function loop() {
+    const now = performance.now();
+    const dt = Math.min(32, now - lastTime) / 1000 * 60; // normalize to ~60fps units
+    lastTime = now;
+
+    drawBackground(ctx);
+
+    // Mist layer
+    mistLayer.update(dt);
+    mistLayer.draw(ctx);
+
+    // Update physics if playing
+    if (!CONFIG.paused) {
+      simulatedDays += dt * CONFIG.speed;
+      CONFIG.days = Math.min(30, Math.floor(simulatedDays));
+      document.getElementById('days').value = CONFIG.days;
+      document.getElementById('lbl-days').textContent = 'Day ' + CONFIG.days;
+    } else {
+      simulatedDays = CONFIG.days;
+    }
+
+    // Env factor from sliders
+    const envFactor = 1 + (CONFIG.humidity - 70) / 100 + (20 - Math.abs(CONFIG.temp - 20)) / 100;
+
+    // Spread infection between adjacent berries
+    for (let i = 0; i < berries.length; i++) {
+      for (let j = i + 1; j < berries.length; j++) {
+        const a = berries[i], b = berries[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < (a.r + b.r) * 0.9) {
+          // Contact spread
+          if (a.stage > b.stage + 0.3) {
+            b.infectionProgress += dt * 0.001 * envFactor;
+          }
+          if (b.stage > a.stage + 0.3) {
+            a.infectionProgress += dt * 0.001 * envFactor;
+          }
+        }
+      }
+    }
+
+    // Draw berries back-to-front by y (pseudo-depth)
+    const sorted = [...berries].sort((a, b) => a.y - b.y);
+    sorted.forEach(b => {
+      b.update(dt, envFactor);
+      b.draw(ctx);
+    });
+
+    // Spores
+    sporeSystem.update(dt);
+    sporeSystem.draw(ctx);
+
+    // Draw timeline overlay
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,12,8,0.7)';
+    ctx.fillRect(20, H - 50, 200, 30);
+    ctx.strokeStyle = 'var(--accent)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(20, H - 50, 200, 30);
+    const prog = CONFIG.days / 30;
+    ctx.fillStyle = 'rgba(196,164,58,0.5)';
+    ctx.fillRect(22, H - 48, 196 * prog, 26);
+    ctx.fillStyle = '#d5dcc9';
+    ctx.font = '12px Menlo, Consolas, monospace';
+    ctx.fillText(`Timeline: Day ${CONFIG.days} / 30`, 30, H - 30);
+    ctx.restore();
+
+    updateMetrics();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ============================
+  // UI Wiring
+  // ============================
+  function bindSlider(id, configKey, labelId, suffix) {
+    const el = document.getElementById(id);
+    const lbl = document.getElementById(labelId);
+    el.addEventListener('input', () => {
+      let val = parseFloat(el.value);
+      CONFIG[configKey] = val;
+      if (configKey === 'skin') {
+        const names = ['Very Thin', 'Thin', 'Medium', 'Thick', 'Very Thick'];
+        lbl.textContent = names[Math.min(4, Math.max(0, Math.floor(val - 1)))];
+      } else if (suffix === '°Bx') {
+        CONFIG.initialBrix = val;
+        berries.forEach(b => b.brix = val * (100 / b.water));
+        lbl.textContent = val.toFixed(1) + suffix;
+      } else {
+        lbl.textContent = val + suffix;
+      }
+    });
+  }
+
+  bindSlider('humidity', 'humidity', 'lbl-humidity', '%');
+  bindSlider('temp', 'temp', 'lbl-temp', '°C');
+  bindSlider('uv', 'uv', 'lbl-uv', '%');
+  bindSlider('skin', 'skin', 'lbl-skin', '');
+  bindSlider('brix', 'initialBrix', 'lbl-brix', '°Bx');
+
+  document.getElementById('days').addEventListener('input', () => {
+    CONFIG.days = parseInt(document.getElementById('days').value);
+    simulatedDays = CONFIG.days;
+    document.getElementById('lbl-days').textContent = 'Day ' + CONFIG.days;
+    // Advance berries to match day
+    berries.forEach(b => {
+      // Approximate state from day
+      const targetStage = Math.min(4, CONFIG.days / 7);
+      b.stage = Math.floor(targetStage);
+      b.infectionProgress = targetStage - b.stage;
+      b.water = Math.max(20, 100 - CONFIG.days * 2.5);
+      b.brix = CONFIG.initialBrix * (100 / b.water);
+      const shrivel = Math.min(1, b.stage / 4 + b.infectionProgress * 0.1);
+      b.r = b.baseR * (1 - shrivel * 0.35);
+    });
+  });
+
+  const btnPlay = document.getElementById('btn-play');
+  btnPlay.addEventListener('click', () => {
+    CONFIG.paused = !CONFIG.paused;
+    btnPlay.textContent = CONFIG.paused ? '▶ Play' : '⏸ Pause';
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    CONFIG.paused = true;
+    btnPlay.textContent = '▶ Play';
+    CONFIG.days = 0;
+    simulatedDays = 0;
+    document.getElementById('days').value = 0;
+    document.getElementById('lbl-days').textContent = 'Day 0';
+    SEED = Math.floor(Math.random() * 99999);
+    rng = mulberry32(SEED);
+    initBerries();
+  });
+})();
+</script>
+</body>
+</html>
