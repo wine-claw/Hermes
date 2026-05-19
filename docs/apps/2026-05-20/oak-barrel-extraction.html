@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oak Barrel Extraction Dynamics</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#0f0806; font-family:system-ui,-apple-system,sans-serif; color:#e8d5b7; }
+  .disclaimer { position:sticky; top:0; z-index:1000; background:#2a1a10; border-bottom:1px solid #5a3a20; color:#e8b080; padding:0.6rem 1rem; text-align:center; font-size:0.82rem; }
+  #canvas-container { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:1; }
+  #ui-panel { position:absolute; top:48px; left:16px; width:300px; max-height:calc(100vh - 80px); overflow-y:auto; background:rgba(15,8,6,0.88); backdrop-filter:blur(10px); border:1px solid rgba(196,162,101,0.18); border-radius:14px; padding:18px; z-index:10; scrollbar-width:thin; }
+  #ui-panel h2 { margin:0 0 14px 0; font-size:1.15rem; color:#c4a265; letter-spacing:0.02em; }
+  .control { margin-bottom:14px; }
+  .control label { display:block; font-size:0.82rem; color:#b8a08a; margin-bottom:4px; font-weight:500; }
+  .control input[type=range] { width:100%; accent-color:#c4a265; }
+  .control .value { font-size:0.78rem; color:#e8d5b7; float:right; margin-top:-18px; }
+  .btn-row { display:flex; gap:8px; margin-top:10px; }
+  button { flex:1; background:#2a1a10; border:1px solid #5a3a20; color:#e8d5b7; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:0.8rem; transition:background 0.15s; }
+  button:hover { background:#3d2817; }
+  .legend { margin-top:14px; padding-top:10px; border-top:1px solid rgba(196,162,101,0.15); }
+  .legend-item { display:flex; align-items:center; font-size:0.78rem; margin-bottom:5px; color:#b8a08a; }
+  .dot { width:10px; height:10px; border-radius:50%; margin-right:8px; display:inline-block; }
+  .readout { margin-top:10px; font-size:0.78rem; color:#8b7355; line-height:1.5; }
+  .readout b { color:#c4a265; }
+  #toast-label { font-weight:600; color:#c4a265; }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="canvas-container"></div>
+<div id="ui-panel">
+  <h2>🛢️ Barrel Extraction</h2>
+  <div class="control">
+    <label>Toast Level</label>
+    <span class="value" id="toast-label">Medium</span>
+    <input id="toast" type="range" min="0" max="3" step="1" value="1">
+  </div>
+  <div class="control">
+    <label>Cellar Temperature</label>
+    <span class="value" id="temp-val">15 °C</span>
+    <input id="temp" type="range" min="8" max="25" step="0.5" value="15">
+  </div>
+  <div class="control">
+    <label>Aging Speed</label>
+    <span class="value" id="speed-val">1.0×</span>
+    <input id="speed" type="range" min="0" max="5" step="0.5" value="1">
+  </div>
+  <div class="btn-row">
+    <button id="btn-play">⏸ Pause</button>
+    <button id="btn-reset">↺ Reset</button>
+  </div>
+  <div class="readout">
+    <b>Elapsed:</b> <span id="time-readout">0.0</span> months<br>
+    <b>Total Extracted:</b> <span id="total-readout">0</span> mg/L eq.<br>
+    <small>Click inside barrel to agitate · Press S to save PNG</small>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><span class="dot" style="background:#8B4513"></span>Ellagitannins (astringency)</div>
+    <div class="legend-item"><span class="dot" style="background:#DAA520"></span>Vanillin (vanilla)</div>
+    <div class="legend-item"><span class="dot" style="background:#F5F5DC"></span>Lactones (coconut)</div>
+    <div class="legend-item"><span class="dot" style="background:#B87333"></span>Furfural (toast/caramel)</div>
+  </div>
+</div>
+<script>
+const COMPOUNDS = [
+  { name:'Ellagitannins', h:22, s:70, b:50, release:1.0, toastMult:[1.0,1.2,1.5,1.8], size:3.6 },
+  { name:'Vanillin', h:42, s:82, b:88, release:0.85, toastMult:[0.5,1.0,1.4,1.6], size:3.0 },
+  { name:'Lactones', h:52, s:18, b:94, release:0.65, toastMult:[1.3,1.0,0.75,0.45], size:2.6 },
+  { name:'Furfural', h:30, s:92, b:68, release:0.45, toastMult:[0.25,1.0,2.2,4.0], size:2.4 }
+];
+const TOAST_NAMES = ['Light','Medium','Medium+','Heavy'];
+const TOAST_COLORS = [
+  {h:32, s:40, b:42},   // light
+  {h:26, s:52, b:32},   // medium
+  {h:22, s:62, b:22},   // medium+
+  {h:16, s:72, b:14}    // heavy
+];
+
+let particles = [];
+let extracted = [0,0,0,0]; // dissolved pool per compound
+let history = [[],[],[],[]]; // for sparklines
+let maxHist = 120;
+let toastLevel = 1;
+let tempC = 15;
+let speedMult = 1;
+let isPlaying = true;
+let months = 0;
+let frameCountSim = 0;
+let bgLayer;
+let barrel = { cx:0, cy:0, outerR:0, innerR:0, numStaves:26 };
+let spawnAccum = [0,0,0,0];
+
+function updateUI() {
+  document.getElementById('toast-label').textContent = TOAST_NAMES[toastLevel];
+  document.getElementById('temp-val').textContent = tempC.toFixed(1) + ' °C';
+  document.getElementById('speed-val').textContent = speedMult.toFixed(1) + '×';
+  document.getElementById('time-readout').textContent = months.toFixed(1);
+  let tot = extracted.reduce((a,b)=>a+b,0) + particles.reduce((a,p)=>a+(p.type===4?0:1),0)*0.1;
+  document.getElementById('total-readout').textContent = Math.round(tot);
+  document.getElementById('btn-play').textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+}
+
+document.getElementById('toast').addEventListener('input', e => {
+  toastLevel = parseInt(e.target.value);
+  redrawBarrel();
+  updateUI();
+});
+document.getElementById('temp').addEventListener('input', e => {
+  tempC = parseFloat(e.target.value);
+  updateUI();
+});
+document.getElementById('speed').addEventListener('input', e => {
+  speedMult = parseFloat(e.target.value);
+  updateUI();
+});
+document.getElementById('btn-play').addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  updateUI();
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  particles = [];
+  extracted = [0,0,0,0];
+  history = [[],[],[],[]];
+  months = 0;
+  frameCountSim = 0;
+  spawnAccum = [0,0,0,0];
+  redrawBarrel();
+  updateUI();
+});
+
+const sketch = (p) => {
+  p.setup = () => {
+    let c = p.createCanvas(p.windowWidth, p.windowHeight);
+    c.parent('canvas-container');
+    p.colorMode(p.HSB, 360, 100, 100, 100);
+    p.pixelDensity(1);
+    p.randomSeed(42);
+    p.noiseSeed(42);
+    bgLayer = p.createGraphics(p.width, p.height);
+    bgLayer.colorMode(p.HSB, 360, 100, 100, 100);
+    resizeBarrel();
+    redrawBarrel();
+    updateUI();
+  };
+
+  function resizeBarrel() {
+    barrel.cx = p.width / 2;
+    barrel.cy = p.height / 2;
+    let minDim = Math.min(p.width, p.height);
+    barrel.outerR = minDim * 0.34;
+    barrel.innerR = barrel.outerR * 0.90;
+  }
+
+  function redrawBarrel() {
+    bgLayer.clear();
+    bgLayer.push();
+    // Vignette / background darkening
+    bgLayer.noStroke();
+    for (let r = Math.max(p.width, p.height); r > 0; r -= 40) {
+      let alpha = p.map(r, 0, Math.max(p.width, p.height)*0.6, 0, 40);
+      bgLayer.fill(18, 60, 6, alpha);
+      bgLayer.ellipse(barrel.cx, barrel.cy, r*2, r*2);
+    }
+
+    // Staves
+    let step = p.TWO_PI / barrel.numStaves;
+    let gap = 0.018;
+    let tc = TOAST_COLORS[toastLevel];
+    for (let i = 0; i < barrel.numStaves; i++) {
+      let a1 = i * step + gap;
+      let a2 = (i + 1) * step - gap;
+      // slight variation per stave for realism
+      let varH = tc.h + p.random(-3, 3);
+      let varS = tc.s + p.random(-4, 4);
+      let varB = tc.b + p.random(-3, 3);
+      bgLayer.fill(varH, varS, varB, 100);
+      bgLayer.noStroke();
+      bgLayer.beginShape();
+      bgLayer.vertex(barrel.cx + Math.cos(a1)*barrel.outerR, barrel.cy + Math.sin(a1)*barrel.outerR);
+      bgLayer.vertex(barrel.cx + Math.cos(a1)*barrel.innerR, barrel.cy + Math.sin(a1)*barrel.innerR);
+      bgLayer.vertex(barrel.cx + Math.cos(a2)*barrel.innerR, barrel.cy + Math.sin(a2)*barrel.innerR);
+      bgLayer.vertex(barrel.cx + Math.cos(a2)*barrel.outerR, barrel.cy + Math.sin(a2)*barrel.outerR);
+      bgLayer.endShape(p.CLOSE);
+
+      // Grain lines
+      bgLayer.stroke(varH, Math.min(100, varS+15), Math.min(100, varB+12), 35);
+      bgLayer.strokeWeight(0.6);
+      for (let j = 0; j < 4; j++) {
+        let t = p.random(0.05, 0.95);
+        let ga1 = p.lerp(a1, a2, t);
+        let ga2 = ga1 + p.random(-0.015, 0.015);
+        let gr1 = p.lerp(barrel.innerR, barrel.outerR, p.random(0.1, 0.9));
+        let gr2 = gr1 + p.random(-8, 8);
+        bgLayer.line(
+          barrel.cx + Math.cos(ga1)*gr1, barrel.cy + Math.sin(ga1)*gr1,
+          barrel.cx + Math.cos(ga2)*gr2, barrel.cy + Math.sin(ga2)*gr2
+        );
+      }
+    }
+
+    // Hoops
+    bgLayer.noFill();
+    bgLayer.stroke(0, 0, 22, 100);
+    bgLayer.strokeWeight(5);
+    bgLayer.ellipse(barrel.cx, barrel.cy, barrel.outerR*2 + 6, barrel.outerR*2 + 6);
+    bgLayer.strokeWeight(2.5);
+    bgLayer.ellipse(barrel.cx, barrel.cy, barrel.outerR*2 - 6, barrel.outerR*2 - 6);
+
+    // Wine fill (dark red-brown)
+    bgLayer.noStroke();
+    let wineH = 355, wineS = 55, wineB = 14;
+    for (let r = barrel.innerR; r > 0; r -= 3) {
+      let prog = r / barrel.innerR;
+      let wB = p.lerp(wineB + 6, wineB - 4, prog);
+      let wS = p.lerp(wineS - 10, wineS + 5, prog);
+      bgLayer.fill(wineH, wS, wB, 100);
+      bgLayer.ellipse(barrel.cx, barrel.cy, r*2, r*2);
+    }
+
+    // Inner stave ring highlight
+    bgLayer.noFill();
+    bgLayer.stroke(tc.h, Math.min(100, tc.s+10), Math.min(100, tc.b+8), 40);
+    bgLayer.strokeWeight(1.5);
+    bgLayer.ellipse(barrel.cx, barrel.cy, barrel.innerR*2, barrel.innerR*2);
+
+    bgLayer.pop();
+  }
+
+  p.draw = () => {
+    // Clear
+    p.background(18, 55, 5);
+    p.image(bgLayer, 0, 0);
+
+    if (isPlaying && speedMult > 0) {
+      frameCountSim++;
+      // Advance time: ~30 frames ≈ 1 month at 1x speed
+      months += (speedMult * 0.033);
+      spawnParticles();
+      updateParticles();
+      updateCharts();
+    } else {
+      // Still draw particles even when paused
+    }
+
+    // Draw particles with ADD blending for glow
+    p.push();
+    p.blendMode(p.ADD);
+    for (let pt of particles) {
+      pt.display(p);
+    }
+    p.pop();
+
+    // Ambient dust motes (very subtle)
+    drawDust(p);
+
+    // Sparkline charts
+    drawCharts(p);
+
+    // Overlay title
+    p.noStroke();
+    p.fill(40, 30, 85, 60);
+    p.textSize(13);
+    p.textAlign(p.RIGHT, p.TOP);
+    p.text('Oak Barrel Extraction Dynamics', p.width - 18, 56);
+    p.fill(40, 20, 60, 40);
+    p.textSize(11);
+    p.text('Diffusion-driven compound release · Toast × Temperature', p.width - 18, 74);
+
+    // Mouse hover indicator
+    let mx = p.mouseX - barrel.cx;
+    let my = p.mouseY - barrel.cy;
+    if (mx*mx + my*my < barrel.innerR*barrel.innerR) {
+      p.noFill();
+      p.stroke(40, 25, 90, 25);
+      p.strokeWeight(1);
+      p.ellipse(p.mouseX, p.mouseY, 28, 28);
+    }
+
+    updateUI();
+  };
+
+  function spawnParticles() {
+    let tempFactor = Math.pow(2.2, (tempC - 15) / 10); // Q10 ~2.2
+    let speed = speedMult;
+    for (let t = 0; t < 4; t++) {
+      let comp = COMPOUNDS[t];
+      let rate = comp.release * comp.toastMult[toastLevel] * tempFactor * speed * 0.25;
+      spawnAccum[t] += rate;
+      while (spawnAccum[t] >= 1 && particles.length < 1800) {
+        spawnAccum[t] -= 1;
+        let angle = p.random(p.TWO_PI);
+        let r = barrel.innerR - p.random(2, 10);
+        let x = barrel.cx + Math.cos(angle) * r;
+        let y = barrel.cy + Math.sin(angle) * r;
+        particles.push(new CompoundParticle(p, t, x, y, angle, comp.size, tempFactor));
+      }
+    }
+  }
+
+  function updateParticles() {
+    let mx = p.mouseX;
+    let my = p.mouseY;
+    let mouseInBarrel = false;
+    let dx = mx - barrel.cx;
+    let dy = my - barrel.cy;
+    if (dx*dx + dy*dy < barrel.innerR*barrel.innerR) mouseInBarrel = true;
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      let pt = particles[i];
+      pt.update(tempC, mouseInBarrel, mx, my);
+      if (pt.isDead()) {
+        // Add dissolved mass when particle dies
+        extracted[pt.type] += 1.0 * COMPOUNDS[pt.type].toastMult[toastLevel];
+        particles.splice(i, 1);
+      }
+    }
+  }
+
+  function updateCharts() {
+    if (frameCountSim % 6 !== 0) return; // update every 6 frames
+    for (let t = 0; t < 4; t++) {
+      let val = extracted[t] + particles.filter(pt => pt.type === t).length * 0.15;
+      history[t].push(val);
+      if (history[t].length > maxHist) history[t].shift();
+    }
+  }
+
+  function drawCharts(p) {
+    let chartW = 160;
+    let chartH = 44;
+    let gapY = 52;
+    let startX = p.width - chartW - 18;
+    let startY = 100;
+
+    for (let t = 0; t < 4; t++) {
+      let x = startX;
+      let y = startY + t * gapY;
+      let comp = COMPOUNDS[t];
+      let hist = history[t];
+      if (hist.length < 2) continue;
+
+      // Background
+      p.noStroke();
+      p.fill(18, 50, 8, 70);
+      p.rect(x, y, chartW, chartH, 4);
+
+      // Border
+      p.noFill();
+      p.stroke(30, 30, 25, 50);
+      p.strokeWeight(1);
+      p.rect(x, y, chartW, chartH, 4);
+
+      // Line
+      p.noFill();
+      p.stroke(comp.h, comp.s, comp.b, 90);
+      p.strokeWeight(1.8);
+      p.beginShape();
+      let maxV = Math.max(...hist, 10);
+      for (let i = 0; i < hist.length; i++) {
+        let px = x + p.map(i, 0, maxHist-1, 0, chartW);
+        let py = y + chartH - p.map(hist[i], 0, maxV * 1.1, 0, chartH);
+        p.vertex(px, py);
+      }
+      p.endShape();
+
+      // Label
+      p.noStroke();
+      p.fill(comp.h, comp.s * 0.6, comp.b * 1.2, 85);
+      p.textSize(10);
+      p.textAlign(p.LEFT, p.TOP);
+      p.text(comp.name, x + 6, y + 4);
+      // Current value
+      p.fill(40, 15, 80, 70);
+      p.textAlign(p.RIGHT, p.TOP);
+      p.text(Math.round(hist[hist.length-1]), x + chartW - 6, y + 4);
+    }
+  }
+
+  function drawDust(p) {
+    p.noStroke();
+    let t = p.millis() * 0.0002;
+    for (let i = 0; i < 40; i++) {
+      let angle = (i / 40) * p.TWO_PI + t * (i % 2 === 0 ? 1 : -1);
+      let r = (i / 40) * barrel.innerR * 0.85;
+      let x = barrel.cx + Math.cos(angle) * r;
+      let y = barrel.cy + Math.sin(angle) * r;
+      let sz = 1 + p.noise(i * 3.7, t) * 1.5;
+      let alpha = p.noise(i * 2.1, t * 0.5) * 12;
+      p.fill(35, 20, 50, alpha);
+      p.ellipse(x, y, sz, sz);
+    }
+  }
+
+  p.mousePressed = () => {
+    let dx = p.mouseX - barrel.cx;
+    let dy = p.mouseY - barrel.cy;
+    if (dx*dx + dy*dy < barrel.innerR*barrel.innerR) {
+      // Burst from nearest stave
+      let angle = Math.atan2(dy, dx);
+      for (let t = 0; t < 4; t++) {
+        for (let k = 0; k < 8; k++) {
+          let a = angle + p.random(-0.4, 0.4);
+          let r = barrel.innerR - p.random(2, 12);
+          let x = barrel.cx + Math.cos(a) * r;
+          let y = barrel.cy + Math.sin(a) * r;
+          particles.push(new CompoundParticle(p, t, x, y, a, COMPOUNDS[t].size, 1.5));
+        }
+      }
+    }
+  };
+
+  p.keyPressed = () => {
+    if (p.key === 's' || p.key === 'S') {
+      p.saveCanvas('oak-barrel-extraction', 'png');
+    }
+    if (p.key === ' ') {
+      isPlaying = !isPlaying;
+      updateUI();
+    }
+  };
+
+  p.windowResized = () => {
+    p.resizeCanvas(p.windowWidth, p.windowHeight);
+    bgLayer.resizeCanvas(p.width, p.height);
+    resizeBarrel();
+    redrawBarrel();
+  };
+};
+
+class CompoundParticle {
+  constructor(p, type, x, y, spawnAngle, baseSize, tempFactor) {
+    this.p = p;
+    this.type = type;
+    this.x = x;
+    this.y = y;
+    let inward = 0.15 + p.random(0, 0.25);
+    let spread = 0.4;
+    this.vx = -Math.cos(spawnAngle)*inward + p.random(-spread, spread);
+    this.vy = -Math.sin(spawnAngle)*inward + p.random(-spread, spread);
+    this.life = 1.0;
+    this.decay = p.random(0.002, 0.005) / Math.max(0.5, tempFactor);
+    this.size = baseSize * p.random(0.7, 1.4);
+    this.pulse = p.random(p.TWO_PI);
+    this.pulseSpeed = p.random(0.02, 0.06);
+  }
+
+  update(tempC, mouseInBarrel, mx, my) {
+    // Brownian jitter
+    this.vx += this.p.random(-0.12, 0.12);
+    this.vy += this.p.random(-0.12, 0.12);
+    // Damping
+    this.vx *= 0.94;
+    this.vy *= 0.94;
+    // Temperature boost to velocity
+    let tempBoost = Math.pow(1.8, (tempC - 15) / 10);
+    // Inward drift from center-seeking
+    let dx = barrel.cx - this.x;
+    let dy = barrel.cy - this.y;
+    let dist = Math.sqrt(dx*dx + dy*dy) + 0.1;
+    this.vx += (dx/dist) * 0.04 * tempBoost;
+    this.vy += (dy/dist) * 0.04 * tempBoost;
+    // Mouse repulsion (stirring)
+    if (mouseInBarrel) {
+      let mdx = this.x - mx;
+      let mdy = this.y - my;
+      let mdist = Math.sqrt(mdx*mdx + mdy*mdy) + 0.1;
+      if (mdist < 120) {
+        let force = (120 - mdist) / 120 * 0.8;
+        this.vx += (mdx/mdist) * force;
+        this.vy += (mdy/mdist) * force;
+      }
+    }
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life -= this.decay;
+    this.pulse += this.pulseSpeed;
+  }
+
+  display(p) {
+    let comp = COMPOUNDS[this.type];
+    let alpha = this.life * 70;
+    let sz = this.size * (1 + Math.sin(this.pulse)*0.15);
+    p.noStroke();
+    // Core
+    p.fill(comp.h, comp.s, comp.b, alpha);
+    p.ellipse(this.x, this.y, sz, sz);
+    // Halo
+    p.fill(comp.h, comp.s * 0.5, comp.b * 1.3, alpha * 0.25);
+    p.ellipse(this.x, this.y, sz * 2.2, sz * 2.2);
+  }
+
+  isDead() {
+    return this.life <= 0 ||
+      (this.x - barrel.cx)**2 + (this.y - barrel.cy)**2 < 36;
+  }
+}
+
+new p5(sketch, 'canvas-container');
+</script>
+</body>
+</html>
