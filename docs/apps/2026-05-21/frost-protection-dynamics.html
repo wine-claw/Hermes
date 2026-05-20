@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vineyard Frost Protection & Temperature Inversion Dynamics</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; background: #050810; font-family: 'SF Mono', Menlo, monospace; }
+#canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+#ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+#ui-layer > * { pointer-events: auto; }
+.disclaimer { position: fixed; top: 0; left: 0; right: 0; background: rgba(180,100,40,0.92); color: #fff8f0; text-align: center; padding: 6px 12px; font-size: 12px; z-index: 100; font-family: system-ui, sans-serif; }
+.panel { position: absolute; top: 44px; left: 12px; width: 270px; background: rgba(10,14,24,0.88); border: 1px solid rgba(80,120,180,0.3); border-radius: 10px; padding: 14px; color: #c8d8e8; font-size: 11px; backdrop-filter: blur(6px); }
+.panel h2 { margin: 0 0 10px 0; font-size: 13px; color: #7ab8ff; text-transform: uppercase; letter-spacing: 1px; }
+.slider-row { margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+.slider-row label { flex: 1; color: #a0b4c8; }
+.slider-row input[type="range"] { width: 110px; height: 4px; accent-color: #5a9fd4; cursor: pointer; }
+.slider-row span.val { width: 36px; text-align: right; color: #7ab8ff; font-weight: 600; }
+.toggle-row { margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+.toggle-row label { color: #a0b4c8; }
+.toggle-row input { cursor: pointer; }
+.status-box { position: absolute; top: 44px; right: 12px; width: 220px; background: rgba(10,14,24,0.88); border: 1px solid rgba(80,120,180,0.3); border-radius: 10px; padding: 14px; color: #c8d8e8; font-size: 11px; backdrop-filter: blur(6px); }
+.status-box h2 { margin: 0 0 10px 0; font-size: 13px; color: #7ab8ff; text-transform: uppercase; letter-spacing: 1px; }
+.metric { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.metric .label { color: #a0b4c8; }
+.metric .value { font-weight: 600; }
+.danger { color: #ff6b6b; }
+.safe { color: #6bcb77; }
+.warn { color: #ffd93d; }
+.legend { position: absolute; bottom: 12px; left: 12px; background: rgba(10,14,24,0.88); border: 1px solid rgba(80,120,180,0.3); border-radius: 10px; padding: 10px 14px; color: #a0b4c8; font-size: 10px; backdrop-filter: blur(6px); }
+.legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+.key-hint { position: absolute; bottom: 12px; right: 12px; background: rgba(10,14,24,0.88); border: 1px solid rgba(80,120,180,0.3); border-radius: 10px; padding: 8px 12px; color: #a0b4c8; font-size: 10px; backdrop-filter: blur(6px); }
+button.action-btn { background: rgba(90,159,212,0.2); border: 1px solid rgba(90,159,212,0.5); color: #7ab8ff; border-radius: 6px; padding: 6px 12px; font-size: 11px; cursor: pointer; margin-top: 8px; width: 100%; }
+button.action-btn:hover { background: rgba(90,159,212,0.35); }
+button.action-btn.active { background: rgba(255,107,107,0.2); border-color: rgba(255,107,107,0.5); color: #ff6b6b; }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="canvas-container"></div>
+<div id="ui-layer">
+<div class="panel">
+<h2>🌡️ Conditions</h2>
+<div class="slider-row"><label>Air Temp</label><input id="airTemp" type="range" min="-8" max="15" step="0.5" value="2"><span class="val" id="airTempVal">2°C</span></div>
+<div class="slider-row"><label>Humidity</label><input id="humidity" type="range" min="20" max="100" step="5" value="65"><span class="val" id="humidityVal">65%</span></div>
+<div class="slider-row"><label>Wind (m/s)</label><input id="wind" type="range" min="0" max="12" step="0.5" value="1"><span class="val" id="windVal">1</span></div>
+<div class="slider-row"><label>Slope °</label><input id="slope" type="range" min="0" max="20" step="1" value="5"><span class="val" id="slopeVal">5°</span></div>
+<div class="slider-row"><label>Vine Height</label><input id="vineH" type="range" min="0.5" max="2.5" step="0.1" value="1.2"><span class="val" id="vineHVal">1.2m</span></div>
+<h2 style="margin-top:12px">🛡️ Protection</h2>
+<div class="toggle-row"><label>Wind Machine</label><input id="fanOn" type="checkbox"></div>
+<div class="toggle-row"><label>Smudge Pots</label><input id="heatOn" type="checkbox"></div>
+<div class="toggle-row"><label>Sprinklers</label><input id="sprinkOn" type="checkbox"></div>
+<div class="toggle-row"><label>Row Covers</label><input id="coverOn" type="checkbox"></div>
+<button class="action-btn" id="resetBtn">Reset Simulation</button>
+</div>
+<div class="status-box">
+<h2>📊 Live Status</h2>
+<div class="metric"><span class="label">Time</span><span class="value" id="timeVal">20:00</span></div>
+<div class="metric"><span class="label">Bud Temp</span><span class="value" id="budTempVal">2.0°C</span></div>
+<div class="metric"><span class="label">Inversion ΔT</span><span class="value" id="invVal">0.0°C</span></div>
+<div class="metric"><span class="label">Frost Risk</span><span class="value safe" id="riskVal">None</span></div>
+<div class="metric"><span class="label">Bud Damage</span><span class="value safe" id="dmgVal">0%</span></div>
+<div class="metric"><span class="label">Protection Δ</span><span class="value" id="protVal">+0.0°C</span></div>
+</div>
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:#1a3a6a"></div>Cold air settling</div>
+<div class="legend-item"><div class="legend-dot" style="background:#4a8fd4"></div>Cool mixed layer</div>
+<div class="legend-item"><div class="legend-dot" style="background:#e87040"></div>Warm air / heater plume</div>
+<div class="legend-item"><div class="legend-dot" style="background:#60d0ff"></div>Sprinkler droplet</div>
+<div class="legend-item"><div class="legend-dot" style="background:#3de073"></div>Healthy bud</div>
+<div class="legend-item"><div class="legend-dot" style="background:#8b4513"></div>Damaged tissue</div>
+</div>
+<div class="key-hint">S = Save PNG &nbsp;|&nbsp; R = Randomize &nbsp;|&nbsp; Click = move fan</div>
+</div>
+<script>
+// ============================================
+// VINEYARD FROST PROTECTION SIMULATOR
+// p5.js particle system for temperature inversion,
+// cold air drainage, and frost protection efficacy
+// ============================================
+
+const CONFIG = {
+  seed: 42,
+  airTemp: 2,
+  humidity: 65,
+  wind: 1,
+  slope: 5,
+  vineHeight: 1.2,
+  fanOn: false,
+  heatOn: false,
+  sprinkOn: false,
+  coverOn: false,
+  fanX: 0.5,  // normalized 0-1 across vineyard width
+  paused: false,
+};
+
+const COLD_AIR_KILL = -2.2;   // critical bud temp (°C)
+const HARD_FROST = -4.0;      // severe damage threshold
+const FAN_RANGE = 180;        // pixels
+const FAN_STRENGTH = 2.5;
+const HEATER_RANGE = 140;
+const HEATER_STRENGTH = 3.5;
+const SPRINK_RANGE = 120;
+const COVER_BENEFIT = 2.8;    // °C insulation
+
+let particles = [];
+let heaters = [];
+let sprinklers = [];
+let buds = [];
+let terrain = [];
+let timeOfDay = 20.0; // 0-24
+let simTime = 0;
+let windOffset = 0;
+let budDamageTotal = 0;
+let invStrength = 0;
+let protectionDelta = 0;
+
+function setup() {
+  const container = document.getElementById('canvas-container');
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  const canvas = createCanvas(w, h);
+  canvas.parent('canvas-container');
+  pixelDensity(1);
+  colorMode(HSB, 360, 100, 100, 100);
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+
+  initTerrain();
+  initVines();
+  initParticles(800);
+  initHeaters();
+  initSprinklers();
+
+  // UI bindings
+  bindSlider('airTemp', v => { CONFIG.airTemp = parseFloat(v); updateUI(); });
+  bindSlider('humidity', v => { CONFIG.humidity = parseInt(v); updateUI(); });
+  bindSlider('wind', v => { CONFIG.wind = parseFloat(v); updateUI(); });
+  bindSlider('slope', v => { CONFIG.slope = parseInt(v); initTerrain(); initVines(); updateUI(); });
+  bindSlider('vineH', v => { CONFIG.vineHeight = parseFloat(v); initVines(); updateUI(); });
+  document.getElementById('fanOn').addEventListener('change', e => { CONFIG.fanOn = e.target.checked; });
+  document.getElementById('heatOn').addEventListener('change', e => { CONFIG.heatOn = e.target.checked; });
+  document.getElementById('sprinkOn').addEventListener('change', e => { CONFIG.sprinkOn = e.target.checked; });
+  document.getElementById('coverOn').addEventListener('change', e => { CONFIG.coverOn = e.target.checked; });
+  document.getElementById('resetBtn').addEventListener('click', resetSim);
+}
+
+function bindSlider(id, cb) {
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(id + 'Val');
+  el.addEventListener('input', () => {
+    cb(el.value);
+    if (id === 'airTemp') valEl.textContent = el.value + '°C';
+    else if (id === 'humidity') valEl.textContent = el.value + '%';
+    else if (id === 'wind') valEl.textContent = el.value;
+    else if (id === 'slope') valEl.textContent = el.value + '°';
+    else if (id === 'vineH') valEl.textContent = el.value + 'm';
+  });
+}
+
+function initTerrain() {
+  terrain = [];
+  const slopeRise = Math.tan(CONFIG.slope * Math.PI / 180) * 0.3;
+  for (let x = 0; x <= width; x += 4) {
+    const nx = x / width;
+    const slopeY = height * 0.55 - nx * height * slopeRise;
+    const micro = noise(x * 0.008, 0) * 40 + noise(x * 0.02, 100) * 12;
+    terrain.push({ x, y: slopeY + micro });
+  }
+}
+
+function initVines() {
+  buds = [];
+  const rows = 5;
+  const rowSpacing = width / (rows + 1);
+  for (let r = 0; r < rows; r++) {
+    const rowX = rowSpacing * (r + 1);
+    const groundY = getTerrainY(rowX);
+    const vineHpx = CONFIG.vineHeight * 60;
+    const budsPerVine = 6;
+    for (let b = 0; b < budsPerVine; b++) {
+      const bx = rowX + random(-18, 18);
+      const by = groundY - vineHpx - random(-10, 15);
+      buds.push({
+        x: bx, y: by,
+        row: r,
+        damage: 0,
+        temp: CONFIG.airTemp,
+        healthy: true,
+        size: random(4, 7),
+      });
+    }
+  }
+}
+
+function initParticles(count) {
+  particles = [];
+  for (let i = 0; i < count; i++) {
+    spawnParticle();
+  }
+}
+
+function spawnParticle() {
+  const x = random(width);
+  const y = random(height * 0.15, height * 0.5);
+  const groundY = getTerrainY(x);
+  const temp = tempAtHeight(y, groundY);
+  const hue = tempToHue(temp);
+  particles.push({
+    x, y,
+    vx: 0, vy: 0,
+    temp,
+    hue,
+    life: random(60, 200),
+    maxLife: random(120, 300),
+    size: random(1.5, 3.5),
+    alpha: random(30, 70),
+    type: 'air',
+  });
+}
+
+function initHeaters() {
+  heaters = [];
+  const n = 4;
+  for (let i = 0; i < n; i++) {
+    const x = width * (0.15 + 0.7 * i / (n - 1));
+    const y = getTerrainY(x);
+    heaters.push({ x, y, active: false });
+  }
+}
+
+function initSprinklers() {
+  sprinklers = [];
+  const n = 6;
+  for (let i = 0; i < n; i++) {
+    const x = width * (0.1 + 0.8 * i / (n - 1));
+    const y = getTerrainY(x);
+    sprinklers.push({ x, y, active: false, drops: [] });
+  }
+}
+
+function getTerrainY(x) {
+  for (let i = 0; i < terrain.length - 1; i++) {
+    if (x >= terrain[i].x && x <= terrain[i+1].x) {
+      const t = (x - terrain[i].x) / (terrain[i+1].x - terrain[i].x);
+      return lerp(terrain[i].y, terrain[i+1].y, t);
+    }
+  }
+  return terrain[terrain.length - 1]?.y || height * 0.55;
+}
+
+function tempAtHeight(y, groundY) {
+  const hAboveGround = (groundY - y) / 60; // meters
+  // Temperature inversion profile: colder near ground on calm nights
+  const inversionStrength = Math.max(0, 4 - CONFIG.wind * 0.8) * Math.max(0, Math.sin((timeOfDay - 19) * Math.PI / 10));
+  const lapse = -inversionStrength * 0.6; // inverted lapse rate (warmer aloft)
+  return CONFIG.airTemp + lapse * hAboveGround + noise(x/200, y/80, simTime*0.001)*0.4;
+}
+
+function tempToHue(t) {
+  // -8°C = deep blue (220), 15°C = warm orange (25)
+  return map(constrain(t, -8, 15), -8, 15, 220, 25);
+}
+
+function resetSim() {
+  simTime = 0;
+  timeOfDay = 20.0;
+  budDamageTotal = 0;
+  initParticles(800);
+  buds.forEach(b => { b.damage = 0; b.healthy = true; b.temp = CONFIG.airTemp; });
+  document.getElementById('fanOn').checked = false;
+  document.getElementById('heatOn').checked = false;
+  document.getElementById('sprinkOn').checked = false;
+  document.getElementById('coverOn').checked = false;
+  CONFIG.fanOn = false; CONFIG.heatOn = false; CONFIG.sprinkOn = false; CONFIG.coverOn = false;
+}
+
+function draw() {
+  if (CONFIG.paused) return;
+  simTime++;
+  timeOfDay = 20 + (simTime / 1800) * 10; // 20:00 -> 06:00 over 30 min sim
+  if (timeOfDay >= 24) timeOfDay -= 24;
+
+  // Sky gradient based on time
+  drawSky();
+
+  // Terrain
+  drawTerrain();
+
+  // Protection systems
+  updateAndDrawHeaters();
+  updateAndDrawSprinklers();
+  if (CONFIG.fanOn) drawFan();
+
+  // Air particles (temperature visualization)
+  updateAndDrawParticles();
+
+  // Vines and buds
+  updateAndDrawVines();
+
+  // Row covers if active
+  if (CONFIG.coverOn) drawCovers();
+
+  // Update status
+  updateStatus();
+}
+
+function drawSky() {
+  let topHue, topBri, botHue, botBri;
+  const t = timeOfDay;
+  if (t < 5) {        // pre-dawn
+    topHue = 240; topBri = 8; botHue = 230; botBri = 4;
+  } else if (t < 7) { // dawn
+    topHue = 220; topBri = 15; botHue = 35; botBri = 30;
+  } else if (t < 18) { // day (rarely reached in this sim)
+    topHue = 200; topBri = 60; botHue = 190; botBri = 80;
+  } else if (t < 21) { // dusk
+    topHue = 240; topBri = 12; botHue = 30; botBri = 25;
+  } else {            // night
+    topHue = 240; topBri = 6; botHue = 240; botBri = 3;
+  }
+
+  for (let y = 0; y < height * 0.6; y++) {
+    const p = y / (height * 0.6);
+    const h = lerp(topHue, botHue, p);
+    const b = lerp(topBri, botBri, p);
+    stroke(h, 60, b);
+    strokeWeight(1);
+    line(0, y, width, y);
+  }
+
+  // Stars at night
+  if (t > 20 || t < 5) {
+    randomSeed(7);
+    for (let i = 0; i < 80; i++) {
+      const sx = random(width);
+      const sy = random(height * 0.45);
+      const starAlpha = (sin(simTime * 0.02 + i) + 1) * 15 + 10;
+      stroke(0, 0, 100, starAlpha);
+      strokeWeight(random(0.8, 2));
+      point(sx, sy);
+    }
+    randomSeed(CONFIG.seed);
+  }
+
+  // Moon
+  if (t > 20 || t < 6) {
+    noStroke();
+    fill(50, 20, 95, 12);
+    ellipse(width * 0.82, height * 0.12, 70, 70);
+    fill(50, 15, 100, 20);
+    ellipse(width * 0.82, height * 0.12, 50, 50);
+    fill(45, 10, 100, 35);
+    ellipse(width * 0.82, height * 0.12, 36, 36);
+  }
+}
+
+function drawTerrain() {
+  noStroke();
+  fill(130, 45, 18);
+  beginShape();
+  vertex(0, height);
+  for (const pt of terrain) vertex(pt.x, pt.y);
+  vertex(width, height);
+  endShape(CLOSE);
+
+  // Grass top
+  stroke(100, 50, 30);
+  strokeWeight(2);
+  noFill();
+  beginShape();
+  for (const pt of terrain) vertex(pt.x, pt.y);
+  endShape();
+
+  // Vineyard posts
+  const rows = 5;
+  const rowSpacing = width / (rows + 1);
+  stroke(30, 40, 45);
+  strokeWeight(2);
+  for (let r = 0; r < rows; r++) {
+    const rx = rowSpacing * (r + 1);
+    const gy = getTerrainY(rx);
+    const vineHpx = CONFIG.vineHeight * 60;
+    line(rx, gy, rx, gy - vineHpx - 25);
+    // Post cap
+    noStroke();
+    fill(30, 30, 50);
+    ellipse(rx, gy - vineHpx - 25, 6, 6);
+  }
+}
+
+function drawFan() {
+  const fx = CONFIG.fanX * width;
+  const fy = getTerrainY(fx) - 35;
+
+  // Fan tower
+  stroke(0, 0, 60);
+  strokeWeight(3);
+  line(fx, fy + 35, fx, fy);
+
+  // Rotating blades
+  push();
+  translate(fx, fy);
+  const bladeAngle = simTime * 0.25;
+  noStroke();
+  fill(0, 0, 80, 40);
+  ellipse(0, 0, 44, 44);
+  for (let i = 0; i < 3; i++) {
+    const a = bladeAngle + i * TWO_PI / 3;
+    stroke(200, 10, 90, 50);
+    strokeWeight(3);
+    line(0, 0, cos(a) * 18, sin(a) * 18);
+  }
+  pop();
+
+  // Fan disturbance field visualization (subtle)
+  noFill();
+  for (let i = 0; i < 5; i++) {
+    const r = 30 + i * 35 + (simTime * 1.5) % 35;
+    stroke(200, 30, 80, 6);
+    strokeWeight(1);
+    ellipse(fx, fy, r * 2, r * 1.2);
+  }
+}
+
+function updateAndDrawHeaters() {
+  for (const h of heaters) {
+    h.active = CONFIG.heatOn;
+    if (!h.active) continue;
+
+    // Heat plume particles
+    if (simTime % 3 === 0) {
+      particles.push({
+        x: h.x + random(-6, 6),
+        y: h.y - random(5, 15),
+        vx: random(-0.3, 0.3),
+        vy: -random(0.8, 2.2),
+        temp: 25 + random(5, 15),
+        hue: 20,
+        life: random(40, 90),
+        maxLife: 90,
+        size: random(3, 6),
+        alpha: random(40, 70),
+        type: 'heat',
+      });
+    }
+
+    // Draw heater glow
+    noStroke();
+    for (let r = 20; r > 0; r -= 4) {
+      fill(20, 80, map(r, 0, 20, 90, 30), 8);
+      ellipse(h.x, h.y - 5, r * 2, r * 2);
+    }
+    fill(25, 90, 95);
+    ellipse(h.x, h.y - 3, 10, 10);
+    fill(40, 60, 100);
+    ellipse(h.x, h.y - 5, 5, 5);
+  }
+}
+
+function updateAndDrawSprinklers() {
+  for (const s of sprinklers) {
+    s.active = CONFIG.sprinkOn;
+    if (!s.active) continue;
+
+    // Spawn droplets
+    if (simTime % 2 === 0) {
+      for (let i = 0; i < 2; i++) {
+        const angle = random(PI * 0.1, PI * 0.9);
+        const speed = random(2, 5);
+        s.drops.push({
+          x: s.x, y: s.y - 5,
+          vx: cos(angle) * speed,
+          vy: -sin(angle) * speed,
+          life: random(20, 50),
+          frozen: false,
+        });
+      }
+    }
+
+    // Draw sprinkler head
+    noStroke();
+    fill(200, 20, 70);
+    rect(s.x - 4, s.y - 8, 8, 8, 2);
+
+    // Update drops
+    for (let i = s.drops.length - 1; i >= 0; i--) {
+      const d = s.drops[i];
+      d.vy += 0.15; // gravity
+      d.x += d.vx;
+      d.y += d.vy;
+      d.life--;
+
+      // Freeze if temp low enough and latent heat release
+      if (CONFIG.airTemp < -1 && !d.frozen && d.vy > 0 && random() < 0.05) {
+        d.frozen = true;
+        // Latent heat warms nearby buds
+        for (const b of buds) {
+          const dist = Math.hypot(b.x - d.x, b.y - d.y);
+          if (dist < 40) b.temp += 0.04;
+        }
+      }
+
+      if (d.life <= 0 || d.y > getTerrainY(d.x)) {
+        s.drops.splice(i, 1);
+        continue;
+      }
+
+      noStroke();
+      const alpha = map(d.life, 0, 50, 10, 60);
+      if (d.frozen) {
+        fill(200, 30, 95, alpha);
+        ellipse(d.x, d.y, 3, 3);
+      } else {
+        fill(195, 70, 90, alpha);
+        ellipse(d.x, d.y, 2.5, 2.5);
+      }
+    }
+  }
+}
+
+function updateAndDrawParticles() {
+  // Cooling rate: faster on clear calm nights
+  const coolingRate = 0.004 * (1 + (100 - CONFIG.humidity) / 100) * Math.max(0.2, 1 - CONFIG.wind * 0.12);
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    const groundY = getTerrainY(p.x);
+
+    // Base physics
+    p.temp -= coolingRate;
+    if (p.type === 'heat') {
+      p.temp -= 0.12; // heat dissipates
+      p.alpha -= 0.6;
+    }
+
+    // Wind / fan effects
+    let wx = CONFIG.wind * 0.15;
+    let wy = 0;
+
+    if (CONFIG.fanOn) {
+      const fx = CONFIG.fanX * width;
+      const fy = getTerrainY(fx) - 35;
+      const dx = p.x - fx;
+      const dy = p.y - fy;
+      const dist = Math.hypot(dx, dy);
+      if (dist < FAN_RANGE && dist > 10) {
+        const force = (1 - dist / FAN_RANGE) * FAN_STRENGTH;
+        wx += (dx / dist) * force * 0.8;
+        wy += (dy / dist) * force * 0.3 - force * 0.4; // slight uplift
+      }
+    }
+
+    // Heater warmth
+    if (CONFIG.heatOn) {
+      for (const h of heaters) {
+        const dx = p.x - h.x;
+        const dy = p.y - (h.y - 10);
+        const dist = Math.hypot(dx, dy);
+        if (dist < HEATER_RANGE) {
+          const warmth = (1 - dist / HEATER_RANGE) * HEATER_STRENGTH;
+          p.temp += warmth * 0.06;
+        }
+      }
+    }
+
+    // Cold air drainage down slope
+    const slopeForce = Math.sin(CONFIG.slope * Math.PI / 180) * 0.04;
+    wx += slopeForce * (width - p.x) / width * 30;
+
+    // Brownian + noise field
+    p.vx += (wx - p.vx) * 0.05 + (noise(p.x * 0.01, p.y * 0.01, simTime * 0.005) - 0.5) * 0.15;
+    p.vy += (wy - p.vy) * 0.05 + (noise(p.x * 0.01 + 100, p.y * 0.01, simTime * 0.005) - 0.5) * 0.1;
+
+    // Gravity for cold air (sinking)
+    const relativeTemp = p.temp - CONFIG.airTemp;
+    if (relativeTemp < -0.5) {
+      p.vy += 0.008 * Math.abs(relativeTemp);
+    } else if (relativeTemp > 1) {
+      p.vy -= 0.005 * relativeTemp;
+    }
+
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+
+    // Boundaries
+    if (p.x < 0) p.x = width;
+    if (p.x > width) p.x = 0;
+    if (p.y > groundY - 2) { p.y = groundY - 2; p.vy *= -0.3; }
+    if (p.y < height * 0.05) { p.y = height * 0.05; p.vy *= -0.3; }
+
+    if (p.life <= 0 || p.alpha <= 0) {
+      particles.splice(i, 1);
+      spawnParticle();
+      continue;
+    }
+
+    // Render
+    p.hue = tempToHue(p.temp);
+    noStroke();
+    const bri = map(constrain(p.temp, -8, 15), -8, 15, 35, 90);
+    fill(p.hue, 65, bri, p.alpha * (p.life / p.maxLife));
+    ellipse(p.x, p.y, p.size, p.size);
+  }
+
+  // Maintain particle count
+  while (particles.length < 800) spawnParticle();
+}
+
+function updateAndDrawVines() {
+  // Calculate inversion strength
+  const tempsAtHeights = [];
+  for (let h = 0; h < 5; h++) {
+    const y = height * 0.3 - h * 30;
+    tempsAtHeights.push(tempAtHeight(y, height * 0.55));
+  }
+  invStrength = tempsAtHeights[tempsAtHeights.length - 1] - tempsAtHeights[0];
+
+  budDamageTotal = 0;
+  protectionDelta = 0;
+
+  // Row wires / cordons
+  const rows = 5;
+  const rowSpacing = width / (rows + 1);
+  stroke(60, 30, 45);
+  strokeWeight(1.5);
+  for (let r = 0; r < rows; r++) {
+    const rx = rowSpacing * (r + 1);
+    const gy = getTerrainY(rx);
+    const vineHpx = CONFIG.vineHeight * 60;
+    line(rx - 20, gy - vineHpx - 8, rx + 20, gy - vineHpx - 8);
+  }
+
+  // Canopy and buds
+  for (const b of buds) {
+    const groundY = getTerrainY(b.x);
+    const hAbove = (groundY - b.y) / 60; // meters
+
+    // Base temperature at bud height
+    let budTemp = tempAtHeight(b.y, groundY);
+
+    // Protection effects
+    let localProtection = 0;
+
+    if (CONFIG.fanOn) {
+      const fx = CONFIG.fanX * width;
+      const fy = getTerrainY(fx) - 35;
+      const dist = Math.hypot(b.x - fx, b.y - fy);
+      if (dist < FAN_RANGE) {
+        localProtection += (1 - dist / FAN_RANGE) * 1.5;
+      }
+    }
+
+    if (CONFIG.heatOn) {
+      for (const h of heaters) {
+        const dist = Math.hypot(b.x - h.x, b.y - (h.y - 10));
+        if (dist < HEATER_RANGE) {
+          localProtection += (1 - dist / HEATER_RANGE) * 3.0;
+        }
+      }
+    }
+
+    if (CONFIG.coverOn) {
+      localProtection += COVER_BENEFIT;
+    }
+
+    budTemp += localProtection;
+    b.temp = budTemp;
+    protectionDelta = Math.max(protectionDelta, localProtection);
+
+    // Damage accumulation
+    if (budTemp < COLD_AIR_KILL) {
+      const severity = map(budTemp, COLD_AIR_KILL, HARD_FROST, 0.05, 0.4);
+      b.damage += severity;
+      b.healthy = b.damage < 1.0;
+    }
+
+    if (b.damage > 1) b.damage = 1;
+    budDamageTotal += b.damage;
+
+    // Draw cane
+    stroke(35, 50, 35);
+    strokeWeight(2);
+    const caneLen = 25;
+    line(b.x, b.y, b.x + random(-caneLen, caneLen) * 0.3, b.y + 12);
+
+    // Draw bud
+    noStroke();
+    if (b.healthy) {
+      const budHue = map(constrain(budTemp, -5, 10), -5, 10, 140, 100);
+      fill(budHue, 70, 65);
+      ellipse(b.x, b.y, b.size, b.size * 1.2);
+      fill(budHue, 50, 85, 40);
+      ellipse(b.x - 1, b.y - 1, b.size * 0.5, b.size * 0.5);
+    } else {
+      const dmgNorm = b.damage;
+      fill(25, 60, map(dmgNorm, 0, 1, 50, 20));
+      ellipse(b.x, b.y, b.size * (1 + dmgNorm * 0.3), b.size * 1.2 * (1 + dmgNorm * 0.2));
+      // Frost crystal on dead bud
+      if (dmgNorm > 0.5) {
+        stroke(200, 40, 90, 30);
+        strokeWeight(0.8);
+        for (let i = 0; i < 6; i++) {
+          const a = i * PI / 3 + b.x * 0.1;
+          line(b.x, b.y, b.x + cos(a) * 6, b.y + sin(a) * 6);
+        }
+      }
+    }
+  }
+}
+
+function drawCovers() {
+  const rows = 5;
+  const rowSpacing = width / (rows + 1);
+  noStroke();
+  fill(180, 20, 85, 12);
+  for (let r = 0; r < rows; r++) {
+    const rx = rowSpacing * (r + 1);
+    const gy = getTerrainY(rx);
+    const vineHpx = CONFIG.vineHeight * 60;
+    const coverY = gy - vineHpx - 30;
+    // Draped cover shape
+    beginShape();
+    vertex(rx - 35, gy);
+    bezierVertex(rx - 25, coverY - 10, rx - 10, coverY - 5, rx, coverY);
+    bezierVertex(rx + 10, coverY - 5, rx + 25, coverY - 10, rx + 35, gy);
+    endShape(CLOSE);
+  }
+}
+
+function updateStatus() {
+  const h = Math.floor(timeOfDay);
+  const m = Math.floor((timeOfDay - h) * 60);
+  document.getElementById('timeVal').textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+
+  const avgBudTemp = buds.length > 0 ? buds.reduce((s,b) => s+b.temp,0)/buds.length : CONFIG.airTemp;
+  const maxDamage = buds.length > 0 ? Math.max(...buds.map(b=>b.damage)) : 0;
+  const avgDamage = buds.length > 0 ? budDamageTotal / buds.length : 0;
+
+  const budEl = document.getElementById('budTempVal');
+  budEl.textContent = avgBudTemp.toFixed(1) + '°C';
+  budEl.className = 'value ' + (avgBudTemp < COLD_AIR_KILL ? 'danger' : avgBudTemp < 0 ? 'warn' : 'safe');
+
+  const invEl = document.getElementById('invVal');
+  invEl.textContent = invStrength.toFixed(1) + '°C';
+  invEl.className = 'value ' + (invStrength > 2 ? 'warn' : '');
+
+  const riskEl = document.getElementById('riskVal');
+  if (avgBudTemp < HARD_FROST) { riskEl.textContent = 'Critical'; riskEl.className = 'value danger'; }
+  else if (avgBudTemp < COLD_AIR_KILL) { riskEl.textContent = 'High'; riskEl.className = 'value danger'; }
+  else if (avgBudTemp < 0) { riskEl.textContent = 'Moderate'; riskEl.className = 'value warn'; }
+  else { riskEl.textContent = 'None'; riskEl.className = 'value safe'; }
+
+  const dmgEl = document.getElementById('dmgVal');
+  dmgEl.textContent = (avgDamage * 100).toFixed(0) + '%';
+  dmgEl.className = 'value ' + (avgDamage > 0.3 ? 'danger' : avgDamage > 0.05 ? 'warn' : 'safe');
+
+  document.getElementById('protVal').textContent = (protectionDelta > 0 ? '+' : '') + protectionDelta.toFixed(1) + '°C';
+}
+
+function mousePressed() {
+  // Move fan to clicked x position if near ground
+  const gy = getTerrainY(mouseX);
+  if (mouseY > gy - 100 && mouseY < gy + 50) {
+    CONFIG.fanX = constrain(mouseX / width, 0.05, 0.95);
+    document.getElementById('fanOn').checked = true;
+    CONFIG.fanOn = true;
+  }
+}
+
+function keyPressed() {
+  if (key === 's' || key === 'S') saveCanvas('frost-protection', 'png');
+  if (key === 'r' || key === 'R') {
+    CONFIG.seed = floor(random(99999));
+    randomSeed(CONFIG.seed);
+    noiseSeed(CONFIG.seed);
+    resetSim();
+  }
+  if (key === ' ') CONFIG.paused = !CONFIG.paused;
+}
+
+function windowResized() {
+  const container = document.getElementById('canvas-container');
+  resizeCanvas(container.clientWidth, container.clientHeight);
+  initTerrain();
+  initVines();
+  initHeaters();
+  initSprinklers();
+}
+</script>
+</body>
+</html>
