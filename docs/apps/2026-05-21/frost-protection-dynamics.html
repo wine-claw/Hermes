@@ -207,7 +207,7 @@ function spawnParticle() {
   const x = random(width);
   const y = random(height * 0.15, height * 0.5);
   const groundY = getTerrainY(x);
-  const temp = tempAtHeight(y, groundY);
+  const temp = tempAtHeight(x, y, groundY);
   const hue = tempToHue(temp);
   particles.push({
     x, y,
@@ -252,12 +252,12 @@ function getTerrainY(x) {
   return terrain[terrain.length - 1]?.y || height * 0.55;
 }
 
-function tempAtHeight(y, groundY) {
+function tempAtHeight(hx, y, groundY) {
   const hAboveGround = (groundY - y) / 60; // meters
   // Temperature inversion profile: colder near ground on calm nights
   const inversionStrength = Math.max(0, 4 - CONFIG.wind * 0.8) * Math.max(0, Math.sin((timeOfDay - 19) * Math.PI / 10));
   const lapse = -inversionStrength * 0.6; // inverted lapse rate (warmer aloft)
-  return CONFIG.airTemp + lapse * hAboveGround + noise(x/200, y/80, simTime*0.001)*0.4;
+  return CONFIG.airTemp + lapse * hAboveGround + noise(hx/200, y/80, simTime*0.001)*0.4;
 }
 
 function tempToHue(t) {
@@ -616,7 +616,7 @@ function updateAndDrawVines() {
   const tempsAtHeights = [];
   for (let h = 0; h < 5; h++) {
     const y = height * 0.3 - h * 30;
-    tempsAtHeights.push(tempAtHeight(y, height * 0.55));
+    tempsAtHeights.push(tempAtHeight(width/2, y, height * 0.55));
   }
   invStrength = tempsAtHeights[tempsAtHeights.length - 1] - tempsAtHeights[0];
 
@@ -641,7 +641,7 @@ function updateAndDrawVines() {
     const hAbove = (groundY - b.y) / 60; // meters
 
     // Base temperature at bud height
-    let budTemp = tempAtHeight(b.y, groundY);
+    let budTemp = tempAtHeight(b.x, b.y, groundY);
 
     // Protection effects
     let localProtection = 0;
