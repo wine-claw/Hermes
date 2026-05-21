@@ -7,38 +7,51 @@
   <script>p5.disableFriendlyErrors = true;</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
   <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; background: #0a0e14; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    canvas { display: block; }
-    /* Disclaimer banner */
-    .disclaimer { background: linear-gradient(90deg, #2a1a10, #1a1020); border-bottom: 1px solid #5a3a20; color: #e8b080; padding: 0.6rem 1rem; text-align: center; font-size: 0.8rem; position: fixed; top: 0; left: 0; right: 0; z-index: 200; }
+    :root { --bg:#0a0e14; --surface:rgba(12,18,28,0.92); --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#a371f7; --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080; }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text); }
+    canvas { display: block; position: fixed; top: 0; left: 0; z-index: 0; }
+
+    /* Disclaimer */
+    .disclaimer { background: linear-gradient(90deg,#2a1a10,#1a1020); border-bottom: 1px solid var(--warn-border); color: var(--warn-text); padding: 0.55rem 0.75rem; text-align: center; font-size: 0.78rem; position: fixed; top: 0; left: 0; right: 0; z-index: 200; }
     .disclaimer strong { font-weight: 600; }
-    /* UI overlay */
-    #ui-layer { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 100; }
+
+    /* UI Layer */
+    #ui-layer { position: absolute; top: 38px; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 100; }
     #ui-layer > * { pointer-events: auto; }
-    .panel { position: absolute; background: rgba(12, 18, 28, 0.88); border: 1px solid #2a3441; border-radius: 10px; padding: 0.9rem 1.1rem; color: #c9d1d9; font-size: 0.82rem; backdrop-filter: blur(4px); }
-    .panel h3 { margin: 0 0 0.55rem; font-size: 0.88rem; color: #58a6ff; letter-spacing: 0.03em; }
-    .control-group { margin-bottom: 0.6rem; }
-    .control-group label { display: block; margin-bottom: 0.25rem; color: #8b949e; font-size: 0.76rem; }
-    .control-group input[type="range"] { width: 100%; accent-color: #58a6ff; cursor: pointer; }
-    .control-group .val { float: right; color: #a371f7; font-weight: 600; font-size: 0.74rem; }
-    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 0.8rem; }
+    .panel { position: absolute; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1.0rem; color: var(--text); font-size: 0.82rem; backdrop-filter: blur(4px); max-width: min(260px, calc(100vw - 20px)); }
+    .panel h3 { margin: 0 0 0.5rem; font-size: 0.88rem; color: var(--accent); letter-spacing: 0.03em; }
+    .control-group { margin-bottom: 0.55rem; }
+    .control-group label { display: block; margin-bottom: 0.2rem; color: var(--muted); font-size: 0.74rem; }
+    .control-group input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .control-group .val { float: right; color: var(--accent2); font-weight: 600; font-size: 0.72rem; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem 0.7rem; }
     .stat { display: flex; justify-content: space-between; }
-    .stat .k { color: #8b949e; }
+    .stat .k { color: var(--muted); }
     .stat .v { color: #e8d5b7; font-weight: 600; }
     .phase-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.3rem; }
     .phase-flowering { background: #1a3a2a; color: #6bcb77; }
-    .phase-pea { background: #1a2a3a; color: #58a6ff; }
+    .phase-pea { background: #1a2a3a; color: var(--accent); }
+    .phase-lag { background: #1a1a2a; color: #8b949e; }
     .phase-veraison { background: #3a1a3a; color: #d28fd2; }
     .phase-ripening { background: #3a1a20; color: #ff6b6b; }
     .phase-harvest { background: #2a3a1a; color: #b8d28f; }
-    .btns { margin-top: 0.5rem; display: flex; gap: 0.4rem; }
-    .btns button { background: #1a2230; border: 1px solid #3a4451; color: #c9d1d9; border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.75rem; cursor: pointer; }
-    .btns button:hover { border-color: #58a6ff; }
-    .btns button.primary { border-color: #58a6ff; color: #58a6ff; }
+    .btns { margin-top: 0.45rem; display: flex; gap: 0.35rem; }
+    .btns button { background: #1a2230; border: 1px solid #3a4451; color: var(--text); border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.75rem; cursor: pointer; touch-action: manipulation; }
+    .btns button:hover { border-color: var(--accent); }
+    .btns button.primary { border-color: var(--accent); color: var(--accent); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+      canvas { position: fixed; top: 0; left: 0; }
+      #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 44px 8px 20px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+      #ui-layer > * { pointer-events: auto; }
+      .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; }
+    }
   </style>
 </head>
 <body>
-<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> For educational and demonstration purposes only. Not for commercial or production use.</div>
 <div id="ui-layer">
   <div class="panel" style="top:10px; left:10px; width:230px;">
     <h3>🍇 Berry Development</h3>
