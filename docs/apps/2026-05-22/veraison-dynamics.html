@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grape Berry Development & Veraison Dynamics</title>
+  <script>p5.disableFriendlyErrors = true;</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; background: #0a0e14; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    canvas { display: block; }
+    /* Disclaimer banner */
+    .disclaimer { background: linear-gradient(90deg, #2a1a10, #1a1020); border-bottom: 1px solid #5a3a20; color: #e8b080; padding: 0.6rem 1rem; text-align: center; font-size: 0.8rem; position: fixed; top: 0; left: 0; right: 0; z-index: 200; }
+    .disclaimer strong { font-weight: 600; }
+    /* UI overlay */
+    #ui-layer { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 100; }
+    #ui-layer > * { pointer-events: auto; }
+    .panel { position: absolute; background: rgba(12, 18, 28, 0.88); border: 1px solid #2a3441; border-radius: 10px; padding: 0.9rem 1.1rem; color: #c9d1d9; font-size: 0.82rem; backdrop-filter: blur(4px); }
+    .panel h3 { margin: 0 0 0.55rem; font-size: 0.88rem; color: #58a6ff; letter-spacing: 0.03em; }
+    .control-group { margin-bottom: 0.6rem; }
+    .control-group label { display: block; margin-bottom: 0.25rem; color: #8b949e; font-size: 0.76rem; }
+    .control-group input[type="range"] { width: 100%; accent-color: #58a6ff; cursor: pointer; }
+    .control-group .val { float: right; color: #a371f7; font-weight: 600; font-size: 0.74rem; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 0.8rem; }
+    .stat { display: flex; justify-content: space-between; }
+    .stat .k { color: #8b949e; }
+    .stat .v { color: #e8d5b7; font-weight: 600; }
+    .phase-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.3rem; }
+    .phase-flowering { background: #1a3a2a; color: #6bcb77; }
+    .phase-pea { background: #1a2a3a; color: #58a6ff; }
+    .phase-veraison { background: #3a1a3a; color: #d28fd2; }
+    .phase-ripening { background: #3a1a20; color: #ff6b6b; }
+    .phase-harvest { background: #2a3a1a; color: #b8d28f; }
+    .btns { margin-top: 0.5rem; display: flex; gap: 0.4rem; }
+    .btns button { background: #1a2230; border: 1px solid #3a4451; color: #c9d1d9; border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.75rem; cursor: pointer; }
+    .btns button:hover { border-color: #58a6ff; }
+    .btns button.primary { border-color: #58a6ff; color: #58a6ff; }
+  </style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="ui-layer">
+  <div class="panel" style="top:10px; left:10px; width:230px;">
+    <h3>🍇 Berry Development</h3>
+    <div class="stats-grid">
+      <div class="stat"><span class="k">Days</span><span class="v" id="s-days">0</span></div>
+      <div class="stat"><span class="k">Phase</span><span class="v" id="s-phase">—</span></div>
+      <div class="stat"><span class="k">Brix</span><span class="v" id="s-brix">5.0°</span></div>
+      <div class="stat"><span class="k">TA</span><span class="v" id="s-ta">15.0</span></div>
+      <div class="stat"><span class="k">pH</span><span class="v" id="s-ph">3.1</span></div>
+      <div class="stat"><span class="k">Berry Ø</span><span class="v" id="s-dia">8.0 mm</span></div>
+      <div class="stat"><span class="k">Antho.</span><span class="v" id="s-antho">0</span></div>
+      <div class="stat"><span class="k">Color idx</span><span class="v" id="s-color">0.0</span></div>
+    </div>
+    <div id="phase-badge" class="phase-badge phase-flowering">Flowering</div>
+    <div class="btns">
+      <button id="btn-pause">⏸ Pause</button>
+      <button id="btn-reset" class="primary">↺ Reset</button>
+    </div>
+  </div>
+  <div class="panel" style="top:10px; right:10px; width:210px;">
+    <h3>🌤 Environment</h3>
+    <div class="control-group">
+      <label>Temperature <span class="val" id="v-temp">22°C</span></label>
+      <input type="range" id="rng-temp" min="12" max="35" value="22" step="0.5">
+    </div>
+    <div class="control-group">
+      <label>Irrigation <span class="val" id="v-irr">100%</span></label>
+      <input type="range" id="rng-irr" min="0" max="120" value="100" step="5">
+    </div>
+    <div class="control-group">
+      <label>Sunlight (PAR) <span class="val" id="v-sun">100%</span></label>
+      <input type="range" id="rng-sun" min="30" max="150" value="100" step="5">
+    </div>
+    <div class="control-group">
+      <label>Simulation speed <span class="val" id="v-speed">1×</span></label>
+      <input type="range" id="rng-speed" min="0.2" max="5" value="1" step="0.2">
+    </div>
+  </div>
+  <div class="panel" style="bottom:14px; left:10px; width:230px;">
+    <h3>📈 Season Profile</h3>
+    <canvas id="chart-season" width="210" height="80" style="width:210px;height:80px;margin-top:0.3rem;"></canvas>
+  </div>
+</div>
+<script>
+// === Configuration ===
+const CONFIG = {
+  seed: 42,
+  berryCount: 72,
+  tempBase: 10.0,         // base temp for GDD (°C)
+  daysToVeraison: 60,     // base days from flowering to veraison
+  daysToHarvest: 120,     // base days from flowering to harvest
+  berryBaseRadius: 5.0,   // mm at flowering
+  berryMaxRadius: 14.0,   // mm at harvest
+  brixVeraison: 5.0,      // °Brix at veraison
+  brixHarvest: 24.0,      // °Brix at harvest
+  taFlowering: 18.0,      // g/L tartaric
+  taHarvest: 6.0,         // g/L tartaric
+  anthoMax: 2.5,          // mg/g berry at harvest (red)
+  sunOptimal: 100,        // % PAR for optimal color
+};
+
+// === Palette (HSB: H from green 120 → red 0, then purple 280) ===
+const PALETTE = {
+  bgTop: '#0a0e14',
+  bgBot: '#1a1020',
+  stem: '#5a7a4a',
+  stemShadow: '#3a5230',
+  berryGreen: {h:105, s:55, b:42},
+  berryPink: {h:340, s:60, b:65},
+  berryRed: {h:355, s:85, b:55},
+  berryPurple: {h:280, s:75, b:42},
+  berryGold: {h:48, s:75, b:82},
+  goldHighlight: {h:55, s:40, b:95},
+};
+
+// === State ===
+let berries = [];
+let particles = [];
+let dayCounter = 0;
+let simPaused = false;
+let seasonPhase = 'flowering';
+let env = { temp: 22, irr: 100, sun: 100, speed: 1 };
+let gdd = 0; // growing degree days
+let trailLayer, berryLayer, hudLayer;
+let seasonCanvas, seasonCtx;
+let historyBrix = [];
+let historyTA = [];
+let maxHistory = 120;
+
+// === p5.js Setup ===
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  colorMode(HSB, 360, 100, 100, 100);
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+
+  trailLayer = createGraphics(width, height);
+  trailLayer.colorMode(HSB, 360, 100, 100, 100);
+  berryLayer = createGraphics(width, height);
+  berryLayer.colorMode(HSB, 360, 100, 100, 100);
+  hudLayer = createGraphics(width, height);
+  hudLayer.colorMode(HSB, 360, 100, 100, 100);
+
+  seasonCanvas = document.getElementById('chart-season');
+  seasonCtx = seasonCanvas.getContext('2d');
+
+  initBerries();
+  initParticles();
+  setupUI();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  trailLayer = createGraphics(width, height);
+  trailLayer.colorMode(HSB, 360, 100, 100, 100);
+  berryLayer = createGraphics(width, height);
+  berryLayer.colorMode(HSB, 360, 100, 100, 100);
+  hudLayer = createGraphics(width, height);
+  hudLayer.colorMode(HSB, 360, 100, 100, 100);
+  initBerries();
+  initParticles();
+}
+
+// === Berry Cluster Geometry ===
+function initBerries() {
+  berries = [];
+  let cx = width * 0.5;
+  let cy = height * 0.42;
+  let stemLen = height * 0.18;
+  // Central rachis / peduncle endpoint
+  let bunchCx = cx;
+  let bunchCy = cy + stemLen;
+
+  // Generate bunch using noise-driven radial packing
+  for (let i = 0; i < CONFIG.berryCount; i++) {
+    let angle = random(TWO_PI);
+    // Denser at top, tapering to bottom (teardrop bunch shape)
+    let rBias = random() * random(); // bias toward center/top
+    let radius = map(rBias, 0, 1, 0, height * 0.22);
+    let bx = bunchCx + Math.cos(angle) * radius * 0.75;
+    let by = bunchCy + Math.sin(angle) * radius * 0.9 + (radius * 0.3); // slightly elongated downward
+
+    // Variation
+    let varietalOffset = random(-8, 8); // days offset per berry
+    berries.push({
+      x: bx,
+      y: by,
+      baseX: bx,
+      baseY: by,
+      phaseOffset: varietalOffset,
+      radius: CONFIG.berryBaseRadius,
+      brix: 3.0,
+      ta: CONFIG.taFlowering,
+      pH: 2.9,
+      antho: 0,
+      colorIdx: 0, // 0=green, 0.33=pink, 0.66=red, 1.0=purple
+      turgor: 1.0,
+      wobblePhase: random(TWO_PI),
+      wobbleSpeed: random(0.01, 0.03),
+      noiseOffset: random(1000),
+    });
+  }
+
+  // Sort by Y so lower berries draw last ( painter's algorithm )
+  berries.sort((a, b) => a.y - b.y);
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < 60; i++) {
+    particles.push({
+      x: random(width),
+      y: random(height),
+      vx: random(-0.3, 0.3),
+      vy: random(-0.4, -0.1),
+      size: random(1, 3),
+      alpha: random(20, 50),
+      life: random(100, 300),
+    });
+  }
+}
+
+// === Simulation Update ===
+function updateSimulation() {
+  if (simPaused) return;
+
+  let dt = env.speed;
+  dayCounter += dt * 0.15; // ~7 frames per simulated day at 1×
+  let days = dayCounter;
+  gdd += Math.max(0, env.temp - CONFIG.tempBase) * dt * 0.15;
+
+  // Season phases
+  let phaseFrac = 0;
+  if (days < 15) { seasonPhase = 'flowering'; phaseFrac = days / 15; }
+  else if (days < 25) { seasonPhase = 'pea'; phaseFrac = (days - 15) / 10; }
+  else if (days < CONFIG.daysToVeraison) { seasonPhase = 'lag'; phaseFrac = (days - 25) / (CONFIG.daysToVeraison - 25); }
+  else if (days < CONFIG.daysToVeraison + 10) { seasonPhase = 'veraison'; phaseFrac = (days - CONFIG.daysToVeraison) / 10; }
+  else if (days < CONFIG.daysToHarvest) { seasonPhase = 'ripening'; phaseFrac = (days - (CONFIG.daysToVeraison + 10)) / (CONFIG.daysToHarvest - (CONFIG.daysToVeraison + 10)); }
+  else { seasonPhase = 'harvest'; phaseFrac = 1; }
+
+  // Water stress factor (1.0 = unstressed, <1.0 = stressed)
+  let waterStress = constrain(env.irr / 100, 0.3, 1.3);
+  // Temp stress: optimal 20-28°C, below slows, above 35°C stresses
+  let tempFactor = 1.0;
+  if (env.temp < 15) tempFactor = 0.6;
+  else if (env.temp > 32) tempFactor = 0.75;
+  else if (env.temp > 28) tempFactor = 0.9;
+
+  let sunFactor = env.sun / CONFIG.sunOptimal;
+
+  for (let b of berries) {
+    let berryDays = Math.max(0, days - b.phaseOffset);
+    let berryGDD = Math.max(0, gdd - b.phaseOffset * 12); // approx daily GDD
+
+    // Size: sigmoid from flowering to harvest
+    let sizeProgress = constrain((berryDays) / CONFIG.daysToHarvest, 0, 1);
+    // Water stress increases concentration but reduces size
+    let sizeMult = 0.6 + 0.4 * waterStress;
+    let targetRadius = CONFIG.berryBaseRadius + (CONFIG.berryMaxRadius - CONFIG.berryBaseRadius) * sizeProgress * sizeMult;
+    b.radius = lerp(b.radius, targetRadius, 0.02);
+
+    // Softening / turgor
+    if (berryDays > CONFIG.daysToVeraison) {
+      b.turgor = lerp(b.turgor, 0.65 + 0.25 * waterStress, 0.01);
+    } else {
+      b.turgor = lerp(b.turgor, 1.0, 0.01);
+    }
+
+    // Brix: flat until veraison, then rapid accumulation (modified logistic)
+    if (berryDays < CONFIG.daysToVeraison) {
+      b.brix = lerp(b.brix, CONFIG.brixVeraison, 0.005);
+    } else {
+      let ripenDays = berryDays - CONFIG.daysToVeraison;
+      let ripenProgress = constrain(ripenDays / (CONFIG.daysToHarvest - CONFIG.daysToVeraison), 0, 1);
+      // Temperature accelerates sugar accumulation
+      let brixTarget = CONFIG.brixVeraison + (CONFIG.brixHarvest - CONFIG.brixVeraison) * ripenProgress * tempFactor;
+      // Water stress concentrates sugars (higher Brix at lower berry size)
+      if (waterStress < 0.8) brixTarget *= (1.0 + (0.8 - waterStress) * 0.6);
+      b.brix = lerp(b.brix, brixTarget, 0.015);
+    }
+
+    // TA: gradual decline, faster with heat and accumulation
+    if (berryDays > CONFIG.daysToVeraison) {
+      let ripenProgress = constrain((berryDays - CONFIG.daysToVeraison) / (CONFIG.daysToHarvest - CONFIG.daysToVeraison), 0, 1);
+      let taTarget = CONFIG.taHarvest + (CONFIG.taFlowering - CONFIG.taHarvest) * (1 - ripenProgress);
+      // Heat accelerates acid respiration
+      if (env.temp > 28) taTarget *= 0.92;
+      b.ta = lerp(b.ta, taTarget, 0.008);
+    }
+
+    // pH rises as TA drops (simplified empirical)
+    let targetPH = 3.05 + (b.ta < 10 ? (10 - b.ta) * 0.08 : 0);
+    if (env.temp > 30) targetPH += 0.1; // heat raises pH
+    b.pH = lerp(b.pH, targetPH, 0.005);
+
+    // Anthocyanin accumulation (reds) — starts at veraison, light dependent
+    if (berryDays > CONFIG.daysToVeraison) {
+      let ripenProgress = constrain((berryDays - CONFIG.daysToVeraison) / (CONFIG.daysToHarvest - CONFIG.daysToVeraison), 0, 1);
+      let anthoTarget = CONFIG.anthoMax * ripenProgress * constrain(sunFactor, 0.3, 1.4) * tempFactor;
+      // Excessive heat above 35°C degrades anthocyanins
+      if (env.temp > 34) anthoTarget *= 0.6;
+      b.antho = lerp(b.antho, anthoTarget, 0.012);
+    } else {
+      b.antho = lerp(b.antho, 0, 0.02);
+    }
+
+    // Color index: 0 = green, 1 = purple
+    if (berryDays < CONFIG.daysToVeraison - 5) {
+      b.colorIdx = lerp(b.colorIdx, 0, 0.02);
+    } else if (berryDays < CONFIG.daysToVeraison + 5) {
+      let vProgress = constrain((berryDays - (CONFIG.daysToVeraison - 5)) / 10, 0, 1);
+      b.colorIdx = lerp(b.colorIdx, vProgress, 0.03);
+    } else {
+      let ripenProgress = constrain((berryDays - CONFIG.daysToVeraison) / (CONFIG.daysToHarvest - CONFIG.daysToVeraison), 0, 1);
+      let targetCI = 0.3 + ripenProgress * 0.7;
+      if (targetCI > b.colorIdx) b.colorIdx = lerp(b.colorIdx, targetCI, 0.015);
+    }
+  }
+
+  // Update history for chart
+  let avgBrix = berries.reduce((s, b) => s + b.brix, 0) / berries.length;
+  let avgTA = berries.reduce((s, b) => s + b.ta, 0) / berries.length;
+  historyBrix.push(avgBrix);
+  historyTA.push(avgTA);
+  if (historyBrix.length > maxHistory) { historyBrix.shift(); historyTA.shift(); }
+
+  updateUI(days);
+}
+
+function getBerryColor(b) {
+  let ci = constrain(b.colorIdx, 0, 1);
+  let h, s, br;
+  if (ci < 0.33) {
+    let t = ci / 0.33;
+    h = lerp(PALETTE.berryGreen.h, PALETTE.berryPink.h, t);
+    s = lerp(PALETTE.berryGreen.s, PALETTE.berryPink.s, t);
+    br = lerp(PALETTE.berryGreen.b, PALETTE.berryPink.b, t);
+  } else if (ci < 0.66) {
+    let t = (ci - 0.33) / 0.33;
+    h = lerp(PALETTE.berryPink.h, PALETTE.berryRed.h, t);
+    s = lerp(PALETTE.berryPink.s, PALETTE.berryRed.s, t);
+    br = lerp(PALETTE.berryPink.b, PALETTE.berryRed.b, t);
+  } else {
+    let t = (ci - 0.66) / 0.34;
+    h = lerp(PALETTE.berryRed.h, PALETTE.berryPurple.h, t);
+    s = lerp(PALETTE.berryRed.s, PALETTE.berryPurple.s, t);
+    br = lerp(PALETTE.berryRed.b, PALETTE.berryPurple.b, t);
+  }
+  // Sunlight bleaches slightly
+  if (env.sun > 120) br = lerp(br, 65, 0.2);
+  return color(h, s, br);
+}
+
+// === Draw ===
+function draw() {
+  updateSimulation();
+
+  // Background: gradient sky shifting with season
+  let days = dayCounter;
+  let skyHue = 220;
+  let skySat = 40;
+  let skyBri = 8;
+  if (days > CONFIG.daysToVeraison) {
+    let t = constrain((days - CONFIG.daysToVeraison) / (CONFIG.daysToHarvest - CONFIG.daysToVeraison), 0, 1);
+    skyHue = lerp(220, 18, t);   // blue → amber
+    skySat = lerp(40, 70, t);
+    skyBri = lerp(8, 18, t);
+  }
+  background(skyHue, skySat, skyBri);
+
+  // Draw atmospheric motes
+  updateAndDrawParticles();
+
+  // Trail layer for subtle ambient motion
+  trailLayer.noStroke();
+  trailLayer.fill(skyHue, skySat, skyBri, 8);
+  trailLayer.rect(0, 0, width, height);
+
+  // Draw vine stem (peduncle + rachis)
+  drawStems();
+
+  // Berry layer
+  berryLayer.clear();
+  for (let b of berries) {
+    let bx = b.x + Math.sin(frameCount * b.wobbleSpeed + b.wobblePhase) * 0.6;
+    let by = b.y + Math.cos(frameCount * b.wobbleSpeed * 0.7 + b.wobblePhase) * 0.4;
+    let r = b.radius * (width / 800); // scale with canvas
+
+    berryLayer.noStroke();
+
+    // Shadow
+    berryLayer.fill(0, 0, 0, 25);
+    berryLayer.ellipse(bx + r * 0.15, by + r * 0.25, r * 2.1, r * 2.1);
+
+    // Berry body
+    let c = getBerryColor(b);
+    berryLayer.fill(c);
+    berryLayer.ellipse(bx, by, r * 2, r * 2 * (0.9 + b.turgor * 0.1));
+
+    // Highlight (bloom)
+    let bloomAlpha = map(b.colorIdx, 0, 0.5, 18, 6);
+    berryLayer.fill(PALETTE.goldHighlight.h, PALETTE.goldHighlight.s, PALETTE.goldHighlight.b, bloomAlpha);
+    berryLayer.ellipse(bx - r * 0.25, by - r * 0.25, r * 1.2, r * 1.1);
+
+    // Specular glint
+    berryLayer.fill(0, 0, 100, 30);
+    berryLayer.ellipse(bx - r * 0.35, by - r * 0.35, r * 0.35, r * 0.3);
+  }
+  image(berryLayer, 0, 0);
+
+  // HUD layer overlays (no content drawn in p5 here, HTML handles it)
+  drawSeasonChart();
+}
+
+function drawStems() {
+  let cx = width * 0.5;
+  let cy = height * 0.42;
+  let stemLen = height * 0.18;
+  let bunchCx = cx;
+  let bunchCy = cy + stemLen;
+
+  stroke(PALETTE.stemShadow);
+  strokeWeight(3);
+  noFill();
+  // Main peduncle
+  line(cx, cy, bunchCx, bunchCy);
+
+  // Rachis branches
+  stroke(PALETTE.stem);
+  strokeWeight(2);
+  for (let b of berries) {
+    let d = dist(b.x, b.y, bunchCx, bunchCy);
+    if (d < height * 0.18) {
+      let bend = noise(b.x * 0.01, b.y * 0.01, frameCount * 0.005) * 6;
+      line(bunchCx + (b.x - bunchCx) * 0.4 + bend, bunchCy + (b.y - bunchCy) * 0.4, b.x, b.y - b.radius * 0.6);
+    }
+  }
+}
+
+function updateAndDrawParticles() {
+  noStroke();
+  for (let p of particles) {
+    p.x += p.vx + noise(p.x * 0.003, frameCount * 0.002) * 0.3;
+    p.y += p.vy;
+    p.life -= 0.5;
+    if (p.life <= 0 || p.y < -10) {
+      p.x = random(width);
+      p.y = height + random(20, 80);
+      p.life = random(100, 300);
+      p.vy = random(-0.5, -0.15);
+    }
+    let alpha = map(constrain(p.life, 0, 100), 0, 100, 0, p.alpha);
+    fill(40, 30, 85, alpha);
+    ellipse(p.x, p.y, p.size, p.size);
+  }
+}
+
+function drawSeasonChart() {
+  if (!seasonCtx) return;
+  let ctx = seasonCtx;
+  let w = seasonCanvas.width;
+  let h = seasonCanvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(42,52,65,0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= 4; i++) { let y = (h - 10) * (i / 4) + 5; ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke();
+
+  // Brix line
+  if (historyBrix.length > 1) {
+    ctx.strokeStyle = '#58a6ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < historyBrix.length; i++) {
+      let x = (i / (maxHistory - 1)) * w;
+      let y = h - 10 - (historyBrix[i] / 30) * (h - 20);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // TA line
+  if (historyTA.length > 1) {
+    ctx.strokeStyle = '#ff6b6b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < historyTA.length; i++) {
+      let x = (i / (maxHistory - 1)) * w;
+      let y = h - 10 - (historyTA[i] / 20) * (h - 20);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Legend
+  ctx.fillStyle = '#58a6ff'; ctx.fillRect(6, 6, 8, 3);
+  ctx.fillStyle = '#8b949e'; ctx.font = '9px sans-serif'; ctx.fillText('Brix', 18, 11);
+  ctx.fillStyle = '#ff6b6b'; ctx.fillRect(60, 6, 8, 3);
+  ctx.fillStyle = '#8b949e'; ctx.fillText('TA', 72, 11);
+}
+
+// === UI wiring ===
+function setupUI() {
+  document.getElementById('rng-temp').addEventListener('input', function() {
+    env.temp = parseFloat(this.value);
+    document.getElementById('v-temp').textContent = env.temp.toFixed(1) + '°C';
+  });
+  document.getElementById('rng-irr').addEventListener('input', function() {
+    env.irr = parseInt(this.value);
+    document.getElementById('v-irr').textContent = env.irr + '%';
+  });
+  document.getElementById('rng-sun').addEventListener('input', function() {
+    env.sun = parseInt(this.value);
+    document.getElementById('v-sun').textContent = env.sun + '%';
+  });
+  document.getElementById('rng-speed').addEventListener('input', function() {
+    env.speed = parseFloat(this.value);
+    document.getElementById('v-speed').textContent = env.speed.toFixed(1) + '×';
+  });
+  document.getElementById('btn-pause').addEventListener('click', function() {
+    simPaused = !simPaused;
+    this.textContent = simPaused ? '▶ Resume' : '⏸ Pause';
+  });
+  document.getElementById('btn-reset').addEventListener('click', function() {
+    dayCounter = 0; gdd = 0; historyBrix = []; historyTA = []; seasonPhase = 'flowering';
+    initBerries(); initParticles();
+    simPaused = false;
+    document.getElementById('btn-pause').textContent = '⏸ Pause';
+  });
+}
+
+function updateUI(days) {
+  let avgBrix = berries.reduce((s, b) => s + b.brix, 0) / berries.length;
+  let avgTA = berries.reduce((s, b) => s + b.ta, 0) / berries.length;
+  let avgPH = berries.reduce((s, b) => s + b.pH, 0) / berries.length;
+  let avgDia = berries.reduce((s, b) => s + b.radius, 0) / berries.length;
+  let avgAntho = berries.reduce((s, b) => s + b.antho, 0) / berries.length;
+  let avgColor = berries.reduce((s, b) => s + b.colorIdx, 0) / berries.length;
+
+  document.getElementById('s-days').textContent = Math.floor(days);
+  document.getElementById('s-brix').textContent = avgBrix.toFixed(1) + '°';
+  document.getElementById('s-ta').textContent = avgTA.toFixed(1) + ' g/L';
+  document.getElementById('s-ph').textContent = avgPH.toFixed(2);
+  document.getElementById('s-dia').textContent = avgDia.toFixed(1) + ' mm';
+  document.getElementById('s-antho').textContent = avgAntho.toFixed(2) + ' mg/g';
+  document.getElementById('s-color').textContent = avgColor.toFixed(2);
+
+  let phaseNames = { flowering: 'Flowering', pea: 'Pea berry', lag: 'Lag phase', veraison: 'Veraison', ripening: 'Ripening', harvest: 'Harvest' };
+  document.getElementById('s-phase').textContent = phaseNames[seasonPhase] || seasonPhase;
+
+  let badge = document.getElementById('phase-badge');
+  badge.className = 'phase-badge phase-' + seasonPhase;
+  badge.textContent = phaseNames[seasonPhase] || seasonPhase;
+}
+
+function keyPressed() {
+  if (key === 's' || key === 'S') saveCanvas('veraison-output', 'png');
+  if (key === ' ') { simPaused = !simPaused; document.getElementById('btn-pause').textContent = simPaused ? '▶ Resume' : '⏸ Pause'; }
+  if (key === 'r' || key === 'R') { dayCounter = 0; gdd = 0; historyBrix = []; historyTA = []; initBerries(); initParticles(); }
+}
+</script>
+</body>
+</html>
