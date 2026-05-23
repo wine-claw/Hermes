@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Tears &amp; Marangoni Flow Simulator</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #0a0507; font-family: system-ui, -apple-system, sans-serif; }
+  canvas { display: block; }
+
+  .disclaimer {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    background: #2a1a10; border-bottom: 1px solid #5a3a20; color: #d4a574;
+    padding: 0.55rem 1rem; text-align: center; font-size: 0.82rem; line-height: 1.35;
+  }
+  .disclaimer strong { color: #e8c080; font-weight: 600; }
+
+  #ui-layer {
+    position: absolute; top: 38px; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 100;
+    display: flex; flex-direction: column; align-items: flex-start; padding: 10px;
+  }
+  #ui-layer > * { pointer-events: auto; }
+
+  .panel {
+    position: absolute; background: rgba(12, 6, 8, 0.92); border: 1px solid #3a2028;
+    border-radius: 10px; padding: 0.9rem 1.1rem; color: #e8d5c8; max-width: min(290px, calc(100vw - 20px));
+    backdrop-filter: blur(4px);
+  }
+  .panel h2 { font-size: 0.9rem; color: #d4a0a0; margin: 0 0 0.6rem 0; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+  .panel label { display: block; font-size: 0.78rem; color: #b09090; margin: 0.5rem 0 0.15rem 0; }
+  .panel input[type=range] { width: 100%; margin-bottom: 0.1rem; accent-color: #c45a5a; }
+  .val { font-size: 0.72rem; color: #d4a0a0; text-align: right; margin-bottom: 0.3rem; }
+
+  .glass-btn {
+    background: rgba(60, 30, 30, 0.6); border: 1px solid #5a3030; color: #d4a0a0;
+    border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.75rem; cursor: pointer; margin-right: 4px; margin-bottom: 4px;
+  }
+  .glass-btn.active { background: #7a3a3a; color: #fff; border-color: #a05050; }
+
+  .readout { font-size: 0.75rem; color: #c0a0a0; margin-top: 0.4rem; }
+  .readout .num { color: #f0c0a0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+
+  /* position panels */
+  #params-panel { top: 48px; left: 10px; }
+  #metrics-panel { top: 48px; right: 10px; width: 230px; }
+  #glass-panel { bottom: 14px; left: 10px; }
+
+  /* mobile */
+  @media (max-width: 768px) {
+    body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    canvas { position: fixed; top: 0; left: 0; }
+    #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 44px 8px 20px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+    .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+
+<div id="ui-layer">
+  <div class="panel" id="params-panel">
+    <h2>Physics Controls</h2>
+    <label>Alcohol % (v/v)</label>
+    <input type="range" id="slider-alc" min="8" max="18" step="0.1" value="13">
+    <div class="val" id="val-alc">13.0%</div>
+
+    <label>Temperature (°C)</label>
+    <input type="range" id="slider-temp" min="5" max="30" step="0.5" value="18">
+    <div class="val" id="val-temp">18.0 °C</div>
+
+    <label>Relative Humidity (%)</label>
+    <input type="range" id="slider-rh" min="10" max="95" step="1" value="50">
+    <div class="val" id="val-rh">50%</div>
+
+    <label>Film Thickness Factor</label>
+    <input type="range" id="slider-film" min="0.3" max="3" step="0.1" value="1.2">
+    <div class="val" id="val-film">1.2×</div>
+  </div>
+
+  <div class="panel" id="metrics-panel">
+    <h2>Live Metrics</h2>
+    <div class="readout">Surface Tension: <span class="num" id="m-st">—</span> mN/m</div>
+    <div class="readout">Evap. Rate: <span class="num" id="m-evap">—</span> mg/cm²/s</div>
+    <div class="readout">Marangoni Δσ: <span class="num" id="m-dsigma">—</span> mN/m</div>
+    <div class="readout">Active Tears: <span class="num" id="m-tears">—</span></div>
+    <div class="readout" style="margin-top:0.6rem; color:#b08080;">Gibbs-Marangoni effect drives wine up the glass wall as ethanol selectively evaporates from the meniscus film, creating a surface-tension gradient.</div>
+    <div style="margin-top:0.5rem; font-size:0.7rem; color:#907070;">
+      <span class="legend-dot" style="background:#e8a0a0;"></span>Ethanol-rich film&nbsp;
+      <span class="legend-dot" style="background:#8a3a3a;"></span>Bulk wine&nbsp;
+      <span class="legend-dot" style="background:#d4c0a0;"></span>Tear droplet
+    </div>
+  </div>
+
+  <div class="panel" id="glass-panel">
+    <h2>Glass Profile</h2>
+    <div>
+      <button class="glass-btn active" data-shape="bordeaux" onclick="setGlass('bordeaux',this)">Bordeaux</button>
+      <button class="glass-btn" data-shape="burgundy" onclick="setGlass('burgundy',this)">Burgundy</button>
+      <button class="glass-btn" data-shape="iso" onclick="setGlass('iso',this)">ISO Tasting</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// === Configuration ===
+const CONFIG = {
+  seed: 42,
+  alcPct: 13.0,
+  tempC: 18.0,
+  rhPct: 50.0,
+  filmFactor: 1.2,
+  glassShape: 'bordeaux',
+  paused: false,
+  baseParticleCount: 900,
+  tearMaxCount: 60
+};
+
+// === Glass Profiles ===
+// Each returns inner wall x as function of y (0=bottom, 1=top)
+const GLASS_PROFILES = {
+  bordeaux: (y) => { // tall, relatively straight
+    const h = y;
+    if (h < 0.15) return 0.25 + h * 1.5; // bowl base
+    if (h < 0.55) return 0.475 + (h - 0.15) * 0.25; // bowl sides
+    if (h < 0.75) return 0.575 + (h - 0.55) * 0.8; // shoulder to rim
+    return 0.735 + (h - 0.75) * 0.2;
+  },
+  burgundy: (y) => { // wide bowl, shorter
+    const h = y;
+    if (h < 0.12) return 0.28 + h * 2.0;
+    if (h < 0.45) return 0.52 + (h - 0.12) * 0.5;
+    if (h < 0.65) return 0.685 + (h - 0.45) * 0.9;
+    return 0.865 + (h - 0.65) * 0.15;
+  },
+  iso: (y) => { // tulip, moderate
+    const h = y;
+    if (h < 0.18) return 0.30 + h * 1.2;
+    if (h < 0.50) return 0.516 + (h - 0.18) * 0.15;
+    if (h < 0.72) return 0.564 + (h - 0.50) * 0.6;
+    return 0.696 + (h - 0.72) * 0.25;
+  }
+};
+
+// === Color Palette (HSB) ===
+// Using custom RGB-ish palette for wine elegance
+const PALETTE = {
+  bg: '#0a0507',
+  bgLight: '#140a0d',
+  glass: 'rgba(200,210,220,0.12)',
+  glassHighlight: 'rgba(230,240,255,0.25)',
+  wineDark: [80, 20, 25],
+  wineMid: [120, 35, 40],
+  wineLight: [160, 55, 55],
+  tear: [220, 190, 160],
+  film: [210, 170, 150],
+  ethanolGlow: [255, 200, 180],
+  meniscusLine: 'rgba(180,140,130,0.35)'
+};
+
+// === Global State ===
+let particles = [];
+let tears = [];
+let trailLayer;
+let glassLayer;
+let meniscusY = 0;
+let cx, cy, glassW, glassH;
+let globalT = 0;
+
+// === Helpers ===
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function surfaceTension(alcPct, tempC) {
+  // Water ST ~72.8 at 20C, ethanol ~22.3
+  // Linear mixing approximation with temperature correction
+  const stWater = 75.83 - 0.147 * tempC; // mN/m
+  const stEthanol = 24.05 - 0.0832 * tempC;
+  let st = stWater * (1 - alcPct / 100) + stEthanol * (alcPct / 100);
+  // Slightly non-ideal mixing (real ethanol-water has negative deviation)
+  st -= 2.5 * Math.sin((alcPct / 100) * Math.PI);
+  return st;
+}
+function evapRate(alcPct, tempC, rhPct) {
+  // Ethanol evaporates much faster than water
+  // Vapor pressure of ethanol rises steeply with T
+  const vpEthanol = 10.0 * Math.exp(0.12 * (tempC - 15)); // arbitrary scaled vapor pressure proxy
+  const vpWater = 2.5 * Math.exp(0.06 * (tempC - 15));
+  const drivingForce = (100 - rhPct) / 100;
+  const ethanolFlux = alcPct / 100 * vpEthanol * drivingForce * 0.4;
+  const waterFlux = (1 - alcPct / 100) * vpWater * drivingForce * 0.05;
+  return ethanolFlux + waterFlux;
+}
+
+// === Particle Class ===
+class FilmParticle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    // Spawn near meniscus on inner wall
+    const profile = GLASS_PROFILES[CONFIG.glassShape];
+    const gy = meniscusY / glassH;
+    const baseRadius = profile(gy) * glassW;
+    const wallX = cx + baseRadius;
+    const wallY = meniscusY + random(-3, 6);
+    this.x = wallX - random(1, 8 * CONFIG.filmFactor);
+    this.y = wallY;
+    this.vx = random(-0.3, 0.1);
+    this.vy = random(-1.2, -0.2);
+    this.life = random(60, 200);
+    this.maxLife = this.life;
+    this.size = random(1.2, 3.2);
+    this.type = random() < (CONFIG.alcPct / 25) ? 'ethanol' : 'wine'; // higher alc = more ethanol particles
+    this.trail = [];
+  }
+  update() {
+    const profile = GLASS_PROFILES[CONFIG.glassShape];
+    // Marangoni force: surface tension gradient drives upward
+    // Stronger at meniscus where evaporation is fastest
+    const distAboveMeniscus = (meniscusY - this.y);
+    const meniscusProximity = Math.exp(-Math.abs(this.y - meniscusY) / (20 * CONFIG.filmFactor));
+    const st = surfaceTension(CONFIG.alcPct, CONFIG.tempC);
+    const stGradient = st * 0.015 * meniscusProximity; // mN/m per pixel proxy
+    const marangoniUp = stGradient * 0.08 * CONFIG.filmFactor;
+
+    // Gravity pulls down
+    const gravity = 0.018;
+
+    // Evaporation shrinks and fades ethanol particles faster
+    const evap = evapRate(CONFIG.alcPct, CONFIG.tempC, CONFIG.rhPct) * 0.1;
+    if (this.type === 'ethanol') {
+      this.size -= evap * 0.15;
+      this.life -= 1.5;
+    } else {
+      this.size -= evap * 0.02;
+      this.life -= 1.0;
+    }
+
+    // Update velocity
+    this.vy += (marangoniUp - gravity) * (this.type === 'ethanol' ? 1.3 : 1.0);
+    this.vx *= 0.96;
+    this.vy *= 0.97;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Keep near glass wall
+    const gy = clamp(this.y / glassH, 0, 1);
+    const wallX = cx + profile(gy) * glassW;
+    const dist = wallX - this.x;
+    if (dist > 0) {
+      this.x += dist * 0.08;
+      this.vx += dist * 0.003;
+    }
+
+    // Trail
+    if (frameCount % 3 === 0 && this.trail.length < 12) {
+      this.trail.push({x: this.x, y: this.y, a: 1.0});
+    }
+    for (let t of this.trail) { t.a -= 0.08; }
+    this.trail = this.trail.filter(t => t.a > 0);
+
+    // Reset if dead or too far
+    if (this.life <= 0 || this.size <= 0.3 || this.y < cy - glassH * 0.35) {
+      this.reset();
+    }
+  }
+  display(p) {
+    const alpha = clamp(this.life / this.maxLife, 0, 1);
+    p.noStroke();
+
+    // Trail
+    for (let t of this.trail) {
+      p.fill(this.type === 'ethanol' ? 210 : 120, this.type === 'ethanol' ? 55 : 35, this.type === 'ethanol' ? 45 : 25, t.a * alpha * 120);
+      p.ellipse(t.x, t.y, this.size * 0.6, this.size * 0.6);
+    }
+
+    // Core
+    if (this.type === 'ethanol') {
+      p.fill(210, 60, 75, alpha * 160);
+    } else {
+      p.fill(0, 70, 35, alpha * 180);
+    }
+    p.ellipse(this.x, this.y, this.size, this.size);
+
+    // Highlight
+    p.fill(255, alpha * (this.type === 'ethanol' ? 80 : 40));
+    p.ellipse(this.x - this.size * 0.2, this.y - this.size * 0.2, this.size * 0.35, this.size * 0.35);
+  }
+}
+
+// === Tear Droplet Class ===
+class TearDroplet {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    const profile = GLASS_PROFILES[CONFIG.glassShape];
+    const startGy = random(0.45, 0.75); // start somewhere above meniscus
+    const wallX = cx + profile(startGy) * glassW;
+    this.x = wallX - random(2, 6);
+    this.y = cy + glassH * 0.5 - startGy * glassH;
+    this.vx = random(-0.1, 0.1);
+    this.vy = random(-0.3, -0.8); // initially slowly up (Marangoni)
+    this.size = random(3, 7);
+    this.phase = 'rising';
+    this.life = random(300, 600);
+    this.maxLife = this.life;
+    this.trail = [];
+  }
+  update() {
+    this.life--;
+    const profile = GLASS_PROFILES[CONFIG.glassShape];
+    const gy = clamp(this.y / glassH, 0, 1);
+    const wallX = cx + profile(gy) * glassW;
+
+    if (this.phase === 'rising') {
+      const st = surfaceTension(CONFIG.alcPct, CONFIG.tempC);
+      const meniscusProximity = Math.exp(-Math.abs(this.y - meniscusY) / (25 * CONFIG.filmFactor));
+      const upForce = st * 0.012 * meniscusProximity * CONFIG.filmFactor;
+      this.vy -= 0.005; // upward accel
+      this.vy += upForce * 0.01;
+      this.vy *= 0.98;
+      this.vx *= 0.95;
+      this.size += 0.03; // accumulates wine
+      if (this.size > 9 || this.life < this.maxLife * 0.6) {
+        this.phase = 'falling';
+        this.vy = random(0.5, 1.5);
+      }
+    } else {
+      // Falling
+      this.vy += 0.04; // gravity
+      this.vy *= 0.99;
+      this.size -= 0.015; // evaporation / spreading
+      if (this.y > meniscusY + 10 || this.size < 1.5) {
+        // Reabsorbed at meniscus
+        this.reset();
+        return;
+      }
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Wall constraint
+    const dist = wallX - this.x;
+    if (dist > 0) {
+      this.x += dist * 0.12;
+    }
+
+    if (frameCount % 2 === 0 && this.trail.length < 18) {
+      this.trail.push({x: this.x, y: this.y, a: 1.0, sz: this.size});
+    }
+    for (let t of this.trail) { t.a -= 0.04; }
+    this.trail = this.trail.filter(t => t.a > 0);
+
+    if (this.life <= 0) this.reset();
+  }
+  display(p) {
+    const alpha = clamp(this.life / this.maxLife, 0, 1);
+    p.noStroke();
+
+    // Long tear trail
+    for (let i = 0; i < this.trail.length; i++) {
+      const t = this.trail[i];
+      const ta = t.a * alpha * 140;
+      p.fill(15, 65, 45, ta);
+      p.ellipse(t.x, t.y, t.sz * 0.7, t.sz * 0.7);
+    }
+
+    // Droplet body
+    p.fill(10, 70, 50, alpha * 200);
+    p.ellipse(this.x, this.y, this.size, this.size * 1.25);
+
+    // Highlight (wine glass reflection)
+    p.fill(255, alpha * 90);
+    p.ellipse(this.x - this.size * 0.25, this.y - this.size * 0.3, this.size * 0.3, this.size * 0.35);
+  }
+}
+
+// === p5.js Sketch ===
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+  colorMode(HSB, 360, 100, 100, 100);
+
+  cx = width * 0.5;
+  cy = height * 0.52;
+  glassW = Math.min(width, height) * 0.42;
+  glassH = height * 0.74;
+  meniscusY = cy + glassH * 0.12;
+
+  trailLayer = createGraphics(width, height);
+  trailLayer.colorMode(HSB, 360, 100, 100, 100);
+  glassLayer = createGraphics(width, height);
+  glassLayer.colorMode(HSB, 360, 100, 100, 100);
+
+  initParticles();
+  drawGlassShape(glassLayer);
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < CONFIG.baseParticleCount; i++) {
+    particles.push(new FilmParticle());
+  }
+  tears = [];
+  for (let i = 0; i < CONFIG.tearMaxCount; i++) {
+    tears.push(new TearDroplet());
+  }
+}
+
+function drawGlassShape(g) {
+  g.clear();
+  const profile = GLASS_PROFILES[CONFIG.glassShape];
+  // Draw left and right walls as subtle glass curves
+  g.noFill();
+  g.strokeWeight(2);
+  g.stroke(0, 0, 85, 8);
+
+  // Right wall (visible)
+  g.beginShape();
+  for (let y = 0; y <= glassH; y += 2) {
+    const gy = (cy + glassH * 0.5 - y) / glassH;
+    const rx = cx + profile(clamp(gy, 0, 1)) * glassW + 2;
+    g.vertex(rx, y);
+  }
+  g.endShape();
+
+  // Highlight line on right wall
+  g.strokeWeight(1);
+  g.stroke(0, 0, 95, 18);
+  g.beginShape();
+  for (let y = 0; y <= glassH; y += 3) {
+    const gy = (cy + glassH * 0.5 - y) / glassH;
+    const rx = cx + profile(clamp(gy, 0, 1)) * glassW - 1;
+    g.vertex(rx, y);
+  }
+  g.endShape();
+
+  // Stem
+  g.strokeWeight(3);
+  g.stroke(0, 0, 90, 10);
+  g.line(cx, cy + glassH * 0.5 + 2, cx, cy + glassH * 0.5 + glassH * 0.22);
+  // Base
+  g.strokeWeight(2);
+  g.line(cx - glassW * 0.22, cy + glassH * 0.5 + glassH * 0.22, cx + glassW * 0.22, cy + glassH * 0.5 + glassH * 0.22);
+}
+
+function updateMeniscus() {
+  // Meniscus slowly oscillates and shifts with parameters
+  const t = frameCount * 0.003;
+  const baseY = cy + glassH * 0.10;
+  const breathe = Math.sin(t) * 3 + Math.sin(t * 2.3) * 1.5;
+  meniscusY = baseY + breathe;
+}
+
+function drawMeniscus(p) {
+  const profile = GLASS_PROFILES[CONFIG.glassShape];
+  p.noFill();
+  p.strokeWeight(1.5);
+  p.stroke(15, 45, 55, 35);
+
+  // Curved meniscus line across glass interior
+  p.beginShape();
+  const steps = 60;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const gy = (meniscusY - cy + glassH * 0.5) / glassH;
+    const wallR = profile(clamp(gy, 0, 1)) * glassW;
+    const x = cx - wallR + t * wallR * 2;
+    // Meniscus curves down at walls (capillary depression for wetting liquid, but wine in glass shows slight curvature)
+    const wallCurve = Math.sin(t * Math.PI) * 2.5;
+    p.vertex(x, meniscusY + wallCurve);
+  }
+  p.endShape();
+
+  // Surface micro-ripples
+  p.strokeWeight(0.8);
+  p.stroke(15, 40, 55, 20);
+  for (let r = 0; r < 4; r++) {
+    const gy = (meniscusY - cy + glassH * 0.5) / glassH;
+    const wallR = profile(clamp(gy, 0, 1)) * glassW * 0.7;
+    const rx = random(-wallR, wallR);
+    p.line(cx + rx, meniscusY + random(-1, 1), cx + rx + random(-8, 8), meniscusY + random(-1, 1));
+  }
+}
+
+function drawWineBody(p) {
+  const profile = GLASS_PROFILES[CONFIG.glassShape];
+  const gyBase = (cy + glassH * 0.5 - (meniscusY + 2)) / glassH;
+  const gyTop = (cy + glassH * 0.5 - meniscusY) / glassH;
+
+  p.fill(0, 75, 22, 85);
+  p.noStroke();
+  p.beginShape();
+  // Left side down to bottom
+  const bottomY = cy + glassH * 0.5 + glassH * 0.18;
+  const baseGy = (cy + glassH * 0.5 - bottomY) / glassH;
+  for (let y = meniscusY + 2; y <= bottomY; y += 3) {
+    const gy = (cy + glassH * 0.5 - y) / glassH;
+    const wallX = profile(clamp(gy, 0, 1)) * glassW;
+    p.vertex(cx - wallX + 2, y);
+  }
+  // Bottom across
+  const baseWall = profile(clamp(baseGy, 0, 1)) * glassW;
+  p.vertex(cx - baseWall + 2, bottomY);
+  p.vertex(cx + baseWall - 2, bottomY);
+  // Right side up
+  for (let y = bottomY; y >= meniscusY + 2; y -= 3) {
+    const gy = (cy + glassH * 0.5 - y) / glassH;
+    const wallX = profile(clamp(gy, 0, 1)) * glassW;
+    p.vertex(cx + wallX - 2, y);
+  }
+  p.endShape(CLOSE);
+
+  // Depth gradient overlay
+  p.fill(0, 80, 12, 40);
+  p.beginShape();
+  for (let y = meniscusY + 2; y <= bottomY; y += 3) {
+    const gy = (cy + glassH * 0.5 - y) / glassH;
+    const wallX = profile(clamp(gy, 0, 1)) * glassW;
+    p.vertex(cx - wallX + 4, y);
+  }
+  p.vertex(cx - baseWall + 4, bottomY);
+  p.vertex(cx + baseWall - 4, bottomY);
+  for (let y = bottomY; y >= meniscusY + 2; y -= 3) {
+    const gy = (cy + glassH * 0.5 - y) / glassH;
+    const wallX = profile(clamp(gy, 0, 1)) * glassW;
+    p.vertex(cx + wallX * 0.5, y); // shifted center creates depth shading
+  }
+  p.endShape(CLOSE);
+}
+
+function draw() {
+  if (CONFIG.paused) return;
+
+  background(0, 0, 4); // very dark background
+  globalT += 0.016;
+
+  updateMeniscus();
+
+  // Draw glass shape (persistent layer)
+  image(glassLayer, 0, 0);
+
+  // Wine body
+  drawWineBody(this);
+
+  // Meniscus line
+  drawMeniscus(this);
+
+  // Trail layer with fade
+  trailLayer.noStroke();
+  trailLayer.fill(0, 0, 4, 6); // fade old trails
+  trailLayer.rect(0, 0, width, height);
+
+  // Update and draw film particles
+  blendMode(ADD);
+  for (let p of particles) {
+    p.update();
+    p.display(trailLayer);
+  }
+  image(trailLayer, 0, 0);
+  blendMode(BLEND);
+
+  // Tears on top
+  for (let t of tears) {
+    t.update();
+    t.display(this);
+  }
+
+  // Ambient micro-droplets (background sparkle)
+  noStroke();
+  for (let i = 0; i < 8; i++) {
+    const profile = GLASS_PROFILES[CONFIG.glassShape];
+    const gy = random(0.3, 0.85);
+    const wallX = cx + profile(gy) * glassW;
+    const px = wallX - random(3, 18);
+    const py = cy + glassH * 0.5 - gy * glassH + random(-10, 10);
+    fill(20, 40, 70, random(10, 40));
+    ellipse(px, py, random(1, 2.5), random(1, 2.5));
+  }
+
+  // Edge glow where ethanol evaporates
+  const profile = GLASS_PROFILES[CONFIG.glassShape];
+  const menGy = (meniscusY - cy + glassH * 0.5) / glassH;
+  const menWallX = cx + profile(clamp(menGy, 0, 1)) * glassW;
+  noStroke();
+  fill(25, 50, 75, 15 + Math.sin(frameCount * 0.04) * 8);
+  ellipse(menWallX - 6, meniscusY, 14, 10);
+
+  // Update metrics to DOM
+  updateMetrics();
+}
+
+function updateMetrics() {
+  const st = surfaceTension(CONFIG.alcPct, CONFIG.tempC).toFixed(1);
+  const ev = evapRate(CONFIG.alcPct, CONFIG.tempC, CONFIG.rhPct).toFixed(3);
+  const ds = (surfaceTension(5, CONFIG.tempC) - surfaceTension(CONFIG.alcPct, CONFIG.tempC)).toFixed(2);
+  const tc = tears.filter(t => t.phase === 'falling').length;
+
+  const elSt = document.getElementById('m-st');
+  const elEv = document.getElementById('m-evap');
+  const elDs = document.getElementById('m-dsigma');
+  const elTc = document.getElementById('m-tears');
+  if (elSt) elSt.textContent = st;
+  if (elEv) elEv.textContent = ev;
+  if (elDs) elDs.textContent = ds;
+  if (elTc) elTc.textContent = tc;
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  trailLayer = createGraphics(width, height);
+  trailLayer.colorMode(HSB, 360, 100, 100, 100);
+  glassLayer = createGraphics(width, height);
+  glassLayer.colorMode(HSB, 360, 100, 100, 100);
+  cx = width * 0.5;
+  cy = height * 0.52;
+  glassW = Math.min(width, height) * 0.42;
+  glassH = height * 0.74;
+  drawGlassShape(glassLayer);
+  initParticles();
+}
+
+function keyPressed() {
+  if (key === 's' || key === 'S') saveCanvas('wine-tears', 'png');
+  if (key === 'g' || key === 'G') saveGif('wine-tears', 5);
+  if (key === ' ') CONFIG.paused = !CONFIG.paused;
+}
+
+// === UI Wiring ===
+function setGlass(shape, btn) {
+  CONFIG.glassShape = shape;
+  document.querySelectorAll('.glass-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  drawGlassShape(glassLayer);
+}
+
+function updateSlider(id, key, decimals, suffix) {
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(id.replace('slider-', 'val-'));
+  if (!el || !valEl) return;
+  el.addEventListener('input', () => {
+    CONFIG[key] = parseFloat(el.value);
+    valEl.textContent = parseFloat(el.value).toFixed(decimals) + suffix;
+    // Recolor particles on alc change
+    if (key === 'alcPct') {
+      for (let p of particles) p.type = random() < (CONFIG.alcPct / 25) ? 'ethanol' : 'wine';
+    }
+  });
+}
+
+updateSlider('slider-alc', 'alcPct', 1, '%');
+updateSlider('slider-temp', 'tempC', 1, ' °C');
+updateSlider('slider-rh', 'rhPct', 0, '%');
+updateSlider('slider-film', 'filmFactor', 1, '×');
+</script>
+</body>
+</html>
