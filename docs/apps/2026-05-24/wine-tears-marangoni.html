@@ -49,25 +49,63 @@
   #metrics-panel { top: 48px; right: 10px; width: 230px; }
   #glass-panel { bottom: 14px; left: 10px; }
 
-  /* mobile */
+  /* ---- Mobile: panels hidden by default, toggle button visible ---- */
   @media (max-width: 768px) {
-    body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    body { overflow-y: hidden; }
     canvas { position: fixed; top: 0; left: 0; z-index: 0; }
-    #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 44px 8px 20px; display: flex; flex-direction: column; gap: 6px; align-items: stretch; z-index: 10; }
-    .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; padding: 0.6rem 0.85rem; background: rgba(12, 6, 8, 0.78); }
-    .panel h2 { font-size: 0.78rem; margin-bottom: 0.35rem; }
-    .panel label { font-size: 0.7rem; margin: 0.35rem 0 0.1rem 0; }
-    .panel input[type=range] { margin-bottom: 0; }
-    .val { font-size: 0.66rem; margin-bottom: 0.2rem; }
-    .readout { font-size: 0.7rem; margin-top: 0.25rem; }
+
+    #ui-layer {
+      position: relative; top: auto; left: auto; right: auto; bottom: auto;
+      padding: 0; display: block; z-index: 10;
+    }
+    .panel {
+      position: relative !important; top: auto !important; left: auto !important;
+      right: auto !important; bottom: auto !important;
+      width: 100% !important; max-width: none !important;
+      padding: 0.7rem 0.9rem; background: rgba(12, 6, 8, 0.88);
+      border-radius: 0; border-left: none; border-right: none;
+      border-top: 1px solid #3a2028; border-bottom: 1px solid #3a2028;
+    }
+    /* Collapsed state: panels are hidden, only the toggle FAB is visible */
+    #ui-layer.collapsed .panel { display: none; }
+
+    /* Mobile panel typography */
+    .panel h2 { font-size: 0.78rem; margin-bottom: 0.3rem; }
+    .panel label { font-size: 0.7rem; margin: 0.3rem 0 0.05rem 0; }
+    .val { font-size: 0.66rem; margin-bottom: 0.15rem; }
+    .readout { font-size: 0.7rem; margin-top: 0.2rem; }
     .glass-btn { font-size: 0.7rem; padding: 0.25rem 0.5rem; }
+
+    /* Toggle FAB */
+    #panel-toggle {
+      display: flex !important;
+      position: fixed; bottom: 14px; right: 14px; z-index: 50;
+      width: 48px; height: 48px; border-radius: 50%;
+      background: rgba(120, 50, 50, 0.92); color: #fff;
+      border: 1px solid #a05050; align-items: center; justify-content: center;
+      font-size: 1.2rem; cursor: pointer; pointer-events: auto;
+      backdrop-filter: blur(4px); box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    /* Close button inside expanded panel list */
+    #panel-close {
+      display: block; text-align: center; padding: 0.5rem;
+      color: #b08080; font-size: 0.8rem; cursor: pointer;
+      border-top: 1px solid #3a2028;
+    }
   }
+
+  /* Desktop: hide toggle & close */
+  #panel-toggle { display: none; }
+  #panel-close { display: none; }
 </style>
 </head>
 <body>
 <div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
 
-<div id="ui-layer">
+<!-- Toggle FAB -->
+<button id="panel-toggle" aria-label="Show controls">⚙</button>
+
+<div id="ui-layer" class="collapsed">
   <div class="panel" id="params-panel">
     <h2>Physics Controls</h2>
     <label>Alcohol % (v/v)</label>
@@ -109,9 +147,45 @@
       <button class="glass-btn" data-shape="iso" onclick="setGlass('iso',this)">ISO Tasting</button>
     </div>
   </div>
+
+  <div id="panel-close">✕ Close controls</div>
 </div>
 
 <script>
+// === MOBILE PANEL TOGGLE ===
+(function() {
+  const ui = document.getElementById('ui-layer');
+  const toggle = document.getElementById('panel-toggle');
+  const closeBtn = document.getElementById('panel-close');
+  if (!ui || !toggle) return;
+
+  function isMobile() { return window.innerWidth <= 768; }
+
+  toggle.addEventListener('click', function() {
+    if (isMobile()) {
+      ui.classList.remove('collapsed');
+      toggle.style.display = 'none';
+    }
+  });
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function() {
+      ui.classList.add('collapsed');
+      if (isMobile()) toggle.style.display = 'flex';
+    });
+  }
+
+  // Ensure toggle stays correct on resize
+  window.addEventListener('resize', function() {
+    if (!isMobile()) {
+      ui.classList.remove('collapsed');
+      toggle.style.display = 'none';
+    } else {
+      toggle.style.display = ui.classList.contains('collapsed') ? 'flex' : 'none';
+    }
+  });
+})();
+
 // === Configuration ===
 const CONFIG = {
   seed: 42,
@@ -126,45 +200,28 @@ const CONFIG = {
 };
 
 // === Glass Profiles ===
-// Each returns inner wall x as function of y (0=bottom, 1=top)
 const GLASS_PROFILES = {
-  bordeaux: (y) => { // tall, relatively straight
+  bordeaux: (y) => {
     const h = y;
-    if (h < 0.15) return 0.25 + h * 1.5; // bowl base
-    if (h < 0.55) return 0.475 + (h - 0.15) * 0.25; // bowl sides
-    if (h < 0.75) return 0.575 + (h - 0.55) * 0.8; // shoulder to rim
+    if (h < 0.15) return 0.25 + h * 1.5;
+    if (h < 0.55) return 0.475 + (h - 0.15) * 0.25;
+    if (h < 0.75) return 0.575 + (h - 0.55) * 0.8;
     return 0.735 + (h - 0.75) * 0.2;
   },
-  burgundy: (y) => { // wide bowl, shorter
+  burgundy: (y) => {
     const h = y;
     if (h < 0.12) return 0.28 + h * 2.0;
     if (h < 0.45) return 0.52 + (h - 0.12) * 0.5;
     if (h < 0.65) return 0.685 + (h - 0.45) * 0.9;
     return 0.865 + (h - 0.65) * 0.15;
   },
-  iso: (y) => { // tulip, moderate
+  iso: (y) => {
     const h = y;
     if (h < 0.18) return 0.30 + h * 1.2;
     if (h < 0.50) return 0.516 + (h - 0.18) * 0.15;
     if (h < 0.72) return 0.564 + (h - 0.50) * 0.6;
     return 0.696 + (h - 0.72) * 0.25;
   }
-};
-
-// === Color Palette (HSB) ===
-// Using custom RGB-ish palette for wine elegance
-const PALETTE = {
-  bg: '#0a0507',
-  bgLight: '#140a0d',
-  glass: 'rgba(200,210,220,0.12)',
-  glassHighlight: 'rgba(230,240,255,0.25)',
-  wineDark: [80, 20, 25],
-  wineMid: [120, 35, 40],
-  wineLight: [160, 55, 55],
-  tear: [220, 190, 160],
-  film: [210, 170, 150],
-  ethanolGlow: [255, 200, 180],
-  meniscusLine: 'rgba(180,140,130,0.35)'
 };
 
 // === Global State ===
@@ -176,23 +233,17 @@ let meniscusY = 0;
 let cx, cy, glassW, glassH;
 let globalT = 0;
 
-// === Helpers ===
 function lerp(a, b, t) { return a + (b - a) * t; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function surfaceTension(alcPct, tempC) {
-  // Water ST ~72.8 at 20C, ethanol ~22.3
-  // Linear mixing approximation with temperature correction
-  const stWater = 75.83 - 0.147 * tempC; // mN/m
+  const stWater = 75.83 - 0.147 * tempC;
   const stEthanol = 24.05 - 0.0832 * tempC;
   let st = stWater * (1 - alcPct / 100) + stEthanol * (alcPct / 100);
-  // Slightly non-ideal mixing (real ethanol-water has negative deviation)
   st -= 2.5 * Math.sin((alcPct / 100) * Math.PI);
   return st;
 }
 function evapRate(alcPct, tempC, rhPct) {
-  // Ethanol evaporates much faster than water
-  // Vapor pressure of ethanol rises steeply with T
-  const vpEthanol = 10.0 * Math.exp(0.12 * (tempC - 15)); // arbitrary scaled vapor pressure proxy
+  const vpEthanol = 10.0 * Math.exp(0.12 * (tempC - 15));
   const vpWater = 2.5 * Math.exp(0.06 * (tempC - 15));
   const drivingForce = (100 - rhPct) / 100;
   const ethanolFlux = alcPct / 100 * vpEthanol * drivingForce * 0.4;
@@ -200,13 +251,9 @@ function evapRate(alcPct, tempC, rhPct) {
   return ethanolFlux + waterFlux;
 }
 
-// === Particle Class ===
 class FilmParticle {
-  constructor() {
-    this.reset();
-  }
+  constructor() { this.reset(); }
   reset() {
-    // Spawn near meniscus on inner wall
     const profile = GLASS_PROFILES[CONFIG.glassShape];
     const gy = meniscusY / glassH;
     const baseRadius = profile(gy) * glassW;
@@ -219,23 +266,17 @@ class FilmParticle {
     this.life = random(60, 200);
     this.maxLife = this.life;
     this.size = random(1.2, 3.2);
-    this.type = random() < (CONFIG.alcPct / 25) ? 'ethanol' : 'wine'; // higher alc = more ethanol particles
+    this.type = random() < (CONFIG.alcPct / 25) ? 'ethanol' : 'wine';
     this.trail = [];
   }
   update() {
     const profile = GLASS_PROFILES[CONFIG.glassShape];
-    // Marangoni force: surface tension gradient drives upward
-    // Stronger at meniscus where evaporation is fastest
     const distAboveMeniscus = (meniscusY - this.y);
     const meniscusProximity = Math.exp(-Math.abs(this.y - meniscusY) / (20 * CONFIG.filmFactor));
     const st = surfaceTension(CONFIG.alcPct, CONFIG.tempC);
-    const stGradient = st * 0.015 * meniscusProximity; // mN/m per pixel proxy
+    const stGradient = st * 0.015 * meniscusProximity;
     const marangoniUp = stGradient * 0.08 * CONFIG.filmFactor;
-
-    // Gravity pulls down
     const gravity = 0.018;
-
-    // Evaporation shrinks and fades ethanol particles faster
     const evap = evapRate(CONFIG.alcPct, CONFIG.tempC, CONFIG.rhPct) * 0.1;
     if (this.type === 'ethanol') {
       this.size -= evap * 0.15;
@@ -244,16 +285,11 @@ class FilmParticle {
       this.size -= evap * 0.02;
       this.life -= 1.0;
     }
-
-    // Update velocity
     this.vy += (marangoniUp - gravity) * (this.type === 'ethanol' ? 1.3 : 1.0);
     this.vx *= 0.96;
     this.vy *= 0.97;
-
     this.x += this.vx;
     this.y += this.vy;
-
-    // Keep near glass wall
     const gy = clamp(this.y / glassH, 0, 1);
     const wallX = cx + profile(gy) * glassW;
     const dist = wallX - this.x;
@@ -261,15 +297,11 @@ class FilmParticle {
       this.x += dist * 0.08;
       this.vx += dist * 0.003;
     }
-
-    // Trail
     if (frameCount % 3 === 0 && this.trail.length < 12) {
       this.trail.push({x: this.x, y: this.y, a: 1.0});
     }
     for (let t of this.trail) { t.a -= 0.08; }
     this.trail = this.trail.filter(t => t.a > 0);
-
-    // Reset if dead or too far
     if (this.life <= 0 || this.size <= 0.3 || this.y < cy - glassH * 0.35) {
       this.reset();
     }
@@ -277,40 +309,31 @@ class FilmParticle {
   display(p) {
     const alpha = clamp(this.life / this.maxLife, 0, 1);
     p.noStroke();
-
-    // Trail
     for (let t of this.trail) {
       p.fill(this.type === 'ethanol' ? 210 : 120, this.type === 'ethanol' ? 55 : 35, this.type === 'ethanol' ? 45 : 25, t.a * alpha * 120);
       p.ellipse(t.x, t.y, this.size * 0.6, this.size * 0.6);
     }
-
-    // Core
     if (this.type === 'ethanol') {
       p.fill(210, 60, 75, alpha * 160);
     } else {
       p.fill(0, 70, 35, alpha * 180);
     }
     p.ellipse(this.x, this.y, this.size, this.size);
-
-    // Highlight
     p.fill(255, alpha * (this.type === 'ethanol' ? 80 : 40));
     p.ellipse(this.x - this.size * 0.2, this.y - this.size * 0.2, this.size * 0.35, this.size * 0.35);
   }
 }
 
-// === Tear Droplet Class ===
 class TearDroplet {
-  constructor() {
-    this.reset();
-  }
+  constructor() { this.reset(); }
   reset() {
     const profile = GLASS_PROFILES[CONFIG.glassShape];
-    const startGy = random(0.45, 0.75); // start somewhere above meniscus
+    const startGy = random(0.45, 0.75);
     const wallX = cx + profile(startGy) * glassW;
     this.x = wallX - random(2, 6);
     this.y = cy + glassH * 0.5 - startGy * glassH;
     this.vx = random(-0.1, 0.1);
-    this.vy = random(-0.3, -0.8); // initially slowly up (Marangoni)
+    this.vy = random(-0.3, -0.8);
     this.size = random(3, 7);
     this.phase = 'rising';
     this.life = random(300, 600);
@@ -322,90 +345,70 @@ class TearDroplet {
     const profile = GLASS_PROFILES[CONFIG.glassShape];
     const gy = clamp(this.y / glassH, 0, 1);
     const wallX = cx + profile(gy) * glassW;
-
     if (this.phase === 'rising') {
       const st = surfaceTension(CONFIG.alcPct, CONFIG.tempC);
       const meniscusProximity = Math.exp(-Math.abs(this.y - meniscusY) / (25 * CONFIG.filmFactor));
       const upForce = st * 0.012 * meniscusProximity * CONFIG.filmFactor;
-      this.vy -= 0.005; // upward accel
+      this.vy -= 0.005;
       this.vy += upForce * 0.01;
       this.vy *= 0.98;
       this.vx *= 0.95;
-      this.size += 0.03; // accumulates wine
+      this.size += 0.03;
       if (this.size > 9 || this.life < this.maxLife * 0.6) {
         this.phase = 'falling';
         this.vy = random(0.5, 1.5);
       }
     } else {
-      // Falling
-      this.vy += 0.04; // gravity
+      this.vy += 0.04;
       this.vy *= 0.99;
-      this.size -= 0.015; // evaporation / spreading
+      this.size -= 0.015;
       if (this.y > meniscusY + 10 || this.size < 1.5) {
-        // Reabsorbed at meniscus
         this.reset();
         return;
       }
     }
-
     this.x += this.vx;
     this.y += this.vy;
-
-    // Wall constraint
     const dist = wallX - this.x;
-    if (dist > 0) {
-      this.x += dist * 0.12;
-    }
-
+    if (dist > 0) { this.x += dist * 0.12; }
     if (frameCount % 2 === 0 && this.trail.length < 18) {
       this.trail.push({x: this.x, y: this.y, a: 1.0, sz: this.size});
     }
     for (let t of this.trail) { t.a -= 0.04; }
     this.trail = this.trail.filter(t => t.a > 0);
-
     if (this.life <= 0) this.reset();
   }
   display(p) {
     const alpha = clamp(this.life / this.maxLife, 0, 1);
     p.noStroke();
-
-    // Long tear trail
     for (let i = 0; i < this.trail.length; i++) {
       const t = this.trail[i];
       const ta = t.a * alpha * 140;
       p.fill(15, 65, 45, ta);
       p.ellipse(t.x, t.y, t.sz * 0.7, t.sz * 0.7);
     }
-
-    // Droplet body
     p.fill(10, 70, 50, alpha * 200);
     p.ellipse(this.x, this.y, this.size, this.size * 1.25);
-
-    // Highlight (wine glass reflection)
     p.fill(255, alpha * 90);
     p.ellipse(this.x - this.size * 0.25, this.y - this.size * 0.3, this.size * 0.3, this.size * 0.35);
   }
 }
 
-// === p5.js Sketch ===
 function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(1);
   randomSeed(CONFIG.seed);
   noiseSeed(CONFIG.seed);
   colorMode(HSB, 360, 100, 100, 100);
-
   cx = width * 0.5;
   cy = height * 0.52;
   glassW = Math.min(width, height) * 0.42;
   glassH = height * 0.74;
   meniscusY = cy + glassH * 0.12;
-
   trailLayer = createGraphics(width, height);
   trailLayer.colorMode(HSB, 360, 100, 100, 100);
   glassLayer = createGraphics(width, height);
   glassLayer.colorMode(HSB, 360, 100, 100, 100);
-
   initParticles();
   drawGlassShape(glassLayer);
 }
@@ -424,12 +427,9 @@ function initParticles() {
 function drawGlassShape(g) {
   g.clear();
   const profile = GLASS_PROFILES[CONFIG.glassShape];
-  // Draw left and right walls as subtle glass curves
   g.noFill();
   g.strokeWeight(2);
   g.stroke(0, 0, 85, 8);
-
-  // Right wall (visible)
   g.beginShape();
   for (let y = 0; y <= glassH; y += 2) {
     const gy = (cy + glassH * 0.5 - y) / glassH;
@@ -437,8 +437,6 @@ function drawGlassShape(g) {
     g.vertex(rx, y);
   }
   g.endShape();
-
-  // Highlight line on right wall
   g.strokeWeight(1);
   g.stroke(0, 0, 95, 18);
   g.beginShape();
@@ -448,18 +446,14 @@ function drawGlassShape(g) {
     g.vertex(rx, y);
   }
   g.endShape();
-
-  // Stem
   g.strokeWeight(3);
   g.stroke(0, 0, 90, 10);
   g.line(cx, cy + glassH * 0.5 + 2, cx, cy + glassH * 0.5 + glassH * 0.22);
-  // Base
   g.strokeWeight(2);
   g.line(cx - glassW * 0.22, cy + glassH * 0.5 + glassH * 0.22, cx + glassW * 0.22, cy + glassH * 0.5 + glassH * 0.22);
 }
 
 function updateMeniscus() {
-  // Meniscus slowly oscillates and shifts with parameters
   const t = frameCount * 0.003;
   const baseY = cy + glassH * 0.10;
   const breathe = Math.sin(t) * 3 + Math.sin(t * 2.3) * 1.5;
@@ -471,8 +465,6 @@ function drawMeniscus(p) {
   p.noFill();
   p.strokeWeight(1.5);
   p.stroke(15, 45, 55, 35);
-
-  // Curved meniscus line across glass interior
   p.beginShape();
   const steps = 60;
   for (let i = 0; i <= steps; i++) {
@@ -480,13 +472,10 @@ function drawMeniscus(p) {
     const gy = (meniscusY - cy + glassH * 0.5) / glassH;
     const wallR = profile(clamp(gy, 0, 1)) * glassW;
     const x = cx - wallR + t * wallR * 2;
-    // Meniscus curves down at walls (capillary depression for wetting liquid, but wine in glass shows slight curvature)
     const wallCurve = Math.sin(t * Math.PI) * 2.5;
     p.vertex(x, meniscusY + wallCurve);
   }
   p.endShape();
-
-  // Surface micro-ripples
   p.strokeWeight(0.8);
   p.stroke(15, 40, 55, 20);
   for (let r = 0; r < 4; r++) {
@@ -501,11 +490,9 @@ function drawWineBody(p) {
   const profile = GLASS_PROFILES[CONFIG.glassShape];
   const gyBase = (cy + glassH * 0.5 - (meniscusY + 2)) / glassH;
   const gyTop = (cy + glassH * 0.5 - meniscusY) / glassH;
-
   p.fill(0, 75, 22, 85);
   p.noStroke();
   p.beginShape();
-  // Left side down to bottom
   const bottomY = cy + glassH * 0.5 + glassH * 0.18;
   const baseGy = (cy + glassH * 0.5 - bottomY) / glassH;
   for (let y = meniscusY + 2; y <= bottomY; y += 3) {
@@ -513,19 +500,15 @@ function drawWineBody(p) {
     const wallX = profile(clamp(gy, 0, 1)) * glassW;
     p.vertex(cx - wallX + 2, y);
   }
-  // Bottom across
   const baseWall = profile(clamp(baseGy, 0, 1)) * glassW;
   p.vertex(cx - baseWall + 2, bottomY);
   p.vertex(cx + baseWall - 2, bottomY);
-  // Right side up
   for (let y = bottomY; y >= meniscusY + 2; y -= 3) {
     const gy = (cy + glassH * 0.5 - y) / glassH;
     const wallX = profile(clamp(gy, 0, 1)) * glassW;
     p.vertex(cx + wallX - 2, y);
   }
   p.endShape(CLOSE);
-
-  // Depth gradient overlay
   p.fill(0, 80, 12, 40);
   p.beginShape();
   for (let y = meniscusY + 2; y <= bottomY; y += 3) {
@@ -538,34 +521,22 @@ function drawWineBody(p) {
   for (let y = bottomY; y >= meniscusY + 2; y -= 3) {
     const gy = (cy + glassH * 0.5 - y) / glassH;
     const wallX = profile(clamp(gy, 0, 1)) * glassW;
-    p.vertex(cx + wallX * 0.5, y); // shifted center creates depth shading
+    p.vertex(cx + wallX * 0.5, y);
   }
   p.endShape(CLOSE);
 }
 
 function draw() {
   if (CONFIG.paused) return;
-
-  background(0, 0, 4); // very dark background
+  background(0, 0, 4);
   globalT += 0.016;
-
   updateMeniscus();
-
-  // Draw glass shape (persistent layer)
   image(glassLayer, 0, 0);
-
-  // Wine body
   drawWineBody(this);
-
-  // Meniscus line
   drawMeniscus(this);
-
-  // Trail layer with fade
   trailLayer.noStroke();
-  trailLayer.fill(0, 0, 4, 6); // fade old trails
+  trailLayer.fill(0, 0, 4, 6);
   trailLayer.rect(0, 0, width, height);
-
-  // Update and draw film particles
   blendMode(ADD);
   for (let p of particles) {
     p.update();
@@ -573,14 +544,10 @@ function draw() {
   }
   image(trailLayer, 0, 0);
   blendMode(BLEND);
-
-  // Tears on top
   for (let t of tears) {
     t.update();
     t.display(this);
   }
-
-  // Ambient micro-droplets (background sparkle)
   noStroke();
   for (let i = 0; i < 8; i++) {
     const profile = GLASS_PROFILES[CONFIG.glassShape];
@@ -591,16 +558,12 @@ function draw() {
     fill(20, 40, 70, random(10, 40));
     ellipse(px, py, random(1, 2.5), random(1, 2.5));
   }
-
-  // Edge glow where ethanol evaporates
   const profile = GLASS_PROFILES[CONFIG.glassShape];
   const menGy = (meniscusY - cy + glassH * 0.5) / glassH;
   const menWallX = cx + profile(clamp(menGy, 0, 1)) * glassW;
   noStroke();
   fill(25, 50, 75, 15 + Math.sin(frameCount * 0.04) * 8);
   ellipse(menWallX - 6, meniscusY, 14, 10);
-
-  // Update metrics to DOM
   updateMetrics();
 }
 
@@ -609,7 +572,6 @@ function updateMetrics() {
   const ev = evapRate(CONFIG.alcPct, CONFIG.tempC, CONFIG.rhPct).toFixed(3);
   const ds = (surfaceTension(5, CONFIG.tempC) - surfaceTension(CONFIG.alcPct, CONFIG.tempC)).toFixed(2);
   const tc = tears.filter(t => t.phase === 'falling').length;
-
   const elSt = document.getElementById('m-st');
   const elEv = document.getElementById('m-evap');
   const elDs = document.getElementById('m-dsigma');
@@ -640,7 +602,6 @@ function keyPressed() {
   if (key === ' ') CONFIG.paused = !CONFIG.paused;
 }
 
-// === UI Wiring ===
 function setGlass(shape, btn) {
   CONFIG.glassShape = shape;
   document.querySelectorAll('.glass-btn').forEach(b => b.classList.remove('active'));
@@ -655,7 +616,6 @@ function updateSlider(id, key, decimals, suffix) {
   el.addEventListener('input', () => {
     CONFIG[key] = parseFloat(el.value);
     valEl.textContent = parseFloat(el.value).toFixed(decimals) + suffix;
-    // Recolor particles on alc change
     if (key === 'alcPct') {
       for (let p of particles) p.type = random() < (CONFIG.alcPct / 25) ? 'ethanol' : 'wine';
     }
