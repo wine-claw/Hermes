@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Spectrophotometry & Optical Density Simulator</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#070a10; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  canvas { display:block; }
+
+  /* Disclaimer */
+  .disclaimer{ position:fixed; top:0; left:0; right:0; background:linear-gradient(90deg,#1a0f1a,#0f141f); border-bottom:1px solid #3a1a3a; color:#d8a8d8; padding:0.5rem 0.8rem; text-align:center; font-size:0.78rem; z-index:200; }
+  .disclaimer strong{ color:#ff66aa; }
+
+  /* UI Layer */
+  #ui-layer { position:fixed; top:34px; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+  #ui-layer > * { pointer-events:auto; }
+
+  .panel { position:absolute; background:rgba(10,14,22,0.92); border:1px solid #1e2a3a; border-radius:10px; padding:0.85rem 1.0rem; color:#c9d1d9; max-width:min(280px, calc(100vw - 20px)); }
+  .panel h3 { font-size:0.85rem; margin:0 0 0.5rem; color:#58a6ff; text-transform:uppercase; letter-spacing:0.06em; }
+  .panel label { display:block; font-size:0.72rem; color:#8b949e; margin:0.35rem 0 0.15rem; }
+  .panel input[type="range"] { width:100%; margin-bottom:0.15rem; cursor:pointer; accent-color:#58a6ff; }
+  .panel .value { font-size:0.75rem; color:#58a6ff; font-weight:600; text-align:right; display:block; }
+  .panel select { width:100%; padding:0.25rem; font-size:0.75rem; background:#0d1117; color:#c9d1d9; border:1px solid #1e2a3a; border-radius:4px; cursor:pointer; }
+  .panel button { width:100%; margin-top:0.4rem; padding:0.35rem; font-size:0.75rem; background:#1e2a3a; color:#58a6ff; border:1px solid #58a6ff; border-radius:4px; cursor:pointer; }
+  .panel button:hover { background:#58a6ff; color:#fff; }
+
+  .readout { position:absolute; background:rgba(10,14,22,0.92); border:1px solid #1e2a3a; border-radius:10px; padding:0.7rem 1.0rem; color:#c9d1d9; }
+  .readout .row { display:flex; justify-content:space-between; gap:1.5rem; font-size:0.78rem; margin:0.2rem 0; }
+  .readout .label { color:#8b949e; }
+  .readout .val { color:#58a6ff; font-weight:600; font-variant-numeric:tabular-nums; }
+
+  #panel-close { position:absolute; top:38px; right:8px; background:rgba(10,14,22,0.9); border:1px solid #1e2a3a; border-radius:6px; padding:0.25rem 0.55rem; color:#8b949e; font-size:0.7rem; cursor:pointer; pointer-events:auto; z-index:20; }
+  #ui-layer.collapsed .panel,
+  #ui-layer.collapsed .readout,
+  #ui-layer.collapsed #panel-close { display:none; }
+
+  @media (max-width:768px) {
+    body { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    canvas { position:fixed; top:0; left:0; z-index:0; }
+    #ui-layer { position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:40px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; }
+    .panel, .readout { position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:0.6rem 0.85rem; background:rgba(10,14,22,0.78); }
+    #panel-close { position:relative !important; top:auto !important; right:auto !important; margin-bottom:0.4rem; align-self:flex-end; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+
+<div id="ui-layer">
+  <div id="panel-close" onclick="document.getElementById('ui-layer').classList.toggle('collapsed')">✕ Close controls</div>
+
+  <div class="panel" style="top:46px; left:10px;">
+    <h3>Sample</h3>
+    <label>Varietal Preset</label>
+    <select id="sel-varietal" onchange="updateVarietal()">
+      <option value="cabernet">Cabernet Sauvignon</option>
+      <option value="pinotnoir">Pinot Noir</option>
+      <option value="chardonnay">Chardonnay</option>
+      <option value="rose">Rosé — Saignée</option>
+      <option value="custom">Custom Manual</option>
+    </select>
+    <label>Pigment Concentration (AU)</label>
+    <input id="sl-conc" type="range" min="0" max="100" value="55" oninput="updateConfig()">
+    <span class="value" id="val-conc">5.5</span>
+    <label>Path Length (mm)</label>
+    <input id="sl-path" type="range" min="1" max="100" value="10" oninput="updateConfig()">
+    <span class="value" id="val-path">1.0</span>
+    <label>pH</label>
+    <input id="sl-ph" type="range" min="20" max="50" value="36" oninput="updateConfig()">
+    <span class="value" id="val-ph">3.6</span>
+    <label>SO₂ (mg/L)</label>
+    <input id="sl-so2" type="range" min="0" max="200" value="30" oninput="updateConfig()">
+    <span class="value" id="val-so2">30</span>
+  </div>
+
+  <div class="panel" style="top:46px; left:300px;">
+    <h3>Instrument</h3>
+    <label>Wavelength (nm)</label>
+    <input id="sl-wl" type="range" min="380" max="700" value="520" oninput="updateConfig()">
+    <span class="value" id="val-wl">520 nm</span>
+    <label>Scan Speed</label>
+    <input id="sl-speed" type="range" min="0" max="100" value="15" oninput="updateConfig()">
+    <span class="value" id="val-speed">15 nm/s</span>
+    <label>Photons per frame</label>
+    <input id="sl-rate" type="range" min="50" max="800" value="300" oninput="updateConfig()">
+    <span class="value" id="val-rate">300</span>
+    <button onclick="toggleScan()">Auto-Scan Spectrum</button>
+    <button onclick="resetSpectrum()">Clear Spectrum</button>
+  </div>
+
+  <div class="readout" style="top:46px; right:10px;">
+    <div class="row"><span class="label">Absorbance A</span><span class="val" id="abs-A">0.000</span></div>
+    <div class="row"><span class="label">Transmittance T</span><span class="val" id="abs-T">100.0%</span></div>
+    <div class="row"><span class="label">Optical Density</span><span class="val" id="abs-OD">0.000</span></div>
+    <div class="row"><span class="label">Detected photons</span><span class="val" id="abs-photons">0</span></div>
+    <div class="row"><span class="label">Peak λ</span><span class="val" id="abs-peak">—</span></div>
+  </div>
+</div>
+
+<script>
+// === Configuration & Palette ===
+const CONFIG = {
+  varietal: 'cabernet',
+  conc: 55,       // 0-100 scaled to 0-10 AU
+  path: 10,       // 1-100 scaled to 0.1-10 mm
+  ph: 36,         // 2.0-5.0
+  so2: 30,        // 0-200 mg/L
+  wl: 520,        // 380-700 nm
+  scanSpeed: 15,  // nm/s
+  rate: 300       // photons per frame
+};
+
+const PALETTE = {
+  bg: '#070a10',
+  panel: '#0a0e16',
+  accent: '#58a6ff',
+  accent2: '#ff66aa',
+  gold: '#f0c040',
+  grid: 'rgba(30,42,58,0.5)',
+  cuvetteGlass: 'rgba(180,200,220,0.08)',
+  cuvetteGlassEdge: 'rgba(200,220,240,0.25)',
+  wineDark: 'rgba(60,10,40,0.75)',
+  wineLight: 'rgba(120,20,70,0.45)',
+  photonSurvive: '#ffe066',
+  photonAbsorb: '#ff3366',
+  moleculeRed: '#cc2244',
+  moleculeBlue: '#3366cc',
+  moleculeTan: '#8b5a2b'
+};
+
+// === Global State ===
+let photons = [];
+let molecules = [];
+let spectrumData = []; // {wl, A, T}
+let scanDir = 1;
+let scanning = false;
+let detectorCount = 0;
+let detectorBuffer = [];
+let spectrumBuffer;
+
+let cuvetteX, cuvetteW, cuvetteY, cuvetteH;
+let slitX;
+let gratingX;
+let detectorX;
+
+// === Extinction Coefficient Models ===
+// Realistic approximations of wine pigment spectra
+function anthocyaninRed(wl) {
+  // Peak ~520nm, FWHM ~60nm
+  return Math.exp(-Math.pow(wl - 520, 2) / (2 * 35 * 35));
+}
+function anthocyaninBlue(wl) {
+  // Peak ~600nm (blue anthocyanin form at high pH)
+  return Math.exp(-Math.pow(wl - 600, 2) / (2 * 50 * 50));
+}
+function tanninAbs(wl) {
+  // Broad absorption 350-500, tail beyond
+  if (wl < 350) return 0.9;
+  return 0.7 * Math.exp(-(wl - 380) / 80) + 0.15 * Math.exp(-(wl - 520) / 120);
+}
+function so2BleachFactor(so2_mgL) {
+  // Michaelis-like bleaching: saturating effect
+  return 1.0 / (1.0 + so2_mgL / 40.0);
+}
+function phEquilibrium(ph) {
+  // pKa ~3.5 for anthocyanin red/blue equilibrium
+  let ratio = 1.0 / (1.0 + Math.pow(10, -(ph - 3.5)));
+  return ratio; // 1 = fully red, 0 = fully blue
+}
+
+function molarExtinction(wl, ph, so2) {
+  let redFrac = phEquilibrium(ph);
+  let bleach = so2BleachFactor(so2);
+  let e = 0;
+  // Anthocyanin contribution (bleached by SO2)
+  e += redFrac * anthocyaninRed(wl) * bleach;
+  e += (1 - redFrac) * anthocyaninBlue(wl) * bleach;
+  // Tannin contribution (slightly bleached)
+  e += tanninAbs(wl) * (0.6 + 0.4 * bleach);
+  // General wine background
+  e += 0.05 * Math.exp(-(wl - 420) / 200);
+  return Math.max(0, e);
+}
+
+// Beer-Lambert absorbance
+function absorbance(wl, c, l, ph, so2) {
+  let e = molarExtinction(wl, ph, so2);
+  let c_real = c * 0.1; // 0-10 AU scale
+  let l_real = l * 0.1; // 0.1-10 mm scale
+  return e * c_real * l_real;
+}
+
+function transmittance(A) {
+  return Math.pow(10, -A);
+}
+
+function wavelengthToHue(wl) {
+  // Map visible spectrum to hue approx
+  let t = (wl - 380) / (700 - 380);
+  return (1 - t) * 280 + t * 0; // violet->red, HSB hue
+}
+
+function wavelengthToRGB(wl) {
+  let gamma = 0.8;
+  let r=0, g=0, b=0;
+  if (wl >= 380 && wl < 440) { r = -(wl - 440)/(440-380); g = 0; b = 1; }
+  else if (wl >= 440 && wl < 490) { r = 0; g = (wl - 440)/(490-440); b = 1; }
+  else if (wl >= 490 && wl < 510) { r = 0; g = 1; b = -(wl - 510)/(510-490); }
+  else if (wl >= 510 && wl < 580) { r = (wl - 510)/(580-510); g = 1; b = 0; }
+  else if (wl >= 580 && wl < 645) { r = 1; g = -(wl - 645)/(645-580); b = 0; }
+  else if (wl >= 645 && wl <= 780) { r = 1; g = 0; b = 0; }
+  let factor = 1;
+  if (wl >= 380 && wl < 420) factor = 0.3 + 0.7*(wl - 380)/(420-380);
+  if (wl >= 700 && wl <= 780) factor = 0.3 + 0.7*(780 - wl)/(780-700);
+  r = Math.round(255 * Math.pow(r * factor, gamma));
+  g = Math.round(255 * Math.pow(g * factor, gamma));
+  b = Math.round(255 * Math.pow(b * factor, gamma));
+  return [r, g, b];
+}
+
+// === UI Updates ===
+function updateConfig() {
+  CONFIG.conc = +document.getElementById('sl-conc').value;
+  CONFIG.path = +document.getElementById('sl-path').value;
+  CONFIG.ph = +document.getElementById('sl-ph').value;
+  CONFIG.so2 = +document.getElementById('sl-so2').value;
+  CONFIG.wl = +document.getElementById('sl-wl').value;
+  CONFIG.scanSpeed = +document.getElementById('sl-speed').value;
+  CONFIG.rate = +document.getElementById('sl-rate').value;
+
+  document.getElementById('val-conc').textContent = (CONFIG.conc * 0.1).toFixed(1);
+  document.getElementById('val-path').textContent = (CONFIG.path * 0.1).toFixed(1);
+  document.getElementById('val-ph').textContent = (CONFIG.ph * 0.1).toFixed(1);
+  document.getElementById('val-so2').textContent = CONFIG.so2;
+  document.getElementById('val-wl').textContent = CONFIG.wl + ' nm';
+  document.getElementById('val-speed').textContent = CONFIG.scanSpeed + ' nm/s';
+  document.getElementById('val-rate').textContent = CONFIG.rate;
+}
+
+function updateVarietal() {
+  let sel = document.getElementById('sel-varietal').value;
+  CONFIG.varietal = sel;
+  let concSlider = document.getElementById('sl-conc');
+  let phSlider = document.getElementById('sl-ph');
+  let so2Slider = document.getElementById('sl-so2');
+
+  if (sel === 'cabernet') { concSlider.value = 70; phSlider.value = 36; so2Slider.value = 30; }
+  else if (sel === 'pinotnoir') { concSlider.value = 45; phSlider.value = 35; so2Slider.value = 25; }
+  else if (sel === 'chardonnay') { concSlider.value = 8; phSlider.value = 33; so2Slider.value = 35; }
+  else if (sel === 'rose') { concSlider.value = 22; phSlider.value = 34; so2Slider.value = 28; }
+  else if (sel === 'custom') { /* leave as-is */ }
+  updateConfig();
+  resetSpectrum();
+}
+
+function toggleScan() {
+  scanning = !scanning;
+}
+
+function resetSpectrum() {
+  spectrumData = [];
+  detectorBuffer = [];
+}
+
+// === p5.js Sketch ===
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  colorMode(HSB, 360, 100, 100, 100);
+  randomSeed(42);
+  noiseSeed(42);
+
+  // Layout geometry
+  slitX = width * 0.06;
+  cuvetteX = width * 0.22;
+  cuvetteW = width * 0.28;
+  cuvetteY = height * 0.28;
+  cuvetteH = height * 0.35;
+  gratingX = width * 0.58;
+  detectorX = width * 0.85;
+
+  spectrumBuffer = createGraphics(width, height);
+  spectrumBuffer.colorMode(HSB, 360, 100, 100, 100);
+
+  // Initialize molecules in cuvette
+  initMolecules();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  slitX = width * 0.06;
+  cuvetteX = width * 0.22;
+  cuvetteW = width * 0.28;
+  cuvetteY = height * 0.28;
+  cuvetteH = height * 0.35;
+  gratingX = width * 0.58;
+  detectorX = width * 0.85;
+  spectrumBuffer = createGraphics(width, height);
+  spectrumBuffer.colorMode(HSB, 360, 100, 100, 100);
+  initMolecules();
+}
+
+function initMolecules() {
+  molecules = [];
+  let count = Math.floor(80 + CONFIG.conc * 0.8);
+  for (let i = 0; i < count; i++) {
+    molecules.push({
+      x: cuvetteX + random() * cuvetteW,
+      y: cuvetteY + random() * cuvetteH,
+      type: random() < 0.6 ? 'red' : (random() < 0.5 ? 'blue' : 'tan'),
+      size: 3 + random() * 4,
+      phase: random() * TWO_PI,
+      wobble: 0.5 + random() * 1.5
+    });
+  }
+}
+
+function draw() {
+  background(220, 40, 6); // very dark cool blue in HSB
+
+  // Auto-scan
+  if (scanning) {
+    CONFIG.wl += scanDir * CONFIG.scanSpeed * 0.016;
+    if (CONFIG.wl > 700) { CONFIG.wl = 700; scanDir = -1; }
+    if (CONFIG.wl < 380) { CONFIG.wl = 380; scanDir = 1; }
+    document.getElementById('sl-wl').value = Math.round(CONFIG.wl);
+    updateConfig();
+  }
+
+  let wl = CONFIG.wl;
+  let rgb = wavelengthToRGB(wl);
+  let h = wavelengthToHue(wl);
+
+  // === Background instrument aesthetic ===
+  drawGrid();
+  drawCircuitPattern();
+
+  // === Light source slit ===
+  drawLightSource(wl, rgb);
+
+  // === Cuvette ===
+  drawCuvette(wl, rgb);
+
+  // === Molecules ===
+  drawMolecules();
+
+  // === Photon stream ===
+  spawnPhotons();
+  updateAndDrawPhotons(wl, rgb);
+
+  // === Detector ===
+  drawDetector(wl, rgb);
+
+  // === Spectrum plot overlay ===
+  drawSpectrum();
+
+  // === HUD / Labels ===
+  drawHUD(wl, rgb);
+
+  // === Update readouts ===
+  updateReadouts();
+}
+
+function drawGrid() {
+  push();
+  stroke(210, 15, 18);
+  strokeWeight(0.5);
+  for (let x = 0; x < width; x += 40) { line(x, 0, x, height); }
+  for (let y = 0; y < height; y += 40) { line(0, y, width, y); }
+  pop();
+}
+
+function drawCircuitPattern() {
+  push();
+  noFill();
+  stroke(210, 10, 12);
+  strokeWeight(0.8);
+  // Decorative circuit traces
+  beginShape();
+  for (let x = width * 0.02; x < width * 0.18; x += 8) {
+    let y = height * 0.65 + noise(x * 0.01, frameCount * 0.002) * 40;
+    vertex(x, y);
+  }
+  endShape();
+
+  beginShape();
+  for (let x = width * 0.62; x < width * 0.98; x += 8) {
+    let y = height * 0.75 + noise(x * 0.013, 1000 + frameCount * 0.002) * 30;
+    vertex(x, y);
+  }
+  endShape();
+  pop();
+}
+
+function drawLightSource(wl, rgb) {
+  push();
+  // Slit housing
+  noStroke();
+  fill(210, 15, 12);
+  rect(slitX - 20, cuvetteY + cuvetteH * 0.35, 28, cuvetteH * 0.3, 3);
+  // Glowing slit
+  let glow = map(CONFIG.rate, 50, 800, 30, 80);
+  drawingContext.shadowBlur = glow;
+  drawingContext.shadowColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  fill(rgb[0], rgb[1], rgb[2]);
+  rect(slitX, cuvetteY + cuvetteH * 0.4, 4, cuvetteH * 0.2, 2);
+  drawingContext.shadowBlur = 0;
+
+  // Label
+  fill(0, 0, 70);
+  textSize(min(14, width * 0.012));
+  textAlign(CENTER);
+  text("Tungsten\nSource", slitX - 6, cuvetteY + cuvetteH * 0.85);
+  pop();
+}
+
+function drawCuvette(wl, rgb) {
+  push();
+  // Cuvette shadow
+  noStroke();
+  fill(220, 40, 4);
+  rect(cuvetteX + 8, cuvetteY + 8, cuvetteW, cuvetteH, 4);
+
+  // Liquid fill with absorption tint
+  let A = absorbance(wl, CONFIG.conc, CONFIG.path, CONFIG.ph * 0.1, CONFIG.so2);
+  let T = transmittance(A);
+  let liquidAlpha = map(T, 0, 1, 85, 15);
+  let redFrac = phEquilibrium(CONFIG.ph * 0.1);
+  let liqR = lerp(60, 30, redFrac);
+  let liqG = lerp(10, 15, redFrac);
+  let liqB = lerp(50, 70, redFrac);
+
+  fill(liqR, liqG * 2.55, liqB * 2.55, liquidAlpha * 0.6);
+  rect(cuvetteX + 4, cuvetteY + 4, cuvetteW - 8, cuvetteH - 8, 2);
+
+  // Glass body
+  noFill();
+  stroke(200, 10, 35);
+  strokeWeight(2);
+  rect(cuvetteX, cuvetteY, cuvetteW, cuvetteH, 4);
+
+  // Meniscus
+  noFill();
+  stroke(200, 15, 40);
+  strokeWeight(1.5);
+  arc(cuvetteX + cuvetteW / 2, cuvetteY + 4, cuvetteW * 0.7, 10, PI, 0);
+
+  // Reflections
+  stroke(200, 10, 50, 30);
+  strokeWeight(1.5);
+  line(cuvetteX + 6, cuvetteY + 10, cuvetteX + 6, cuvetteY + cuvetteH - 10);
+  line(cuvetteX + cuvetteW - 6, cuvetteY + 10, cuvetteX + cuvetteW - 6, cuvetteY + cuvetteH - 10);
+
+  // Cuvette label
+  fill(0, 0, 65);
+  noStroke();
+  textSize(min(12, width * 0.01));
+  textAlign(CENTER);
+  text("Quartz Cuvette\n" + (CONFIG.path * 0.1).toFixed(1) + " mm", cuvetteX + cuvetteW / 2, cuvetteY + cuvetteH + 22);
+  pop();
+}
+
+function drawMolecules() {
+  push();
+  for (let m of molecules) {
+    let px = m.x + Math.sin(frameCount * 0.02 + m.phase) * m.wobble;
+    let py = m.y + Math.cos(frameCount * 0.015 + m.phase) * m.wobble * 0.6;
+
+    if (m.type === 'red') {
+      fill(PALETTE.moleculeRed);
+      stroke(0, 80, 60);
+    } else if (m.type === 'blue') {
+      fill(PALETTE.moleculeBlue);
+      stroke(220, 80, 60);
+    } else {
+      fill(PALETTE.moleculeTan);
+      stroke(30, 60, 50);
+    }
+    strokeWeight(1);
+    ellipse(px, py, m.size);
+  }
+  pop();
+}
+
+function spawnPhotons() {
+  let count = CONFIG.rate;
+  for (let i = 0; i < count; i++) {
+    photons.push({
+      x: slitX,
+      y: cuvetteY + cuvetteH * 0.4 + random() * cuvetteH * 0.2,
+      vx: 4 + random() * 3,
+      vy: (random() - 0.5) * 1.2,
+      alive: true,
+      absorbed: false,
+      absorbFrame: 0,
+      wl: CONFIG.wl + (random() - 0.5) * 8 // slight spectral spread
+    });
+  }
+}
+
+function updateAndDrawPhotons(wl, rgb) {
+  let A = absorbance(wl, CONFIG.conc, CONFIG.path, CONFIG.ph * 0.1, CONFIG.so2);
+  let T = transmittance(A);
+  // Per-photon survival probability based on Beer-Lambert
+  // We approximate by giving each photon a chance to survive
+  let survivalProb = T;
+
+  push();
+  // Draw as a single POINTS shape for performance
+  // (but we need per-particle absorption logic, so we iterate)
+  for (let i = photons.length - 1; i >= 0; i--) {
+    let p = photons[i];
+    if (!p.alive) {
+      // Absorption flash
+      if (frameCount - p.absorbFrame < 8) {
+        let flashAlpha = map(frameCount - p.absorbFrame, 0, 8, 80, 0);
+        noStroke();
+        fill(340, 90, 95, flashAlpha);
+        ellipse(p.x, p.y, 6 + (frameCount - p.absorbFrame) * 1.5);
+      }
+      photons.splice(i, 1);
+      continue;
+    }
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Check absorption inside cuvette
+    if (!p.absorbed && p.x > cuvetteX && p.x < cuvetteX + cuvetteW &&
+        p.y > cuvetteY && p.y < cuvetteY + cuvetteH) {
+      if (random() > survivalProb) {
+        p.alive = false;
+        p.absorbed = true;
+        p.absorbFrame = frameCount;
+
+        // Find nearest molecule and flash it
+        let nearest = null;
+        let bestD = 9999;
+        for (let m of molecules) {
+          let dx = m.x - p.x;
+          let dy = m.y - p.y;
+          let d = dx*dx + dy*dy;
+          if (d < bestD) { bestD = d; nearest = m; }
+        }
+        if (nearest && bestD < 900) {
+          nearest.flash = frameCount;
+        }
+        continue;
+      }
+    }
+
+    // Boundary bounce (vertical)
+    if (p.y < cuvetteY || p.y > cuvetteY + cuvetteH) {
+      if (p.x > cuvetteX && p.x < cuvetteX + cuvetteW) {
+        p.vy *= -1;
+        p.y = constrain(p.y, cuvetteY + 2, cuvetteY + cuvetteH - 2);
+      }
+    }
+
+    // Detector arrival
+    if (p.x >= detectorX) {
+      detectorCount++;
+      p.alive = false;
+      continue;
+    }
+
+    // Photon trail
+    let pr = rgb[0], pg = rgb[1], pb = rgb[2];
+    // Slight color variation per photon based on its wl
+    let pRGB = wavelengthToRGB(p.wl);
+    stroke(pRGB[0], pRGB[1], pRGB[2], 70);
+    strokeWeight(1.5);
+    point(p.x, p.y);
+  }
+  pop();
+
+  // Flash molecules that absorbed
+  for (let m of molecules) {
+    if (m.flash && frameCount - m.flash < 10) {
+      let fa = map(frameCount - m.flash, 0, 10, 90, 0);
+      noStroke();
+      fill(50, 90, 100, fa);
+      ellipse(m.x, m.y, m.size + 6);
+    }
+  }
+}
+
+function drawDetector(wl, rgb) {
+  push();
+  // Detector housing
+  noStroke();
+  fill(210, 15, 12);
+  rect(detectorX, cuvetteY + cuvetteH * 0.35, 28, cuvetteH * 0.3, 3);
+
+  // Active surface glow proportional to signal
+  let A = absorbance(wl, CONFIG.conc, CONFIG.path, CONFIG.ph * 0.1, CONFIG.so2);
+  let T = transmittance(A);
+  let intensity = Math.pow(T, 0.5); // visual brightness
+
+  drawingContext.shadowBlur = 40 * intensity;
+  drawingContext.shadowColor = `rgb(${Math.round(rgb[0] * intensity)},${Math.round(rgb[1] * intensity)},${Math.round(rgb[2] * intensity)})`;
+  fill(rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity);
+  rect(detectorX + 4, cuvetteY + cuvetteH * 0.4, 8, cuvetteH * 0.2, 2);
+  drawingContext.shadowBlur = 0;
+
+  // Label
+  fill(0, 0, 70);
+  textSize(min(14, width * 0.012));
+  textAlign(CENTER);
+  text("Photodiode\nArray", detectorX + 14, cuvetteY + cuvetteH * 0.85);
+
+  // Signal bar
+  let barH = map(intensity, 0, 1, 0, cuvetteH * 0.25);
+  fill(intensity > 0.5 ? 120 : 0, intensity * 80, 90);
+  rect(detectorX + 34, cuvetteY + cuvetteH * 0.65 - barH, 6, barH, 2);
+  pop();
+}
+
+function drawSpectrum() {
+  // Add current point to spectrum data
+  if (frameCount % 3 === 0) {
+    let wl = CONFIG.wl;
+    let A = absorbance(wl, CONFIG.conc, CONFIG.path, CONFIG.ph * 0.1, CONFIG.so2);
+    let T = transmittance(A);
+    // Update or append
+    let existing = spectrumData.find(d => Math.abs(d.wl - wl) < 2);
+    if (existing) {
+      existing.A = existing.A * 0.85 + A * 0.15;
+      existing.T = existing.T * 0.85 + T * 0.15;
+    } else {
+      spectrumData.push({wl: wl, A: A, T: T});
+      spectrumData.sort((a,b) => a.wl - b.wl);
+    }
+  }
+
+  if (spectrumData.length < 2) return;
+
+  push();
+  // Plot background
+  let px = width * 0.05;
+  let py = height * 0.72;
+  let pw = width * 0.42;
+  let ph = height * 0.24;
+
+  noStroke();
+  fill(220, 30, 8);
+  rect(px, py, pw, ph, 6);
+  // Border
+  stroke(210, 15, 18);
+  strokeWeight(1);
+  noFill();
+  rect(px, py, pw, ph, 6);
+
+  // Grid lines
+  stroke(210, 10, 15);
+  strokeWeight(0.5);
+  for (let i = 0; i <= 5; i++) {
+    let gx = px + (pw / 5) * i;
+    line(gx, py, gx, py + ph);
+  }
+  for (let i = 0; i <= 4; i++) {
+    let gy = py + (ph / 4) * i;
+    line(px, gy, px + pw, gy);
+  }
+
+  // Wavelength color bar beneath plot
+  noStroke();
+  let barY = py + ph + 8;
+  let barH2 = 10;
+  for (let wx = 0; wx < pw; wx += 2) {
+    let w = map(wx, 0, pw, 380, 700);
+    let c = wavelengthToRGB(w);
+    fill(c[0], c[1], c[2]);
+    rect(px + wx, barY, 2, barH2);
+  }
+
+  // Axes labels
+  fill(0, 0, 70);
+  noStroke();
+  textSize(min(11, width * 0.009));
+  textAlign(CENTER);
+  for (let i = 0; i <= 5; i++) {
+    let w = 380 + (700 - 380) * (i / 5);
+    let gx = px + (pw / 5) * i;
+    text(Math.round(w) + "nm", gx, barY + barH2 + 14);
+  }
+
+  // Y-axis absorbance labels (0-3)
+  textAlign(RIGHT);
+  for (let i = 0; i <= 4; i++) {
+    let val = 3 * (1 - i / 4);
+    let gy = py + (ph / 4) * i;
+    text(val.toFixed(1), px - 6, gy + 4);
+  }
+
+  // Plot absorbance line (colored by wavelength)
+  noFill();
+  strokeWeight(2);
+  beginShape();
+  for (let i = 0; i < spectrumData.length; i++) {
+    let d = spectrumData[i];
+    let sx = map(d.wl, 380, 700, px + 4, px + pw - 4);
+    let sy = map(d.A, 0, 3, py + ph - 4, py + 4);
+    let c = wavelengthToRGB(d.wl);
+    stroke(c[0], c[1], c[2]);
+    vertex(sx, constrain(sy, py + 4, py + ph - 4));
+  }
+  endShape();
+
+  // Title
+  fill(0, 0, 85);
+  textAlign(LEFT);
+  textSize(min(13, width * 0.011));
+  text("Absorbance Spectrum (Beer-Lambert)", px + 8, py - 8);
+
+  // Current wavelength indicator line
+  let cx = map(CONFIG.wl, 380, 700, px + 4, px + pw - 4);
+  stroke(0, 0, 90, 60);
+  strokeWeight(1);
+  drawingContext.setLineDash([4, 4]);
+  line(cx, py, cx, py + ph);
+  drawingContext.setLineDash([]);
+
+  // Second plot: Transmittance (small, top right)
+  let px2 = width * 0.53;
+  let py2 = height * 0.72;
+  let pw2 = width * 0.42;
+  let ph2 = height * 0.24;
+
+  noStroke();
+  fill(220, 30, 8);
+  rect(px2, py2, pw2, ph2, 6);
+  stroke(210, 15, 18);
+  strokeWeight(1);
+  noFill();
+  rect(px2, py2, pw2, ph2, 6);
+
+  // Grid
+  stroke(210, 10, 15);
+  strokeWeight(0.5);
+  for (let i = 0; i <= 5; i++) {
+    line(px2 + (pw2/5)*i, py2, px2 + (pw2/5)*i, py2 + ph2);
+  }
+  for (let i = 0; i <= 4; i++) {
+    line(px2, py2 + (ph2/4)*i, px2 + pw2, py2 + (ph2/4)*i);
+  }
+
+  // Color bar
+  noStroke();
+  for (let wx = 0; wx < pw2; wx += 2) {
+    let w = map(wx, 0, pw2, 380, 700);
+    let c = wavelengthToRGB(w);
+    fill(c[0], c[1], c[2]);
+    rect(px2 + wx, py2 + ph2 + 8, 2, 10);
+  }
+
+  // Transmittance curve
+  noFill();
+  strokeWeight(2);
+  beginShape();
+  for (let i = 0; i < spectrumData.length; i++) {
+    let d = spectrumData[i];
+    let sx = map(d.wl, 380, 700, px2 + 4, px2 + pw2 - 4);
+    let sy = map(d.T, 0, 1, py2 + ph2 - 4, py2 + 4);
+    let c = wavelengthToRGB(d.wl);
+    stroke(c[0], c[1], c[2]);
+    vertex(sx, constrain(sy, py2 + 4, py2 + ph2 - 4));
+  }
+  endShape();
+
+  // Labels
+  fill(0, 0, 70);
+  noStroke();
+  textSize(min(11, width * 0.009));
+  textAlign(CENTER);
+  for (let i = 0; i <= 5; i++) {
+    let w = 380 + (700 - 380) * (i / 5);
+    text(Math.round(w) + "nm", px2 + (pw2/5)*i, py2 + ph2 + 22);
+  }
+  textAlign(RIGHT);
+  for (let i = 0; i <= 4; i++) {
+    let val = 1 - (i / 4);
+    text(val.toFixed(1), px2 - 6, py2 + (ph2/4)*i + 4);
+  }
+
+  fill(0, 0, 85);
+  textAlign(LEFT);
+  textSize(min(13, width * 0.011));
+  text("Transmittance / Transmission (%)", px2 + 8, py2 - 8);
+
+  // Current wavelength indicator
+  let cx2 = map(CONFIG.wl, 380, 700, px2 + 4, px2 + pw2 - 4);
+  stroke(0, 0, 90, 60);
+  strokeWeight(1);
+  drawingContext.setLineDash([4, 4]);
+  line(cx2, py2, cx2, py2 + ph2);
+  drawingContext.setLineDash([]);
+  pop();
+
+  // Color preview box (top center between plots)
+  push();
+  let boxX = width * 0.47;
+  let boxY = height * 0.72;
+  let boxW = width * 0.06;
+  let boxH = height * 0.12;
+  noStroke();
+  fill(rgb[0], rgb[1], rgb[2]);
+  rect(boxX, boxY, boxW, boxH, 4);
+  stroke(0, 0, 60);
+  strokeWeight(1);
+  noFill();
+  rect(boxX, boxY, boxW, boxH, 4);
+  fill(0, 0, 80);
+  textAlign(CENTER);
+  textSize(min(11, width * 0.009));
+  text("Color", boxX + boxW/2, boxY + boxH + 14);
+  text(CONFIG.wl + "nm", boxX + boxW/2, boxY + boxH + 26);
+  pop();
+}
+
+function drawHUD(wl, rgb) {
+  push();
+  // Scanning indicator
+  if (scanning) {
+    fill(0, 80, 95);
+    textAlign(LEFT);
+    textSize(min(14, width * 0.012));
+    text("▶ AUTO-SCANNING", width * 0.02, height * 0.95);
+  }
+
+  // Beer-Lambert equation annotation
+  fill(0, 0, 60);
+  textAlign(LEFT);
+  textSize(min(12, width * 0.01));
+  text("Beer-Lambert: A = ε × c × l", width * 0.02, height * 0.98);
+  pop();
+}
+
+function updateReadouts() {
+  let c = CONFIG.conc * 0.1;
+  let l = CONFIG.path * 0.1;
+  let ph = CONFIG.ph * 0.1;
+  let A = absorbance(CONFIG.wl, CONFIG.conc, CONFIG.path, ph, CONFIG.so2);
+  let T = transmittance(A);
+
+  document.getElementById('abs-A').textContent = A.toFixed(3);
+  document.getElementById('abs-T').textContent = (T * 100).toFixed(1) + '%';
+  document.getElementById('abs-OD').textContent = A.toFixed(3);
+  document.getElementById('abs-photons').textContent = detectorCount;
+
+  let peakWL = '—';
+  if (spectrumData.length > 5) {
+    let peak = spectrumData.reduce((a,b) => a.A > b.A ? a : b);
+    peakWL = Math.round(peak.wl) + ' nm (A=' + peak.A.toFixed(2) + ')';
+  }
+  document.getElementById('abs-peak').textContent = peakWL;
+}
+
+// Init JS-side config mirror
+updateConfig();
+</script>
+</body>
+</html>
