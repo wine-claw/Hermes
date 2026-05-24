@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Swirl Dynamics — Aeration, Waves & Legs</title>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#08080c; color:#e8d5b7; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #c { display:block; position:absolute; top:0; left:0; z-index:0; }
+  .disclaimer { position:fixed; top:0; left:0; right:0; z-index:10; background:rgba(90,30,30,0.92); border-bottom:1px solid #7a2a2a; color:#e8d5b7; font-size:0.82rem; text-align:center; padding:0.45rem 1rem; pointer-events:none; }
+  .disclaimer strong { font-weight:700; }
+  #ui-layer { position:absolute; top:36px; left:0; right:0; bottom:0; pointer-events:none; z-index:5; }
+  #ui-layer > * { pointer-events:auto; }
+  .panel { position:absolute; background:rgba(16,14,22,0.92); border:1px solid #2a2236; border-radius:10px; padding:0.9rem 1.1rem; max-width:min(260px, calc(100vw - 20px)); backdrop-filter: blur(6px); }
+  .panel h3 { font-size:0.9rem; margin:0 0 0.6rem; color:#c9a86c; text-transform:uppercase; letter-spacing:0.08em; }
+  .control { margin-bottom:0.65rem; }
+  .control label { display:block; font-size:0.78rem; color:#9e8fb2; margin-bottom:0.15rem; }
+  .control input[type=range] { width:100%; accent-color:#a86b56; cursor:pointer; }
+  .control .val { font-size:0.75rem; color:#d3c6a6; float:right; }
+  .badge { display:inline-block; font-size:0.65rem; padding:0.12rem 0.4rem; border-radius:4px; background:#2e1e1e; color:#c9a86c; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; }
+  #panel-top-right { top:12px; right:12px; }
+  #panel-bottom-left { bottom:16px; left:12px; }
+  #panel-bottom-right { bottom:16px; right:12px; }
+  @media (max-width: 768px) {
+    body { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    #c { position:fixed; top:0; left:0; }
+    #ui-layer { position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:44px 8px 20px; display:flex; flex-direction:column; gap:8px; }
+    .panel { position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<canvas id="c"></canvas>
+<div id="ui-layer">
+  <div class="panel" id="panel-top-right">
+    <h3>Live Telemetry</h3>
+    <div class="control"><span class="badge" id="stateBadge">Settled</span></div>
+    <div class="control"><label>O₂ Dissolved</label><span class="val" id="oxyVal">0.0 mg/L</span></div>
+    <div class="control"><label>Surface Speed</label><span class="val" id="speedVal">0 cm/s</span></div>
+    <div class="control"><label>Aromatic Flux</label><span class="val" id="aromaVal">0 μg/s</span></div>
+    <div class="control"><label>Leg Flow Rate</label><span class="val" id="legVal">0 mL/h</span></div>
+  </div>
+  <div class="panel" id="panel-bottom-left">
+    <h3>Simulation Controls</h3>
+    <div class="control">
+      <label>Swirl Energy <span class="val" id="lblEnergy">60%</span></label>
+      <input type="range" id="inpEnergy" min="10" max="100" value="60">
+    </div>
+    <div class="control">
+      <label>Alcohol % <span class="val" id="lblEtOH">13.5%</span></label>
+      <input type="range" id="inpEtOH" min="10" max="16" step="0.1" value="13.5">
+    </div>
+    <div class="control">
+      <label>Temperature <span class="val" id="lblTemp">18°C</span></label>
+      <input type="range" id="inpTemp" min="8" max="28" value="18">
+    </div>
+    <div class="control">
+      <label>Wine Viscosity <span class="val" id="lblVisc">1.2 cP</span></label>
+      <input type="range" id="inpVisc" min="0.8" max="2.5" step="0.1" value="1.2">
+    </div>
+    <div class="control">
+      <label>Glass Fill % <span class="val" id="lblFill">35%</span></label>
+      <input type="range" id="inpFill" min="15" max="60" value="35">
+    </div>
+    <div class="control">
+      <label><input type="checkbox" id="chkLegs" checked style="accent-color:#a86b56;"> Show Wine Legs</label>
+      <label style="margin-top:0.25rem;display:block;"><input type="checkbox" id="chkAroma" checked style="accent-color:#a86b56;"> Aromatic Release</label>
+    </div>
+  </div>
+  <div class="panel" id="panel-bottom-right">
+    <h3>Actions</h3>
+    <div class="control"><label>Drag to swirl • Press S to save PNG • R to randomise</label></div>
+  </div>
+</div>
+<script>
+/* ============================================================
+   WINE SWIRL DYNAMICS — Interactive Canvas 2D Simulation
+   Topics: fluid wave physics, oxygen dissolution, aromatic
+   volatilisation, wine-leg (tear) formation via Marangoni flow.
+   ============================================================ */
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, DPR;
+
+// Glass geometry
+let glassW, glassH, bowlCX, bowlCY, bowlR, rimW, rimY, waterLevel;
+
+// Simulation state
+let swirlAngle = 0;
+let swirlSpeed = 0;
+let swirlEnergy = 0.6;
+let fillRatio = 0.35;
+let etOH = 0.135;
+let tempC = 18;
+let viscosity = 1.2;
+let showLegs = true;
+let showAroma = true;
+let baseHue = 355;
+let wineColor = 'hsla(355,78%,38%,0.92)'; // will be updated
+let glowColor = 'hsla(1,40%,65%,0.25)';
+
+// Entities
+let bubbles = [];
+let legs = [];
+let aromas = [];
+let wavePts = [];
+const N_WAVE = 200;
+
+// Mouse / touch tracking
+let mouseHistory = [];
+let isPointerDown = false;
+let pointerX = 0, pointerY = 0;
+
+// Offscreen layers
+let wineC, wineCtx, glassC, glassCtx, aromaC, aromaCtx;
+
+function hsla(h,s,l,a){ return 'hsla('+h+','+s+'%,'+l+'%,'+a+')'; }
+function hsl(h,s,l){ return 'hsl('+h+','+s+'%,'+l+'%)'; }
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  initGlassGeometry();
+
+  wineC = document.createElement('canvas');
+  wineC.width = W; wineC.height = H; wineCtx = wineC.getContext('2d');
+  glassC = document.createElement('canvas');
+  glassC.width = W; glassC.height = H; glassCtx = glassC.getContext('2d');
+  aromaC = document.createElement('canvas');
+  aromaC.width = W; aromaC.height = H; aromaCtx = aromaC.getContext('2d');
+
+  drawGlassStatic();
+}
+
+function initGlassGeometry(){
+  glassW = Math.min(W*0.55, 500);
+  glassH = Math.min(H*0.75, 650);
+  bowlCX = W/2;
+  bowlCY = H/2 + glassH*0.12;
+  bowlR = glassW*0.42;
+  rimW = glassW*0.44;
+  rimY = -bowlR*0.85;
+  waterLevel = bowlCY - fillRatio * bowlR * 0.6;
+}
+
+function drawGlassStatic(){
+  let g = glassCtx;
+  g.clearRect(0,0,W,H);
+  let stemH = glassH*0.40;
+  let stemW = glassW*0.025;
+  let footW = glassW*0.35;
+
+  g.save();
+  g.translate(bowlCX, bowlCY);
+  // Bowl body
+  g.beginPath();
+  g.ellipse(0, 0, rimW, Math.abs(rimY), 0, 0, Math.PI*2);
+  g.fillStyle = 'hsla(0,0%,100%,0.03)';
+  g.fill();
+
+  // Rim arc
+  g.beginPath();
+  g.ellipse(0, rimY, rimW*1.02, 4, 0, Math.PI, Math.PI*2);
+  g.strokeStyle = 'hsla(0,0%,100%,0.12)';
+  g.lineWidth = 2;
+  g.stroke();
+
+  // Left wall line
+  g.beginPath();
+  g.moveTo(-rimW*0.96, rimY*0.45);
+  g.quadraticCurveTo(-rimW*0.85, rimY*0.15, -rimW*0.92, -rimY*0.10);
+  g.strokeStyle = 'hsla(0,0%,100%,0.06)';
+  g.lineWidth = 1.5;
+  g.stroke();
+  // Right wall line
+  g.beginPath();
+  g.moveTo(rimW*0.96, rimY*0.45);
+  g.quadraticCurveTo(rimW*0.85, rimY*0.15, rimW*0.92, -rimY*0.10);
+  g.strokeStyle = 'hsla(0,0%,100%,0.06)';
+  g.stroke();
+
+  // Stem
+  g.beginPath();
+  g.moveTo(-stemW*0.3, rimY*0.5);
+  g.lineTo(-stemW*0.3, stemH);
+  g.moveTo(stemW*0.3, rimY*0.5);
+  g.lineTo(stemW*0.3, stemH);
+  g.strokeStyle = 'hsla(0,0%,100%,0.08)';
+  g.lineWidth = 2;
+  g.stroke();
+
+  // Foot
+  g.beginPath();
+  g.ellipse(0, stemH+6, footW, 5, 0, 0, Math.PI*2);
+  g.fillStyle = 'hsla(0,0%,100%,0.04)';
+  g.fill();
+  g.restore();
+}
+
+function initWave(){
+  wavePts = [];
+  for(let i=0;i<N_WAVE;i++){
+    wavePts.push({ t:(Math.PI*2*i)/N_WAVE, amp:0, vel:0 });
+  }
+}
+
+function updateWave(){
+  let swirlForce = swirlSpeed*0.0015;
+  let damping = 0.94 - (viscosity-0.8)*0.02;
+  for(let i=0;i<N_WAVE;i++){
+    let pt = wavePts[i];
+    let drive = swirlForce * Math.cos(pt.t - swirlAngle);
+    let left = wavePts[(i-1+N_WAVE)%N_WAVE];
+    let right = wavePts[(i+1)%N_WAVE];
+    let laplacian = (left.amp + right.amp - 2*pt.amp)*0.5;
+    pt.vel += drive + laplacian*0.018;
+    pt.vel *= damping;
+    pt.amp += pt.vel;
+    if(pt.amp>18){ pt.amp=18; pt.vel*=-0.4; }
+    if(pt.amp<-18){ pt.amp=-18; pt.vel*=-0.4; }
+  }
+}
+
+function getSurfaceXY(i, altT){
+  let t = altT!==undefined ? altT : wavePts[i].t;
+  let rx = rimW * Math.cos(t) * (0.9 + 0.1*Math.abs(Math.sin(t)));
+  let ry = rimY * Math.sin(t) + wavePts[i].amp;
+  return { x: bowlCX+rx, y: bowlCY+ry };
+}
+
+function spawnBubble(){
+  if(Math.random() > 0.12*swirlSpeed*swirlEnergy + 0.0005*tempC) return;
+  let t = Math.random()*Math.PI*2;
+  let i = Math.floor((t/(Math.PI*2))*N_WAVE)%N_WAVE;
+  let pos = getSurfaceXY(i, t);
+  bubbles.push({
+    x:pos.x, y:pos.y,
+    vx:(Math.random()-0.5)*0.6,
+    vy:-Math.random()*1.2-0.3,
+    life:1.0,
+    decay:0.008+Math.random()*0.012,
+    size:1.5+Math.random()*2.5,
+    hue:30+Math.random()*20
+  });
+}
+
+function updateBubbles(){
+  for(let i=bubbles.length-1;i>=0;i--){
+    let b=bubbles[i];
+    b.x += b.vx + swirlSpeed*0.008*(b.y-waterLevel)*Math.sign(b.x-bowlCX);
+    b.y += b.vy;
+    b.life -= b.decay;
+    if(b.life<=0 || b.y < bowlCY+rimY-20) bubbles.splice(i,1);
+  }
+}
+
+function spawnAroma(){
+  if(!showAroma) return;
+  if(Math.random() > 0.35*swirlSpeed + 0.003*(tempC-8)) return;
+  let t = Math.random()*Math.PI*2;
+  let i = Math.floor((t/(Math.PI*2))*N_WAVE)%N_WAVE;
+  let pos = getSurfaceXY(i, t);
+  aromas.push({
+    x:pos.x+(Math.random()-0.5)*40,
+    y:pos.y,
+    vx:(Math.random()-0.5)*0.4,
+    vy:-0.4-Math.random()*0.8-(tempC-12)*0.04,
+    life:1.0,
+    decay:0.003+Math.random()*0.004,
+    size:2+Math.random()*3.5,
+    hue:[50,100,180,270,30][Math.floor(Math.random()*5)]
+  });
+}
+
+function updateAromas(){
+  for(let i=aromas.length-1;i>=0;i--){
+    let a=aromas[i];
+    a.x += a.vx + Math.sin(perfNow*0.002+a.y*0.05)*0.25;
+    a.y += a.vy;
+    a.life -= a.decay;
+    if(a.life<=0 || a.y < -H*0.05) aromas.splice(i,1);
+  }
+}
+
+let perfNow = 0;
+
+function updateLegs(){
+  if(!showLegs){ legs=[]; return; }
+  if(swirlSpeed>6 && Math.random()<0.08*etOH*10){
+    let t = Math.random()*Math.PI*2;
+    let theta = t - Math.PI/2;
+    if(Math.abs(theta)<1.2){
+      legs.push({ t:t, phase:0, climbProgress:0, beadSize:0, y:0, drift:(Math.random()-0.5)*0.4, life:1 });
+    }
+  }
+  for(let i=legs.length-1;i>=0;i--){
+    let l = legs[i];
+    let climbSpeed = (0.2+etOH*2.5)/viscosity;
+    if(l.phase===0){
+      l.climbProgress += climbSpeed;
+      l.y = l.climbProgress*20;
+      if(l.climbProgress>1+Math.random()*0.8) l.phase=1;
+    } else if(l.phase===1){
+      l.beadSize += 0.6;
+      if(l.beadSize>5+etOH*30) l.phase=2;
+    } else if(l.phase===2){
+      l.y -= (1.5+l.beadSize*0.15)/viscosity;
+      if(l.y<=0) legs.splice(i,1);
+      else l.t += l.drift*0.01;
+    }
+  }
+  if(legs.length>120) legs.splice(0, legs.length-120);
+}
+
+function drawWineBody(){
+  let w = wineCtx;
+  w.clearRect(0,0,W,H);
+  // Wine polygon
+  w.beginPath();
+  for(let i=0;i<=N_WAVE;i++){
+    let idx = (i===N_WAVE)?0:i;
+    let pt = wavePts[idx];
+    let t = pt.t;
+    let rx = rimW * Math.cos(t) * (0.9 + 0.1*Math.abs(Math.sin(t)));
+    let ry = rimY * Math.sin(t) + pt.amp;
+    if(i===0) w.moveTo(bowlCX+rx, bowlCY+ry);
+    else w.lineTo(bowlCX+rx, bowlCY+ry);
+  }
+  w.lineTo(bowlCX, bowlCY+Math.abs(rimY)+20);
+  w.closePath();
+  w.fillStyle = wineColor;
+  w.fill();
+  // Subtle inner gradient overlay (simulate volume shading)
+  w.save();
+  w.globalCompositeOperation = 'source-atop';
+  let grd = w.createRadialGradient(bowlCX, bowlCY, bowlR*0.15, bowlCX, bowlCY, bowlR*1.1);
+  grd.addColorStop(0, 'hsla(355,70%,55%,0.25)');
+  grd.addColorStop(1, 'hsla(355,70%,15%,0.55)');
+  w.fillStyle = grd;
+  w.fillRect(0,0,W,H);
+  w.restore();
+}
+
+function drawBackgroundGlow(){
+  let g = ctx.createRadialGradient(bowlCX, bowlCY+rimY*0.35, bowlR*0.4, bowlCX, bowlCY+rimY*0.35, bowlR*1.4);
+  g.addColorStop(0, 'hsla(1,35%,25%,0.18)');
+  g.addColorStop(1, 'hsla(1,35%,8%,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+}
+
+function drawSurfaceHighlight(){
+  ctx.beginPath();
+  for(let i=0;i<=N_WAVE;i++){
+    let idx=(i===N_WAVE)?0:i;
+    let pt=wavePts[idx];
+    let t=pt.t;
+    let rx=rimW*Math.cos(t)*(0.9+0.1*Math.abs(Math.sin(t)));
+    let ry=rimY*Math.sin(t)+pt.amp-1;
+    if(i===0) ctx.moveTo(bowlCX+rx, bowlCY+ry);
+    else ctx.lineTo(bowlCX+rx, bowlCY+ry);
+  }
+  ctx.strokeStyle='hsla(0,0%,100%,0.12)';
+  ctx.lineWidth=2;
+  ctx.stroke();
+}
+
+function drawLegsOnMain(){
+  if(!showLegs || swirlSpeed<=1.0) return;
+  for(let l of legs){
+    let wallX = bowlCX + rimW*Math.cos(l.t)*(0.9+0.1*Math.abs(Math.sin(l.t)));
+    let wallY = bowlCY + rimY*Math.sin(l.t);
+    let yOff = l.y;
+    if(l.phase<2){
+      let alpha = Math.max(0, Math.min(1, 1 - yOff/40));
+      ctx.beginPath();
+      ctx.moveTo(wallX, wallY);
+      ctx.lineTo(wallX + l.drift*yOff, wallY - yOff);
+      ctx.strokeStyle = 'hsla('+baseHue+',50%,50%,'+(0.10*alpha)+')';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    if(l.phase>=1){
+      let a = Math.max(0, Math.min(1, l.beadSize/10));
+      ctx.beginPath();
+      ctx.ellipse(wallX + l.drift*l.y, wallY - l.y, l.beadSize, l.beadSize*0.9, 0, 0, Math.PI*2);
+      ctx.fillStyle = 'hsla('+baseHue+',30%,75%,'+(0.35+0.45*a)+')';
+      ctx.fill();
+    }
+    if(l.phase===2){
+      ctx.beginPath();
+      ctx.ellipse(wallX, wallY-l.y+6, 2.5, 5, 0, 0, Math.PI*2);
+      ctx.fillStyle = 'hsla('+baseHue+',20%,80%,0.25)';
+      ctx.fill();
+    }
+  }
+}
+
+function drawBubblesOnMain(){
+  for(let b of bubbles){
+    ctx.beginPath();
+    ctx.ellipse(b.x, b.y, b.size, b.size*1.1, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'hsla('+b.hue+',22%,88%,'+(b.life*0.30)+')';
+    ctx.fill();
+    // glint
+    ctx.beginPath();
+    ctx.ellipse(b.x-b.size*0.25, b.y-b.size*0.25, b.size*0.5, b.size*0.5, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'hsla(0,0%,100%,'+(b.life*0.35)+')';
+    ctx.fill();
+  }
+}
+
+function drawAromasLayer(){
+  let a = aromaCtx;
+  a.clearRect(0,0,W,H);
+  for(let x of aromas){
+    a.beginPath();
+    a.ellipse(x.x, x.y, x.size, x.size*1.2, 0, 0, Math.PI*2);
+    a.fillStyle = 'hsla('+x.hue+',65%,85%,'+(x.life*0.18)+')';
+    a.fill();
+  }
+}
+
+function drawCaustics(){
+  for(let i=0;i<6;i++){
+    let t = (perfNow*0.008 + i*1.1) % (Math.PI*2);
+    let cx = bowlCX + Math.cos(t)*bowlR*0.25;
+    let cy = waterLevel + 15 + Math.sin(perfNow*0.01 + i*2)*8;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 60+Math.sin(perfNow*0.015)*20, 14, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'hsla('+((baseHue+8)%360)+',40%,60%,0.08)';
+    ctx.fill();
+  }
+}
+
+function drawVignette(){
+  let r = Math.min(W,H)*0.65;
+  let maxR = Math.max(W,H);
+  for(let i=r;i<maxR;i+=18){
+    let a = (i-r)/(maxR-r);
+    ctx.fillStyle = 'hsla(250,28%,4%,'+(a*0.35)+')';
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+function updateDOM(){
+  let dissolvedO2 = (swirlSpeed*0.12 + tempC*0.015).toFixed(1);
+  let surfSpeed = (swirlSpeed*8).toFixed(0);
+  let aromaticFlux = (swirlSpeed*0.4 + (tempC-8)*0.5).toFixed(1);
+  let legRate = (showLegs && swirlSpeed>2 ? etOH*3.2*swirlSpeed : 0).toFixed(1);
+  document.getElementById('oxyVal').textContent = dissolvedO2 + ' mg/L';
+  document.getElementById('speedVal').textContent = surfSpeed + ' cm/s';
+  document.getElementById('aromaVal').textContent = aromaticFlux + ' μg/s';
+  document.getElementById('legVal').textContent = legRate + ' mL/h';
+  let badge = document.getElementById('stateBadge');
+  if(swirlSpeed>2){ badge.textContent='Swirling'; badge.style.background='#2e1e1e'; badge.style.color='#c9a86c'; }
+  else if(tempC>22){ badge.textContent='Warm'; badge.style.background='#2e1e1e'; badge.style.color='#e8a0a0'; }
+  else if(tempC<12){ badge.textContent='Chilled'; badge.style.background='#1e222e'; badge.style.color='#a0c8e8'; }
+  else { badge.textContent='Settled'; badge.style.background='#1e2e1e'; badge.style.color='#86c586'; }
+}
+
+function onPointerDown(e){ isPointerDown=true; addPointer(e); }
+function onPointerMove(e){ pointerX=e.clientX; pointerY=e.clientY; if(isPointerDown) addPointer(e); }
+function onPointerUp(){ isPointerDown=false; mouseHistory=[]; }
+function addPointer(e){
+  mouseHistory.push({x:e.clientX, y:e.clientY, t:performance.now()});
+  if(mouseHistory.length>12) mouseHistory.shift();
+}
+
+function loop(now){
+  perfNow = now;
+  // Compute swirl
+  swirlSpeed = 0;
+  if(mouseHistory.length>=2){
+    let last=mouseHistory[mouseHistory.length-1];
+    let first=mouseHistory[0];
+    let a1=Math.atan2(first.y-bowlCY, first.x-bowlCX);
+    let a2=Math.atan2(last.y-bowlCY, last.x-bowlCX);
+    let da=a2-a1;
+    while(da>Math.PI) da-=Math.PI*2;
+    while(da<-Math.PI) da+=Math.PI*2;
+    let dt=Math.max(1, last.t-first.t);
+    swirlSpeed = Math.abs(da*1000/dt)*60*swirlEnergy;
+    swirlAngle += da*0.5;
+  }
+  swirlAngle += 0.005*swirlEnergy;
+  swirlSpeed = Math.max(0, swirlSpeed-0.05);
+
+  updateWave();
+
+  // ===== Render main canvas =====
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#08080c';
+  ctx.fillRect(0,0,W,H);
+  drawBackgroundGlow();
+
+  // Wine body
+  drawWineBody();
+  ctx.drawImage(wineC,0,0);
+
+  // Caustics
+  drawCaustics();
+
+  // Surface highlight
+  drawSurfaceHighlight();
+
+  // Glass silhouette
+  ctx.drawImage(glassC,0,0);
+
+  // Legs
+  drawLegsOnMain();
+
+  // Bubbles
+  spawnBubble();
+  updateBubbles();
+  drawBubblesOnMain();
+
+  // Aromas
+  spawnAroma();
+  updateAromas();
+  drawAromasLayer();
+  ctx.drawImage(aromaC,0,0);
+
+  // Vignette
+  drawVignette();
+
+  // Telemetry
+  updateDOM();
+
+  requestAnimationFrame(loop);
+}
+
+// Input bindings
+function bindDOM(){
+  const set = (id,fn)=>{ let el=document.getElementById(id); if(el) el.oninput=fn; };
+  set('inpEnergy', e=>{ swirlEnergy=parseInt(e.target.value)/100; document.getElementById('lblEnergy').textContent=e.target.value+'%'; });
+  set('inpEtOH', e=>{ etOH=parseFloat(e.target.value)/100; document.getElementById('lblEtOH').textContent=e.target.value+'%'; wineColor=hsla(baseHue,78,48,0.92); });
+  set('inpTemp', e=>{ tempC=parseInt(e.target.value); document.getElementById('lblTemp').textContent=tempC+'°C'; });
+  set('inpVisc', e=>{ viscosity=parseFloat(e.target.value); document.getElementById('lblVisc').textContent=viscosity.toFixed(1)+' cP'; });
+  set('inpFill', e=>{ fillRatio=parseInt(e.target.value)/100; document.getElementById('lblFill').textContent=e.target.value+'%'; initGlassGeometry(); resize(); });
+  set('chkLegs', e=>showLegs=e.target.checked);
+  set('chkAroma', e=>showAroma=e.target.checked);
+}
+
+window.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerup', onPointerUp);
+window.addEventListener('resize', ()=>{ resize(); });
+
+window.addEventListener('keydown', e=>{
+  if(e.key==='s'||e.key==='S'){
+    let a=document.createElement('a');
+    a.href=canvas.toDataURL('image/png');
+    a.download='wine-swirl-dynamics.png';
+    a.click();
+  }
+  if(e.key==='r'||e.key==='R'){
+    baseHue = Math.floor(Math.random()*360);
+    wineColor = hsla(baseHue,78,48,0.92);
+  }
+});
+
+resize();
+initWave();
+bindDOM();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

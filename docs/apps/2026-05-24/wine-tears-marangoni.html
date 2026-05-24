@@ -52,9 +52,15 @@
   /* mobile */
   @media (max-width: 768px) {
     body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    canvas { position: fixed; top: 0; left: 0; }
-    #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 44px 8px 20px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
-    .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; }
+    canvas { position: fixed; top: 0; left: 0; z-index: 0; }
+    #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 44px 8px 20px; display: flex; flex-direction: column; gap: 6px; align-items: stretch; z-index: 10; }
+    .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; padding: 0.6rem 0.85rem; background: rgba(12, 6, 8, 0.78); }
+    .panel h2 { font-size: 0.78rem; margin-bottom: 0.35rem; }
+    .panel label { font-size: 0.7rem; margin: 0.35rem 0 0.1rem 0; }
+    .panel input[type=range] { margin-bottom: 0; }
+    .val { font-size: 0.66rem; margin-bottom: 0.2rem; }
+    .readout { font-size: 0.7rem; margin-top: 0.25rem; }
+    .glass-btn { font-size: 0.7rem; padding: 0.25rem 0.5rem; }
   }
 </style>
 </head>
