@@ -66,8 +66,9 @@
       border-radius: 0; border-left: none; border-right: none;
       border-top: 1px solid #3a2028; border-bottom: 1px solid #3a2028;
     }
-    /* Collapsed state: panels are hidden, only the toggle FAB is visible */
-    #ui-layer.collapsed .panel { display: none; }
+    /* Collapsed state: panels AND close button are hidden */
+    #ui-layer.collapsed .panel,
+    #ui-layer.collapsed #panel-close { display: none; }
 
     /* Mobile panel typography */
     .panel h2 { font-size: 0.78rem; margin-bottom: 0.3rem; }
@@ -296,6 +297,9 @@ class FilmParticle {
     if (dist > 0) {
       this.x += dist * 0.08;
       this.vx += dist * 0.003;
+    } else if (dist < -1) {
+      this.x = wallX - 1;
+      this.vx = -Math.abs(this.vx);
     }
     if (frameCount % 3 === 0 && this.trail.length < 12) {
       this.trail.push({x: this.x, y: this.y, a: 1.0});
@@ -369,8 +373,15 @@ class TearDroplet {
     }
     this.x += this.vx;
     this.y += this.vy;
+    const gy = clamp(this.y / glassH, 0, 1);
+    const wallX = cx + profile(gy) * glassW;
     const dist = wallX - this.x;
-    if (dist > 0) { this.x += dist * 0.12; }
+    if (dist > 0) {
+      this.x += dist * 0.12;
+    } else if (dist < -1) {
+      this.x = wallX - 1;
+      this.vx = -Math.abs(this.vx);
+    }
     if (frameCount % 2 === 0 && this.trail.length < 18) {
       this.trail.push({x: this.x, y: this.y, a: 1.0, sz: this.size});
     }
