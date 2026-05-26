@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spontaneous Fermentation Microbial Succession</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  :root{
+    --bg:#0d0608;
+    --surface:rgba(18,10,12,0.92);
+    --border:#3a1e24;
+    --text:#e8d5d0;
+    --muted:#a08080;
+    --accent:#d4a05f;
+    --accent2:#c75b5b;
+    --warn-bg:#2a1810;
+    --warn-border:#5a3a20;
+    --warn-text:#e8b080;
+    --panel-width:280px;
+  }
+  html, body{ margin:0; padding:0; overflow:hidden; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:14px; }
+
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.6rem 1rem; text-align:center; font-size:0.78rem; position:fixed; top:0; left:0; right:0; z-index:200; }
+  .disclaimer strong{ font-weight:600; }
+
+  #ui-layer{ position:absolute; top:38px; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+  #ui-layer > *{ pointer-events:auto; }
+
+  .panel{ position:absolute; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:0.7rem 0.9rem; max-width:min(var(--panel-width), calc(100vw - 20px)); }
+
+  /* Chart panel: top-right */
+  #chart-panel{ top:10px; right:10px; width:var(--panel-width); }
+  /* Controls panel: top-left */
+  #control-panel{ top:10px; left:10px; width:var(--panel-width); }
+
+  .panel h2{ font-size:0.95rem; margin:0 0 0.6rem; color:var(--accent); letter-spacing:0.02em; }
+  .panel h3{ font-size:0.8rem; margin:0.5rem 0 0.2rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; }
+
+  .row{ display:flex; align-items:center; justify-content:space-between; gap:0.4rem; margin-bottom:0.35rem; }
+  .row label{ font-size:0.78rem; color:var(--muted); min-width:90px; }
+  .row span.val{ font-size:0.78rem; color:var(--text); font-variant-numeric:tabular-nums; min-width:36px; text-align:right; }
+
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100px; height:4px; background:#3a1e24; border-radius:2px; outline:none; margin:0; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:12px; height:12px; border-radius:50%; background:var(--accent); cursor:pointer; border:none; }
+  input[type=range]::-moz-range-thumb{ width:12px; height:12px; border-radius:50%; background:var(--accent); cursor:pointer; border:none; }
+
+  .btn-group{ display:flex; gap:0.35rem; margin-top:0.5rem; }
+  button{ background:#2a1814; border:1px solid var(--border); color:var(--text); border-radius:6px; padding:0.3rem 0.6rem; font-size:0.75rem; cursor:pointer; }
+  button:hover{ background:#3a2820; }
+  button.active{ background:var(--accent); color:#1a0f0a; font-weight:600; border-color:var(--accent); }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.4rem; }
+  .legend-item{ display:flex; align-items:center; gap:0.3rem; font-size:0.7rem; color:var(--muted); }
+  .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+
+  .metric{ display:flex; justify-content:space-between; font-size:0.78rem; padding:0.15rem 0; border-bottom:1px solid rgba(58,30,36,0.5); }
+  .metric .label{ color:var(--muted); }
+  .metric .value{ color:var(--text); font-variant-numeric:tabular-nums; }
+
+  .chart-wrap{ position:relative; height:90px; margin-top:0.3rem; }
+  canvas.chart-canvas{ width:100%; height:90px; display:block; }
+
+  /* close button */
+  #panel-close{ position:absolute; top:46px; right:10px; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.5rem; font-size:0.7rem; color:var(--muted); cursor:pointer; z-index:11; }
+  #panel-close:hover{ color:var(--text); }
+
+  /* Toast for notifications */
+  #toast{ position:fixed; bottom:14px; left:50%; transform:translateX(-50%) translateY(20px); background:rgba(18,10,12,0.95); border:1px solid var(--border); color:var(--accent); padding:0.4rem 1rem; border-radius:6px; font-size:0.8rem; opacity:0; transition:opacity 0.3s, transform 0.3s; pointer-events:none; z-index:300; }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* Mobile */
+  @media (max-width: 768px){
+    body{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    canvas#main-canvas{ position:fixed; top:0; left:0; z-index:0; }
+    #ui-layer{ position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:44px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; }
+    .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:0.6rem 0.85rem; background:rgba(18, 10, 12, 0.78); }
+    #panel-close{ position:relative !important; top:auto !important; right:auto !important; align-self:flex-end; margin:0 8px 0 0; }
+  }
+  #ui-layer.collapsed .panel,
+  #ui-layer.collapsed #panel-close{ display:none; }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="ui-layer">
+  <div class="panel" id="control-panel">
+    <h2>🦠 Fermentation Controls</h2>
+    <div class="row"><label>Temperature</label><span class="val" id="v-temp">22 °C</span></div>
+    <input type="range" id="s-temp" min="12" max="35" value="22" step="0.5">
+    <div class="row"><label>Initial SO₂</label><span class="val" id="v-so2">30 ppm</span></div>
+    <input type="range" id="s-so2" min="0" max="80" value="30" step="1">
+    <div class="row"><label>Sugar (Brix)</label><span class="val" id="v-brix">22 °Bx</span></div>
+    <input type="range" id="s-brix" min="15" max="30" value="22" step="0.5">
+    <div class="row"><label>YAN (Nutrients)</label><span class="val" id="v-yan">200 mg/L</span></div>
+    <input type="range" id="s-yan" min="50" max="400" value="200" step="10">
+    <div class="row"><label>pH</label><span class="val" id="v-ph">3.4</span></div>
+    <input type="range" id="s-ph" min="2.8" max="4.0" value="3.4" step="0.05">
+    <div class="btn-group">
+      <button id="b-pause">⏸ Pause</button>
+      <button id="b-reset">↺ Reset</button>
+      <button id="b-brett">Brett: OFF</button>
+    </div>
+    <h3>Species</h3>
+    <div class="legend">
+      <span class="legend-item"><span class="dot" style="background:#4ecdc4"></span>Kloeckera</span>
+      <span class="legend-item"><span class="dot" style="background:#a8e063"></span>Hanseniaspora</span>
+      <span class="legend-item"><span class="dot" style="background:#b967c7"></span>Metschnikowia</span>
+      <span class="legend-item"><span class="dot" style="background:#ffd93d"></span>Saccharomyces</span>
+      <span class="legend-item"><span class="dot" style="background:#c75b5b"></span>Brettanomyces</span>
+      <span class="legend-item"><span class="dot" style="background:#ff9a9e"></span>Lactobacillus</span>
+    </div>
+  </div>
+
+  <div class="panel" id="chart-panel">
+    <h2>📊 Live Analytics</h2>
+    <div class="chart-wrap"><canvas id="popChart" class="chart-canvas"></canvas></div>
+    <div class="chart-wrap"><canvas id="chemChart" class="chart-canvas"></canvas></div>
+    <div class="metric"><span class="label">Elapsed time</span><span class="value" id="m-time">0 d 0 h</span></div>
+    <div class="metric"><span class="label">Total cells (×10⁶/mL)</span><span class="value" id="m-cells">0</span></div>
+    <div class="metric"><span class="label">Sugar consumed</span><span class="value" id="m-sugar">0%</span></div>
+    <div class="metric"><span class="label">Ethanol</span><span class="value" id="m-eth">0.0 % v/v</span></div>
+    <div class="metric"><span class="label">Dominant species</span><span class="value" id="m-dom">—</span></div>
+  </div>
+
+  <div id="panel-close">✕ Close controls</div>
+</div>
+<div id="toast"></div>
+<script>
+// ========== CONFIGURATION ==========
+const CONFIG = {
+  seed: 42,
+  fps: 60,
+  simDurationHours: 240,   // total simulation span (10 days)
+  timeScale: 0.5,          // hours per second of real time
+  particleCount: 1800,
+  temp: 22,
+  so2: 30,
+  brix: 22,
+  yan: 200,
+  ph: 3.4,
+  brettEnabled: false
+};
+
+const PALETTE = {
+  bg: '#0d0608',
+  kloeckera: '#4ecdc4',
+  hanseniaspora: '#a8e063',
+  metschnikowia: '#b967c7',
+  saccharomyces: '#ffd93d',
+  brettanomyces: '#c75b5b',
+  lactobacillus: '#ff9a9e',
+  dead: '#6a5a5a',
+  bubble: 'rgba(220,200,180,0.15)'
+};
+
+// ========== SPECIES DEFINITIONS ==========
+// μ_opt: optimal specific growth rate (1/h)
+// T_opt: optimal temperature (°C)
+// ethanolMax: % v/v before death
+// so2Sens: inhibition factor per ppm SO2 (multiplicative)
+// color: particle color
+// label: display name
+const SPECIES_DEF = {
+  kloeckera:      { μ_opt: 0.70, T_opt: 25, ethanolMax: 4.0,  so2Sens: 0.018, color: PALETTE.kloeckera,      label: 'Kloeckera' },
+  hanseniaspora:  { μ_opt: 0.65, T_opt: 24, ethanolMax: 5.0,  so2Sens: 0.012, color: PALETTE.hanseniaspora,  label: 'Hanseniaspora' },
+  metschnikowia:  { μ_opt: 0.55, T_opt: 23, ethanolMax: 6.0,  so2Sens: 0.010, color: PALETTE.metschnikowia,  label: 'Metschnikowia' },
+  saccharomyces:  { μ_opt: 0.40, T_opt: 28, ethanolMax: 16.0, so2Sens: 0.004, color: PALETTE.saccharomyces,  label: 'Saccharomyces' },
+  brettanomyces:  { μ_opt: 0.12, T_opt: 26, ethanolMax: 16.0, so2Sens: 0.008, color: PALETTE.brettanomyces,  label: 'Brettanomyces' },
+  lactobacillus:  { μ_opt: 0.18, T_opt: 25, ethanolMax: 14.0, so2Sens: 0.015, color: PALETTE.lactobacillus,  label: 'Lactobacillus' }
+};
+
+// ========== GLOBAL STATE ==========
+let particles = [];
+let bubbles = [];
+let simTime = 0;            // simulated hours elapsed
+let paused = false;
+let sugarGPerL = 0;
+let ethanolPct = 0;
+let totalCells = 0;
+let domSpecies = '—';
+
+// History for charts
+const MAX_HIST = 300;
+let history = {
+  time: [],
+  kloeckera: [],
+  hanseniaspora: [],
+  metschnikowia: [],
+  saccharomyces: [],
+  brettanomyces: [],
+  lactobacillus: [],
+  sugar: [],
+  ethanol: []
+};
+
+// Offscreen graphics layers
+let fgLayer, bgLayer;
+let canvasW, canvasH;
+
+// ========== DOM REFS ==========
+const els = {};
+function bindEl(id, key){ els[key] = document.getElementById(id); }
+['s-temp','s-so2','s-brix','s-yan','s-ph','b-pause','b-reset','b-brett',
+ 'v-temp','v-so2','v-brix','v-yan','v-ph',
+ 'm-time','m-cells','m-sugar','m-eth','m-dom',
+ 'panel-close','ui-layer','toast'].forEach(id=>{
+  const key = id.replace(/-/g,'_');
+  bindEl(id, key);
+});
+
+// ========== HELPERS ==========
+function fmtTime(h){ const d=Math.floor(h/24); const hr=Math.floor(h%24); return d+' d '+hr+' h'; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function sigmoid(x,k=1,x0=0){ return 1/(1+Math.exp(-k*(x-x0))); }
+function tempFactor(T, Topt, sigma=8){ return Math.exp(-Math.pow(T-Topt,2)/(2*sigma*sigma)); }
+function showToast(msg){
+  const t = els.toast;
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2000);
+}
+
+// ========== PARTICLE ==========
+class Microbe {
+  constructor(speciesKey, x, y){
+    this.species = speciesKey;
+    this.def = SPECIES_DEF[speciesKey];
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random()-0.5)*0.4;
+    this.vy = (Math.random()-0.5)*0.4;
+    this.alive = true;
+    this.age = 0;
+    this.size = 2.5 + Math.random()*1.5;
+    this.phase = Math.random()*Math.PI*2;
+    this.targetSize = this.size;
+    this.nutrientAccum = 0;
+    this.reproThreshold = 24 + Math.random()*24; // hours until fission
+  }
+  update(dtHours, ethanol, so2, temp, ph, nutrientAvailability){
+    if(!this.alive) return;
+    this.age += dtHours;
+
+    // Growth rate μ = μ_opt * tempFactor * so2Inhibition * pHFactor * nutrientLimit
+    const tf = tempFactor(temp, this.def.T_opt, 8);
+    const so2Inhib = Math.exp(-this.def.so2Sens * so2);
+    const phFactor = sigmoid(ph, 3, 3.2); // lower pH suppresses
+    const nutLim = nutrientAvailability;
+    const μ = this.def.μ_opt * tf * so2Inhib * phFactor * nutLim;
+    const growth = μ * dtHours;
+
+    // Ethanol death
+    if(ethanol > this.def.ethanolMax) {
+      this.alive = false;
+      return;
+    }
+
+    // Probability of death from ethanol stress (smooth, not hard cutoff)
+    const ethStress = sigmoid(ethanol, 0.8, this.def.ethanolMax*0.6);
+    if(Math.random() < ethStress * 0.01 * dtHours) {
+      this.alive = false;
+      return;
+    }
+
+    this.nutrientAccum += growth;
+    this.size = 2.5 + Math.min(this.nutrientAccum*2, 3.5);
+
+    // Movement: Brownian jitter + gentle drift
+    this.vx += (Math.random()-0.5)*0.08;
+    this.vy += (Math.random()-0.5)*0.08;
+    this.vx *= 0.96;
+    this.vy *= 0.96;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.phase += 0.05;
+
+    // Boundaries — bidirectional clamp (wall escape fix)
+    if(this.x < 2){ this.x = 2; this.vx = Math.abs(this.vx)*0.5; }
+    if(this.x > canvasW-2){ this.x = canvasW-2; this.vx = -Math.abs(this.vx)*0.5; }
+    if(this.y < 2){ this.y = 2; this.vy = Math.abs(this.vy)*0.5; }
+    if(this.y > canvasH-2){ this.y = canvasH-2; this.vy = -Math.abs(this.vy)*0.5; }
+  }
+  draw(pg){
+    pg.noStroke();
+    if(this.alive){
+      pg.fill(this.def.color);
+      // Draw cell body
+      pg.ellipse(this.x, this.y, this.size*1.6+Math.sin(this.phase)*0.3, this.size*1.2+Math.cos(this.phase)*0.2);
+      // Inner nucleus highlight
+      pg.fill(255,255,255,60);
+      pg.ellipse(this.x+this.size*0.15, this.y-this.size*0.15, this.size*0.5, this.size*0.4);
+    } else {
+      // Dead cell ghost
+      pg.fill(PALETTE.dead);
+      pg.ellipse(this.x, this.y, this.size*0.9, this.size*0.7);
+    }
+  }
+}
+
+class Bubble {
+  constructor(x, y, r){
+    this.x = x;
+    this.y = y;
+    this.r = r;
+    this.vy = -(0.3 + Math.random()*0.6);
+    this.wobble = Math.random()*Math.PI*2;
+  }
+  update(){
+    this.y += this.vy;
+    this.x += Math.sin(this.wobble)*0.3;
+    this.wobble += 0.1;
+    this.r *= 0.998;
+    if(this.r < 0.5 || this.y < 0) return false;
+    return true;
+  }
+  draw(pg){
+    pg.noStroke();
+    pg.fill(220,200,180,18);
+    pg.ellipse(this.x, this.y, this.r*2, this.r*2);
+    pg.fill(255,255,255,30);
+    pg.ellipse(this.x-this.r*0.25, this.y-this.r*0.25, this.r*0.5, this.r*0.5);
+  }
+}
+
+// ========== p5.js SKETCH ==========
+function setup(){
+  canvasW = Math.max(300, window.innerWidth);
+  canvasH = Math.max(300, window.innerHeight);
+  const c = createCanvas(canvasW, canvasH);
+  c.id('main-canvas');
+  c.style('display','block');
+  pixelDensity(1);
+  colorMode(RGB, 255, 255, 255, 255);
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+
+  // Layers
+  bgLayer = createGraphics(canvasW, canvasH);
+  fgLayer = createGraphics(canvasW, canvasH);
+
+  initSimulation();
+  initCharts();
+  setupUI();
+}
+
+function initSimulation(){
+  particles = [];
+  bubbles = [];
+  simTime = 0;
+  sugarGPerL = CONFIG.brix * 10; // rough: 1 Brix ≈ 10 g/L sugar
+  ethanolPct = 0;
+  totalCells = 0;
+  domSpecies = '—';
+  history = { time:[], kloeckera:[], hanseniaspora:[], metschnikowia:[], saccharomyces:[], brettanomyces:[], lactobacillus:[], sugar:[], ethanol:[] };
+
+  // Initial inoculum: non-Saccharomyces dominant early
+  const speciesKeys = ['kloeckera','hanseniaspora','metschnikowia','saccharomyces'];
+  const initRatios = [0.40, 0.25, 0.15, 0.20]; // wild yeasts dominate initially
+  let n = CONFIG.particleCount;
+  for(let s=0; s<speciesKeys.length; s++){
+    let count = Math.floor(n * initRatios[s]);
+    for(let i=0; i<count; i++){
+      particles.push(new Microbe(speciesKeys[s], Math.random()*canvasW, Math.random()*canvasH));
+    }
+  }
+  // Brett and LAB start at 0
+}
+
+function windowResized(){
+  canvasW = Math.max(300, window.innerWidth);
+  canvasH = Math.max(300, window.innerHeight);
+  resizeCanvas(canvasW, canvasH);
+  bgLayer = createGraphics(canvasW, canvasH);
+  fgLayer = createGraphics(canvasW, canvasH);
+}
+
+function draw(){
+  // Read controls
+  const temp = parseFloat(els.s_temp.value);
+  const so2 = parseFloat(els.s_so2.value);
+  const brix = parseFloat(els.s_brix.value);
+  const yan = parseFloat(els.s_yan.value);
+  const ph = parseFloat(els.s_ph.value);
+  const brettOn = els.b_brett.textContent.includes('ON');
+
+  if(paused) {
+    // Still draw current state
+    image(bgLayer, 0, 0);
+    image(fgLayer, 0, 0);
+    drawHUD();
+    return;
+  }
+
+  const dtReal = 1/CONFIG.fps; // seconds
+  const dtHours = dtReal * CONFIG.timeScale;
+  simTime += dtHours;
+
+  // Chemistry
+  const sugarStart = brix * 10;
+  const sugarConsumed = Math.min(sugarStart, simTime * 0.55); // approx 0.55 g/L/h fermentation rate
+  sugarGPerL = Math.max(0, sugarStart - sugarConsumed);
+  // Ethanol: ~0.6x sugar converted when fully fermented
+  const maxEth = brix * 0.55;
+  ethanolPct = Math.min(maxEth, (sugarStart - sugarGPerL) / sugarStart * maxEth);
+
+  // Nutrient availability declines as YAN is consumed
+  const totalBiomassFactor = totalCells / 500; // arbitrary biomass proxy
+  const nutrientAvailability = Math.max(0, 1 - totalBiomassFactor / (yan/100));
+
+  // Population counts
+  let counts = {kloeckera:0, hanseniaspora:0, metschnikowia:0, saccharomyces:0, brettanomyces:0, lactobacillus:0};
+  let aliveParticles = [];
+
+  // Update particles
+  for(let p of particles){
+    p.update(dtHours, ethanolPct, so2, temp, ph, nutrientAvailability);
+    if(p.alive){
+      aliveParticles.push(p);
+      counts[p.species] = (counts[p.species]||0)+1;
+    }
+  }
+  particles = aliveParticles;
+
+  // Reproduction: when nutrientAccum exceeds threshold, split
+  let toAdd = [];
+  for(let p of particles){
+    if(p.nutrientAccum > p.reproThreshold && (counts[p.species] < 2000)){
+      p.nutrientAccum = 0;
+      p.reproThreshold = 18 + Math.random()*24;
+      // Division
+      const child = new Microbe(p.species, p.x + (Math.random()-0.5)*6, p.y + (Math.random()-0.5)*6);
+      toAdd.push(child);
+      counts[p.species]++;
+    }
+  }
+  particles.push(...toAdd);
+
+  // Late contamination: Brettanomyces & LAB appear after 72h if enabled
+  if(brettOn && simTime > 72 && simTime < 78 && particles.filter(p=>p.species==='brettanomyces'||p.species==='lactobacillus').length < 10){
+    for(let i=0; i<5; i++){
+      particles.push(new Microbe('brettanomyces', Math.random()*canvasW, Math.random()*canvasH));
+      particles.push(new Microbe('lactobacillus', Math.random()*canvasW, Math.random()*canvasH));
+    }
+  }
+
+  // Late spontaneous Saccharomyces boost after 24h if suppressed
+  if(simTime > 24 && simTime < 26 && counts.saccharomyces < 50){
+    for(let i=0; i<30; i++){
+      particles.push(new Microbe('saccharomyces', Math.random()*canvasW, Math.random()*canvasH));
+    }
+  }
+
+  // Bubbles from CO2 during active fermentation
+  if(simTime > 12 && simTime < 200 && Math.random() < 0.15){
+    bubbles.push(new Bubble(Math.random()*canvasW, canvasH - 10 + Math.random()*20, 2 + Math.random()*6));
+  }
+  for(let i=bubbles.length-1; i>=0; i--){
+    if(!bubbles[i].update()) bubbles.splice(i,1);
+  }
+
+  totalCells = particles.length;
+  // Dominant species
+  let maxCount = -1;
+  let dom = '—';
+  for(let k of Object.keys(counts)){
+    if(counts[k] > maxCount){ maxCount = counts[k]; dom = SPECIES_DEF[k].label; }
+  }
+  domSpecies = dom;
+
+  // Update history
+  if(history.time.length === 0 || simTime - history.time[history.time.length-1] > 0.5){
+    history.time.push(simTime);
+    history.kloeckera.push(counts.kloeckera);
+    history.hanseniaspora.push(counts.hanseniaspora);
+    history.metschnikowia.push(counts.metschnikowia);
+    history.saccharomyces.push(counts.saccharomyces);
+    history.brettanomyces.push(counts.brettanomyces);
+    history.lactobacillus.push(counts.lactobacillus);
+    history.sugar.push(sugarGPerL);
+    history.ethanol.push(ethanolPct);
+    if(history.time.length > MAX_HIST){
+      for(let k in history) if(Array.isArray(history[k])) history[k].shift();
+    }
+  }
+
+  // ========== RENDER ==========
+  // Background layer: textured wine must
+  bgLayer.noStroke();
+  bgLayer.fill(13,6,8);
+  bgLayer.rect(0,0,canvasW,canvasH);
+  // Noise texture
+  for(let i=0;i<400;i++){
+    const x = Math.random()*canvasW;
+    const y = Math.random()*canvasH;
+    const a = Math.random()*12;
+    bgLayer.fill(30+Math.random()*10, 15+Math.random()*5, 18, a);
+    bgLayer.ellipse(x,y,2+Math.random()*3,1.5+Math.random()*2);
+  }
+
+  // Foreground layer
+  fgLayer.clear();
+  // Bubbles
+  for(let b of bubbles) b.draw(fgLayer);
+  // Particles — batch draw by species for performance
+  let bySpecies = {};
+  for(let p of particles){
+    if(!bySpecies[p.species]) bySpecies[p.species] = [];
+    bySpecies[p.species].push(p);
+  }
+  for(let k in bySpecies){
+    for(let p of bySpecies[k]) p.draw(fgLayer);
+  }
+
+  image(bgLayer, 0, 0);
+  image(fgLayer, 0, 0);
+
+  drawHUD();
+  updateCharts();
+  updateMetrics();
+}
+
+function drawHUD(){
+  // Subtle must surface line
+  noStroke();
+  fill(30, 14, 16, 40);
+  rect(0, 0, canvasW, 6);
+  // Vignette
+  // (skip for performance, rely on CSS)
+}
+
+function setupUI(){
+  const sliders = ['temp','so2','brix','yan','ph'];
+  sliders.forEach(key=>{
+    const s = els['s_'+key];
+    const v = els['v_'+key];
+    s.addEventListener('input', ()=>{
+      let unit=''; let val=s.value;
+      if(key==='temp') unit=' °C';
+      if(key==='so2') unit=' ppm';
+      if(key==='brix') unit=' °Bx';
+      if(key==='yan') unit=' mg/L';
+      if(key==='ph') { /* no unit */ }
+      v.textContent = val + unit;
+    });
+  });
+
+  els.b_pause.addEventListener('click', ()=>{
+    paused = !paused;
+    els.b_pause.textContent = paused ? '▶ Resume' : '⏸ Pause';
+    els.b_pause.classList.toggle('active', paused);
+  });
+  els.b_reset.addEventListener('click', ()=>{
+    initSimulation();
+    showToast('Simulation reset');
+  });
+  els.b_brett.addEventListener('click', ()=>{
+    const on = els.b_brett.textContent.includes('ON');
+    els.b_brett.textContent = on ? 'Brett: OFF' : 'Brett: ON';
+    els.b_brett.classList.toggle('active', !on);
+    showToast(on ? 'Brettanomyces disabled' : 'Brettanomyces will appear after 72h');
+  });
+
+  els.panel_close.addEventListener('click', ()=>{
+    els.ui_layer.classList.toggle('collapsed');
+  });
+}
+
+function updateMetrics(){
+  els.m_time.textContent = fmtTime(simTime);
+  els.m_cells.textContent = totalCells.toLocaleString();
+  const pct = CONFIG.brix > 0 ? Math.round(((CONFIG.brix*10 - sugarGPerL)/(CONFIG.brix*10))*100) : 0;
+  els.m_sugar.textContent = pct + '%';
+  els.m_eth.textContent = ethanolPct.toFixed(1) + ' % v/v';
+  els.m_dom.textContent = domSpecies;
+}
+
+// ========== CHARTS (raw HTML canvas) ==========
+let popCtx, chemCtx;
+function initCharts(){
+  const pop = document.getElementById('popChart');
+  const chem = document.getElementById('chemChart');
+  pop.width = pop.offsetWidth * 2; pop.height = pop.offsetHeight * 2;
+  chem.width = chem.offsetWidth * 2; chem.height = chem.offsetHeight * 2;
+  popCtx = pop.getContext('2d');
+  chemCtx = chem.getContext('2d');
+  popCtx.scale(2,2);
+  chemCtx.scale(2,2);
+}
+
+function updateCharts(){
+  if(!popCtx || !chemCtx) return;
+  drawStackedChart(popCtx, document.getElementById('popChart'), [
+    {key:'kloeckera', color:PALETTE.kloeckera},
+    {key:'hanseniaspora', color:PALETTE.hanseniaspora},
+    {key:'metschnikowia', color:PALETTE.metschnikowia},
+    {key:'saccharomyces', color:PALETTE.saccharomyces},
+    {key:'brettanomyces', color:PALETTE.brettanomyces},
+    {key:'lactobacillus', color:PALETTE.lactobacillus}
+  ], 'Population');
+  drawDualChart(chemCtx, document.getElementById('chemChart'), [
+    {key:'sugar', color:'#4ecdc4', label:'Sugar (g/L)', max:300},
+    {key:'ethanol', color:'#ffd93d', label:'Ethanol (% v/v)', max:18}
+  ], 'Chemistry');
+}
+
+function drawStackedChart(ctx, canvas, series, title){
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  ctx.clearRect(0,0,W,H);
+  if(history.time.length < 2) return;
+
+  ctx.fillStyle = '#c9a86c';
+  ctx.font = '10px sans-serif';
+  ctx.fillText(title, 4, 11);
+
+  const n = history.time.length;
+  const padL = 30, padB = 14;
+  const chartW = W - padL - 4;
+  const chartH = H - padB - 14;
+  const x0 = padL, y0 = 14;
+
+  // Max total
+  let maxTotal = 1;
+  for(let i=0;i<n;i++){
+    let t=0;
+    for(let s of series) t += history[s.key][i]||0;
+    maxTotal = Math.max(maxTotal, t);
+  }
+
+  // Grid
+  ctx.strokeStyle = 'rgba(58,30,36,0.6)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0); ctx.lineTo(x0, y0+chartH);
+  ctx.lineTo(x0+chartW, y0+chartH);
+  ctx.stroke();
+
+  // Stacked areas
+  for(let s=0; s<series.length; s++){
+    const ser = series[s];
+    ctx.fillStyle = ser.color + 'aa';
+    ctx.beginPath();
+    ctx.moveTo(x0 + (0/(n-1))*chartW, y0+chartH);
+    for(let i=0;i<n;i++){
+      let base = 0;
+      for(let k=0;k<s;k++) base += history[series[k].key][i]||0;
+      let val = history[ser.key][i]||0;
+      const x = x0 + (i/(n-1))*chartW;
+      const yTop = y0 + chartH - ((base+val)/maxTotal)*chartH;
+      ctx.lineTo(x, yTop);
+    }
+    for(let i=n-1;i>=0;i--){
+      let base = 0;
+      for(let k=0;k<s;k++) base += history[series[k].key][i]||0;
+      const x = x0 + (i/(n-1))*chartW;
+      const yBase = y0 + chartH - (base/maxTotal)*chartH;
+      ctx.lineTo(x, yBase);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Axis labels
+  ctx.fillStyle = 'rgba(200,180,170,0.5)';
+  ctx.font = '8px sans-serif';
+  ctx.fillText('0', x0-8, y0+chartH+3);
+  ctx.fillText(String(Math.round(maxTotal)), x0-22, y0+10);
+}
+
+function drawDualChart(ctx, canvas, series, title){
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  ctx.clearRect(0,0,W,H);
+  if(history.time.length < 2) return;
+
+  ctx.fillStyle = '#c9a86c';
+  ctx.font = '10px sans-serif';
+  ctx.fillText(title, 4, 11);
+
+  const n = history.time.length;
+  const padL = 30, padB = 14;
+  const chartW = W - padL - 4;
+  const chartH = H - padB - 14;
+  const x0 = padL, y0 = 14;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(58,30,36,0.6)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0); ctx.lineTo(x0, y0+chartH);
+  ctx.lineTo(x0+chartW, y0+chartH);
+  ctx.stroke();
+
+  for(let ser of series){
+    const maxVal = ser.max;
+    ctx.strokeStyle = ser.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for(let i=0;i<n;i++){
+      const x = x0 + (i/(n-1))*chartW;
+      const val = history[ser.key][i]||0;
+      const y = y0 + chartH - (val/maxVal)*chartH;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = 'rgba(200,180,170,0.5)';
+  ctx.font = '8px sans-serif';
+  ctx.fillText('0', x0-8, y0+chartH+3);
+}
+
+function keyPressed(){
+  if(key === ' ') { paused = !paused; els.b_pause.textContent = paused ? '▶ Resume' : '⏸ Pause'; els.b_pause.classList.toggle('active', paused); }
+  if(key === 'r' || key === 'R') initSimulation();
+  if(key === 's' || key === 'S') saveCanvas('spontaneous-fermentation', 'png');
+}
+</script>
+</body>
+</html>
