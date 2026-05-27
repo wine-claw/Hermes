@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Carbonic Maceration Simulator</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  :root{ --bg:#0d0f12; --panel:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#a371f7; --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080; }
+  html,body{margin:0;padding:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;touch-action:manipulation;}
+  canvas{display:block;}
+  #ui-layer{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;}
+  #ui-layer > *{pointer-events:auto;}
+  .panel{position:absolute;background:rgba(12,18,28,0.92);border:1px solid var(--border);border-radius:10px;padding:0.9rem 1.1rem;max-width:min(260px,calc(100vw - 20px));}
+  .panel h3{margin:0 0 0.5rem 0;font-size:0.92rem;color:var(--accent);}
+  .row{display:flex;align-items:center;justify-content:space-between;margin:0.35rem 0;font-size:0.82rem;}
+  .row label{color:var(--muted);}
+  .row span.val{color:var(--text);font-variant-numeric:tabular-nums;min-width:42px;text-align:right;}
+  input[type=range]{width:110px;touch-action:manipulation;}
+  .badge{display:inline-block;font-size:0.65rem;padding:0.2rem 0.45rem;border-radius:4px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;}
+  .disclaimer{position:sticky;top:0;background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);padding:0.6rem 1rem;text-align:center;font-size:0.82rem;z-index:200;}
+  .disclaimer strong{font-weight:600;}
+  #panel-close{position:absolute;top:6px;right:10px;cursor:pointer;font-size:1.1rem;color:var(--muted);pointer-events:auto;}
+  #panel-close:hover{color:var(--text);}
+  #toggle-controls{position:absolute;bottom:14px;right:14px;z-index:20;background:rgba(12,18,28,0.9);border:1px solid var(--border);color:var(--text);padding:0.45rem 0.8rem;border-radius:6px;font-size:0.8rem;cursor:pointer;pointer-events:auto;display:none;touch-action:manipulation;}
+  #toggle-controls:hover{border-color:var(--accent);}
+  @media(max-width:768px){
+    body{overflow-y:auto;-webkit-overflow-scrolling:touch;}
+    canvas{position:fixed;top:0;left:0;z-index:0;}
+    #ui-layer{position:relative;top:auto;left:auto;right:auto;bottom:auto;padding:44px 8px 20px;display:flex;flex-direction:column;gap:6px;align-items:stretch;}
+    .panel{position:relative !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;width:100% !important;max-width:none !important;padding:0.6rem 0.85rem;background:rgba(12,18,28,0.78);}
+  }
+  #ui-layer.collapsed .panel,
+  #ui-layer.collapsed #panel-close{display:none;}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="ui-layer">
+  <div id="panel-close" onclick="togglePanels()">✕</div>
+  <div class="panel" style="top:46px;left:10px;width:240px;">
+    <h3>🍇 Carbonic Maceration</h3>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.6rem;">Whole-cluster intracellular fermentation in CO₂</div>
+    <div class="row"><label>CO₂ %</label><span class="val" id="v-co2">100%</span></div>
+    <input type="range" min="0" max="100" value="100" id="s-co2" style="width:100%;">
+    <div class="row"><label>Temperature</label><span class="val" id="v-temp">28°C</span></div>
+    <input type="range" min="18" max="35" value="28" id="s-temp" style="width:100%;">
+    <div class="row"><label>Berry Integrity</label><span class="val" id="v-integrity">95%</span></div>
+    <input type="range" min="30" max="100" value="95" id="s-integrity" style="width:100%;">
+    <div class="row"><label>Time (days)</label><span class="val" id="v-days">0.0</span></div>
+    <input type="range" min="0" max="120" value="0" id="s-days" style="width:100%;">
+    <div style="margin-top:0.5rem;font-size:0.75rem;color:var(--muted);">
+      <span class="badge" id="phase-badge">Loading</span>
+    </div>
+  </div>
+  <div class="panel" style="top:46px;right:10px;width:230px;">
+    <h3>📊 Live Chemistry</h3>
+    <div class="row"><label>Sugar (g/L)</label><span class="val" id="v-sugar">220</span></div>
+    <div class="row"><label>Ethanol (% v/v)</label><span class="val" id="v-ethanol">0.0</span></div>
+    <div class="row"><label>Malic Acid (g/L)</label><span class="val" id="v-malic">4.5</span></div>
+    <div class="row"><label>pH</label><span class="val" id="v-ph">3.3</span></div>
+    <div class="row"><label>Anthocyanins (mg/L)</label><span class="val" id="v-antho">0</span></div>
+    <div class="row"><label>Intact Berries</label><span class="val" id="v-intact">100</span></div>
+    <div class="row"><label>Burst Berries</label><span class="val" id="v-burst">0</span></div>
+    <canvas id="miniChartCanvas" width="200" height="60" style="margin-top:0.5rem;width:100%;height:60px;background:rgba(0,0,0,0.2);border-radius:4px;"></canvas>
+  </div>
+  <div class="panel" style="bottom:14px;left:10px;width:280px;">
+    <h3>🔬 Process Stages</h3>
+    <div style="font-size:0.78rem;color:var(--muted);line-height:1.5;">
+      <b>1. Anaerobic envelope:</b> CO₂ displaces O₂; berries breathe internally.<br>
+      <b>2. Enzymatic catabolism:</b> Berry enzymes convert 1–2.5% sugar → ethanol + malic acid inside intact cells.<br>
+      <b>3. Skin weakening:</b> CO₂ + ethanol dissolve pectin; berry turgor drops.<br>
+      <b>4. Bursting:</b> Weak berries rupture, releasing juice for yeast fermentation.<br>
+      <b>5. Press:</b> Remaining clusters pressed; blended ferment continues.
+    </div>
+  </div>
+</div>
+<button id="toggle-controls" onclick="togglePanels()">⚙ Controls</button>
+<script>
+function togglePanels(){
+  const layer=document.getElementById('ui-layer');
+  const btn=document.getElementById('toggle-controls');
+  if(layer.classList.contains('collapsed')){
+    layer.classList.remove('collapsed');
+    btn.style.display='none';
+  } else {
+    layer.classList.add('collapsed');
+    btn.style.display='block';
+  }
+}
+</script>
+<script>
+// ===== Carbonic Maceration Simulator =====
+let CONFIG = { co2Percent: 100, temperature: 28, integrity: 95, day: 0, paused: false, speed: 1 };
+let BERRIES = [];
+let PARTICLES = [];
+let TANK_W, TANK_H, TANK_X, TANK_Y;
+let chartPts = { sugar: [], ethanol: [], malic: [], antho: [] };
+let timeAccum = 0;
+let phase = "Envelope";
+let stains = [];
+let yeastParticles = [];
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  colorMode(HSB, 360, 100, 100, 100);
+  pixelDensity(1);
+  defineTank();
+  spawnBerries(90);
+  spawnParticles(400);
+
+  document.getElementById('s-co2').addEventListener('input', e => {
+    CONFIG.co2Percent = +e.target.value;
+    document.getElementById('v-co2').textContent = CONFIG.co2Percent + '%';
+  });
+  document.getElementById('s-temp').addEventListener('input', e => {
+    CONFIG.temperature = +e.target.value;
+    document.getElementById('v-temp').textContent = CONFIG.temperature + '°C';
+  });
+  document.getElementById('s-integrity').addEventListener('input', e => {
+    CONFIG.integrity = +e.target.value;
+    document.getElementById('v-integrity').textContent = CONFIG.integrity + '%';
+  });
+  document.getElementById('s-days').addEventListener('input', e => {
+    CONFIG.day = +e.target.value;
+    CONFIG.paused = true;
+    document.getElementById('v-days').textContent = CONFIG.day.toFixed(1);
+  });
+
+  // Mini chart updater
+  setInterval(drawMiniChart2D, 250);
+}
+
+function defineTank() {
+  TANK_W = min(width * 0.55, 700);
+  TANK_H = min(height * 0.65, 520);
+  TANK_X = (width - TANK_W) / 2;
+  TANK_Y = (height - TANK_H) / 2 + 20;
+}
+
+class Berry {
+  constructor(x, y, r) {
+    this.x = x; this.y = y; this.r = r;
+    this.intact = true;
+    this.integrity = random(0.55, 1.0);
+    this.sugar = 220;
+    this.ethanol = 0;
+    this.malic = 4.5;
+    this.antho = 0;
+    this.co2Inside = 0;
+    this.hue = random(280, 340);
+    this.sat = random(60, 85);
+    this.bri = random(55, 75);
+    this.pulse = random(1000);
+    this.stemAngle = random(-0.4, 0.4);
+    this.stemLen = r * random(0.4, 0.7);
+    this.vx = 0; this.vy = 0;
+  }
+
+  update(dt) {
+    if (!this.intact) return;
+    this.pulse += dt * 2;
+    let co2Rate = (CONFIG.co2Percent / 100) * (1 - this.co2Inside / 100) * (this.integrity * 0.01);
+    this.co2Inside = min(100, this.co2Inside + co2Rate * dt * 8);
+    if (this.co2Inside > 40) {
+      let tempFactor = Math.pow(2, (CONFIG.temperature - 25) / 10);
+      let enzymaticRate = 0.003 * tempFactor * this.co2Inside / 100;
+      let sugarConsumed = min(this.sugar, enzymaticRate * dt * 10);
+      this.sugar -= sugarConsumed;
+      this.ethanol += sugarConsumed * 0.005;
+      this.malic -= sugarConsumed * 0.0015;
+    }
+    let weaken = (this.ethanol * 0.02 + this.co2Inside * 0.001 + dt * 0.0005) * (1.05 - CONFIG.integrity * 0.01);
+    this.integrity -= weaken;
+    if (this.integrity < 0 && this.intact) {
+      this.intact = false;
+      spawnBurst(this.x, this.y, this.hue, this.sat, this.bri);
+      stains.push({ x: this.x, y: this.y + this.r, r: this.r * 1.5, life: 1.0, hue: this.hue });
+      for (let i = 0; i < 8; i++) {
+        yeastParticles.push({ x: this.x + random(-this.r, this.r), y: this.y + random(-this.r * 0.5, this.r * 0.5), vy: random(-0.3, -0.8), life: random(0.5, 1.5), size: random(1.2, 2) });
+      }
+    }
+    if (!this.intact) { this.antho += (CONFIG.temperature / 28) * dt * 2; }
+    else if (this.integrity < 0.5) { this.antho += (CONFIG.temperature / 28) * dt * 0.3; }
+  }
+
+  drawBerry() {
+    push();
+    noStroke();
+    if (this.intact) {
+      let damage = max(0, 1 - this.integrity);
+      let b = this.bri - damage * 20;
+      fill(this.hue, this.sat * (0.5 + max(0, this.integrity) * 0.5), b, 92);
+      stroke(this.hue, this.sat + 10, 30, 60);
+      strokeWeight(1.2);
+      ellipse(this.x, this.y, this.r * 2, this.r * 2);
+      noStroke();
+      fill(this.hue, this.sat * 0.3, 95, 35);
+      ellipse(this.x - this.r * 0.25, this.y - this.r * 0.25, this.r * 0.5, this.r * 0.35);
+      if (this.co2Inside > 20) {
+        let glowAlpha = map(this.co2Inside, 20, 100, 5, 25);
+        fill(180, 40, 90, glowAlpha);
+        ellipse(this.x, this.y, this.r * 1.4, this.r * 1.4);
+      }
+      // Stem
+      stroke(35, 45, 45, 80);
+      strokeWeight(1.5);
+      let sx = this.x + Math.cos(this.stemAngle) * this.stemLen;
+      let sy = this.y - Math.sin(Math.abs(this.stemAngle)) * this.stemLen - this.r * 0.85;
+      line(this.x, this.y - this.r * 0.6, sx, sy);
+      // Subtle vertical ridge
+      noFill();
+      stroke(this.hue, this.sat * 0.6, 50, 25);
+      strokeWeight(0.8);
+      arc(this.x, this.y, this.r * 1.6, this.r * 1.85, -0.3, 0.3);
+    } else {
+      // Collapsed skin
+      noStroke();
+      fill(this.hue, this.sat * 0.7, 12, 75);
+      ellipse(this.x, this.y, this.r * 2.4, this.r * 1.7);
+      fill(this.hue, this.sat * 0.5, 8, 60);
+      ellipse(this.x, this.y + this.r * 0.3, this.r * 3.0, this.r * 1.0);
+    }
+    pop();
+  }
+}
+
+class GasParticle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = random(TANK_X, TANK_X + TANK_W);
+    this.y = random(TANK_Y, TANK_Y + TANK_H);
+    this.vx = random(-0.5, 0.5);
+    this.vy = random(-0.5, 0.5);
+    this.r = random(1.2, 2.5);
+    this.type = random() < 0.88 ? 'co2' : 'o2';
+    this.life = random(200, 600);
+  }
+  update(dt) {
+    this.x += this.vx * dt * 60;
+    this.y += this.vy * dt * 60;
+    this.life -= dt * 60;
+    if (this.x < TANK_X || this.x > TANK_X + TANK_W) this.vx *= -1;
+    if (this.y < TANK_Y || this.y > TANK_Y + TANK_H) this.vy *= -1;
+    if (this.life <= 0) this.reset();
+  }
+  draw() {
+    let alpha = this.type === 'co2' ? 18 : 8;
+    let hue = this.type === 'co2' ? 160 : 200;
+    noStroke();
+    fill(hue, 50, 90, alpha);
+    ellipse(this.x, this.y, this.r * 2, this.r * 2);
+  }
+}
+
+let bursts = [];
+function spawnBurst(x, y, h, s, b) {
+  for (let i = 0; i < 12; i++) {
+    bursts.push({ x, y, vx: random(-2.5, 2.5), vy: random(-2.5, 2.5), life: 1.0, hue: h, sat: s, bri: b, size: random(2, 5) });
+  }
+}
+
+function spawnBerries(n) {
+  BERRIES = [];
+  let cols = 14;
+  let rows = ceil(n / cols);
+  let cellW = TANK_W / cols;
+  let cellH = TANK_H / (rows + 2);
+  for (let i = 0; i < n; i++) {
+    let c = i % cols;
+    let r = floor(i / cols);
+    let cx = TANK_X + c * cellW + cellW / 2 + random(-cellW * 0.15, cellW * 0.15);
+    let cy = TANK_Y + TANK_H - (r + 1) * cellH - cellH / 2 + random(-cellH * 0.1, cellH * 0.1);
+    let radius = min(cellW, cellH) * random(0.28, 0.36);
+    BERRIES.push(new Berry(cx, cy, radius));
+  }
+}
+
+function spawnParticles(n) {
+  PARTICLES = [];
+  for (let i = 0; i < n; i++) PARTICLES.push(new GasParticle());
+}
+
+function updatePhysics(dt) {
+  if (CONFIG.paused) return;
+  timeAccum += dt;
+  CONFIG.day = min(12, timeAccum / 8);
+  for (let b of BERRIES) b.update(dt);
+  for (let p of PARTICLES) p.update(dt);
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    let b = bursts[i];
+    b.x += b.vx; b.y += b.vy; b.life -= dt * 1.5;
+    if (b.life <= 0) bursts.splice(i, 1);
+  }
+  for (let i = stains.length - 1; i >= 0; i--) {
+    let s = stains[i];
+    s.life -= dt * 0.03;
+    if (s.life <= 0) stains.splice(i, 1);
+  }
+  for (let i = yeastParticles.length - 1; i >= 0; i--) {
+    let y = yeastParticles[i];
+    y.y += y.vy;
+    y.life -= dt * 0.4;
+    if (y.life <= 0) yeastParticles.splice(i, 1);
+  }
+
+  let intactCount = BERRIES.filter(b => b.intact).length;
+  let avgCo2 = BERRIES.reduce((s, b) => s + b.co2Inside, 0) / BERRIES.length;
+  if (CONFIG.day < 0.5) phase = "Envelope";
+  else if (CONFIG.day < 2.5 && avgCo2 < 60) phase = "CO₂ Saturation";
+  else if (intactCount > BERRIES.length * 0.6) phase = "Intracellular Fermentation";
+  else if (intactCount > BERRIES.length * 0.15) phase = "Berry Bursting";
+  else phase = "Press & Blend";
+
+  if (frameCount % 10 === 0 && !CONFIG.paused) {
+    let avgSugar = BERRIES.reduce((s, b) => s + b.sugar, 0) / BERRIES.length;
+    let avgEth = BERRIES.reduce((s, b) => s + b.ethanol, 0) / BERRIES.length;
+    let avgMal = BERRIES.reduce((s, b) => s + b.malic, 0) / BERRIES.length;
+    let avgAntho = BERRIES.reduce((s, b) => s + b.antho, 0) / BERRIES.length;
+    chartPts.sugar.push(avgSugar);
+    chartPts.ethanol.push(avgEth);
+    chartPts.malic.push(avgMal);
+    chartPts.antho.push(avgAntho);
+    if (chartPts.sugar.length > 200) { chartPts.sugar.shift(); chartPts.ethanol.shift(); chartPts.malic.shift(); chartPts.antho.shift(); }
+  }
+}
+
+function draw() {
+  let dt = deltaTime / 1000;
+  updatePhysics(dt);
+  background(220, 18, 7);
+  drawTankAtmosphere();
+  drawTank();
+  drawStains();
+  for (let p of PARTICLES) p.draw();
+  for (let b of BERRIES) b.drawBerry();
+  for (let b of bursts) {
+    noStroke();
+    fill(b.hue, b.sat * 0.6, b.bri, b.life * 40);
+    ellipse(b.x, b.y, b.size * b.life * 2, b.size * b.life * 2);
+  }
+  drawYeastParticles();
+  drawOverlayText();
+  updateDomValues();
+}
+
+function drawTankAtmosphere() {
+  noStroke();
+  let co2Alpha = map(CONFIG.co2Percent, 0, 100, 0, 12);
+  fill(160, 60, 50, co2Alpha);
+  rect(TANK_X, TANK_Y, TANK_W, TANK_H, 8);
+  let g = drawingContext.createRadialGradient(
+    TANK_X + TANK_W / 2, TANK_Y + TANK_H / 2, TANK_W * 0.2,
+    TANK_X + TANK_W / 2, TANK_Y + TANK_H / 2, TANK_W * 0.7
+  );
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.35)');
+  drawingContext.fillStyle = g;
+  drawingContext.fillRect(TANK_X, TANK_Y, TANK_W, TANK_H);
+}
+
+function drawTank() {
+  push();
+  noFill();
+  stroke(210, 10, 45, 60);
+  strokeWeight(3);
+  rect(TANK_X, TANK_Y, TANK_W, TANK_H, 10);
+  stroke(210, 15, 70, 15);
+  strokeWeight(1.5);
+  line(TANK_X + TANK_W * 0.08, TANK_Y + 10, TANK_X + TANK_W * 0.08, TANK_Y + TANK_H - 10);
+  line(TANK_X + TANK_W * 0.92, TANK_Y + 10, TANK_X + TANK_W * 0.92, TANK_Y + TANK_H - 10);
+  pop();
+}
+
+function drawStains() {
+  noStroke();
+  for (let s of stains) {
+    fill(s.hue, 40, 18, s.life * 30);
+    ellipse(s.x, s.y, s.r * 2 * s.life, s.r * 0.7 * s.life);
+  }
+}
+
+function drawYeastParticles() {
+  noStroke();
+  for (let y of yeastParticles) {
+    fill(0, 0, 95, y.life * 45);
+    ellipse(y.x, y.y, y.size * 2, y.size * 2);
+  }
+}
+
+function drawOverlayText() {
+  push();
+  fill(210, 10, 85, 70);
+  noStroke();
+  textFont('system-ui');
+  textSize(14);
+  textAlign(LEFT, TOP);
+  text("Tank: " + Math.round(CONFIG.co2Percent) + "% CO₂  |  Temp: " + CONFIG.temperature + "°C", TANK_X + 10, TANK_Y - 26);
+  pop();
+}
+
+function updateDomValues() {
+  let intact = BERRIES.filter(b => b.intact).length;
+  let burst = BERRIES.length - intact;
+  let avgSugar = BERRIES.reduce((s, b) => s + b.sugar, 0) / BERRIES.length;
+  let avgEth = BERRIES.reduce((s, b) => s + b.ethanol, 0) / BERRIES.length;
+  let avgMal = BERRIES.reduce((s, b) => s + b.malic, 0) / BERRIES.length;
+  let avgAntho = BERRIES.reduce((s, b) => s + b.antho, 0) / BERRIES.length;
+  let pH = 3.3 + (4.5 - avgMal) * 0.08 - avgEth * 0.02;
+  document.getElementById('v-days').textContent = CONFIG.day.toFixed(1);
+  document.getElementById('v-sugar').textContent = avgSugar.toFixed(0);
+  document.getElementById('v-ethanol').textContent = avgEth.toFixed(1);
+  document.getElementById('v-malic').textContent = avgMal.toFixed(2);
+  document.getElementById('v-ph').textContent = pH.toFixed(2);
+  document.getElementById('v-antho').textContent = Math.round(avgAntho);
+  document.getElementById('v-intact').textContent = intact;
+  document.getElementById('v-burst').textContent = burst;
+  document.getElementById('phase-badge').textContent = phase;
+}
+
+function drawMiniChart2D() {
+  const cvs = document.getElementById('miniChartCanvas');
+  if (!cvs) return;
+  const ctx = cvs.getContext('2d');
+  const w = cvs.width;
+  const h = cvs.height;
+  ctx.clearRect(0, 0, w, h);
+  let datasets = [
+    { arr: chartPts.sugar, color: 'rgba(200,200,255,0.7)', max: 250 },
+    { arr: chartPts.ethanol, color: 'rgba(100,255,150,0.7)', max: 2.5 },
+    { arr: chartPts.malic, color: 'rgba(255,220,80,0.7)', max: 5 },
+    { arr: chartPts.antho, color: 'rgba(180,100,255,0.7)', max: 60 }
+  ];
+  ctx.lineWidth = 1.5;
+  for (let ds of datasets) {
+    if (ds.arr.length < 2) continue;
+    ctx.strokeStyle = ds.color;
+    ctx.beginPath();
+    for (let i = 0; i < ds.arr.length; i++) {
+      let x = (i / (ds.arr.length - 1)) * w;
+      let y = h - (ds.arr[i] / ds.max) * h;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w, h); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, h); ctx.stroke();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  defineTank();
+  for (let b of BERRIES) {
+    b.x = constrain(b.x, TANK_X + b.r, TANK_X + TANK_W - b.r);
+    b.y = constrain(b.y, TANK_Y + b.r, TANK_Y + TANK_H - b.r);
+  }
+}
+
+function keyPressed() {
+  if (key === ' ') CONFIG.paused = !CONFIG.paused;
+  if (key === 'r' || key === 'R') {
+    timeAccum = 0; CONFIG.day = 0; spawnBerries(90); spawnParticles(400);
+    chartPts = { sugar: [], ethanol: [], malic: [], antho: [] };
+    bursts = []; stains = []; yeastParticles = [];
+  }
+  if (key === 's' || key === 'S') saveCanvas('carbonic-maceration', 'png');
+}
+</script>
+</body>
+</html>

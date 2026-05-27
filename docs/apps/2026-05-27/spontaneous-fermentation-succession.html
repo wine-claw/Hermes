@@ -20,7 +20,8 @@
     --warn-text:#e8b080;
     --panel-width:280px;
   }
-  html, body{ margin:0; padding:0; overflow:hidden; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:14px; }
+  html, body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size:14px; }
+  body{ overflow:hidden; }
 
   .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.6rem 1rem; text-align:center; font-size:0.78rem; position:fixed; top:0; left:0; right:0; z-index:200; }
   .disclaimer strong{ font-weight:600; }
@@ -72,14 +73,16 @@
 
   /* Mobile */
   @media (max-width: 768px){
-    body{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
-    canvas#main-canvas{ position:fixed; top:0; left:0; z-index:0; }
-    #ui-layer{ position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:44px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; }
-    .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:0.6rem 0.85rem; background:rgba(18, 10, 12, 0.78); }
-    #panel-close{ position:relative !important; top:auto !important; right:auto !important; align-self:flex-end; margin:0 8px 0 0; }
+    html{ overflow-x: hidden; }
+    body{ overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    canvas#main-canvas{ position: fixed; top: 0; left: 0; z-index: 0; }
+    #ui-layer{ position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 44px 8px 20px; display: flex; flex-direction: column; gap: 6px; align-items: stretch; pointer-events: auto; z-index: 10; }
+    .panel{ position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; padding: 0.6rem 0.85rem; background: rgba(18, 10, 12, 0.78); box-sizing: border-box; }
+    .panel *{ max-width: 100%; box-sizing: border-box; }
+    #panel-close{ position: relative !important; top: auto !important; right: auto !important; align-self: flex-end; margin: 0 8px 6px 0; }
   }
-  #ui-layer.collapsed .panel,
-  #ui-layer.collapsed #panel-close{ display:none; }
+  #ui-layer.collapsed .panel{ display: none; }
+  #ui-layer.collapsed #panel-close{ display: block; }
 </style>
 </head>
 <body>
