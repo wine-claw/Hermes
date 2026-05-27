@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Sur Lie Autolysis & Lees Aging Simulator</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  :root{ --bg:#0f080a; --surface:rgba(10,6,8,0.95); --border:#3a2028; --text:#f0d5c5; --muted:#a08080; --accent:#c9a86c; --accent2:#8ebf75; --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080; }
+  html,body{ margin:0; padding:0; overflow:hidden; background:var(--bg); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  canvas{ display:block; }
+
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.6rem 1rem; text-align:center; font-size:0.82rem; position:fixed; top:0; left:0; right:0; z-index:200; }
+
+  #ui-layer{ position:absolute; top:42px; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+  #ui-layer > *{ pointer-events:auto; }
+
+  .panel{ position:absolute; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:0.9rem 1.1rem; max-width:min(280px, calc(100vw - 20px)); color:var(--text); backdrop-filter:blur(4px); }
+
+  .panel.top-left{ top:12px; left:12px; }
+  .panel.top-right{ top:12px; right:12px; }
+  .panel.bottom-left{ bottom:12px; left:12px; }
+  .panel.bottom-right{ bottom:12px; right:12px; }
+
+  .panel h2{ font-size:0.9rem; margin:0 0 0.6rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.08em; }
+  .panel label{ display:block; font-size:0.8rem; color:var(--muted); margin:0.5rem 0 0.15rem; }
+  .panel input[type=range]{ width:100%; accent-color:var(--accent); }
+  .panel .val{ font-variant-numeric:tabular-nums; color:var(--accent); font-weight:600; font-size:0.82rem; }
+
+  .btn{ display:inline-block; background:linear-gradient(135deg,var(--accent),#b8924a); color:#1a0f0a; border:none; padding:0.45rem 0.85rem; border-radius:6px; font-weight:700; cursor:pointer; font-size:0.8rem; margin-top:0.6rem; }
+  .btn:hover{ filter:brightness(1.15); }
+
+  .readout{ margin-top:0.5rem; font-size:0.78rem; color:var(--text); line-height:1.5; }
+  .readout span{ color:var(--accent2); font-weight:600; }
+
+  .chart-label{ font-size:0.7rem; color:var(--muted); margin-top:0.4rem; }
+
+  @media (max-width: 768px){
+    body{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    canvas{ position:fixed; top:0; left:0; z-index:0; }
+    #ui-layer{ position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:50px 8px 20px; display:flex; flex-direction:column; gap:8px; align-items:stretch; z-index:10; }
+    .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; background:rgba(10,6,8,0.78); }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="ui-layer">
+  <div class="panel top-left">
+    <h2>Sur Lie Controls</h2>
+    <label>Aging Duration (months) <span class="val" id="val-duration">6</span></label>
+    <input type="range" id="duration" min="1" max="48" value="6" step="1">
+
+    <label>Cellar Temperature (°C) <span class="val" id="val-temp">12</span></label>
+    <input type="range" id="temp" min="4" max="25" value="12" step="0.5">
+
+    <label>Lees Loading (% v/v) <span class="val" id="val-loading">8</span></label>
+    <input type="range" id="loading" min="1" max="25" value="8" step="0.5">
+
+    <label>Bâtonnage Frequency <span class="val" id="val-stir">7</span></label>
+    <input type="range" id="stir" min="0" max="30" value="7" step="1">
+
+    <button class="btn" id="batBtn">Trigger Bâtonnage</button>
+
+    <div class="readout">
+      Day <span id="read-day">0</span> of <span id="read-target">180</span><br>
+      Mannoproteins: <span id="read-mp">0</span> mg/L<br>
+      FAN Release: <span id="read-fan">0</span> mg/L<br>
+      H₂S Risk: <span id="read-h2s">low</span><br>
+      Texture Index: <span id="read-txt">0.00</span>
+    </div>
+  </div>
+
+  <div class="panel top-right">
+    <h2>Live Trends</h2>
+    <canvas id="spark-mp" width="220" height="70" style="background:rgba(255,255,255,0.03);border-radius:6px;"></canvas>
+    <div class="chart-label">Mannoprotein (mg/L)</div>
+    <canvas id="spark-fan" width="220" height="70" style="background:rgba(255,255,255,0.03);border-radius:6px;margin-top:6px;"></canvas>
+    <div class="chart-label">FAN Release (mg/L)</div>
+    <canvas id="spark-h2s" width="220" height="70" style="background:rgba(255,255,255,0.03);border-radius:6px;margin-top:6px;"></canvas>
+    <div class="chart-label">H₂S Accumulation Risk</div>
+  </div>
+</div>
+
+<script>
+// === Sur Lie Autolysis Simulator ===
+// Particle-based yeast lees aging visualization
+
+const CONFIG = {
+  seed: 42,
+  durationMonths: 6,
+  cellarTemp: 12,
+  leesLoading: 8,
+  stirFreqDays: 7,
+  paused: false,
+};
+
+const PALETTE = {
+  bg:        '#0f080a',
+  wineDeep:  '#2a0a12',
+  wineMid:   '#5c1528',
+  wineLight: '#8a2c45',
+  leesGold:  '#c9a86c',
+  leesPale:  '#e8d5a8',
+  compound:  '#8ebf75',
+  h2s:       '#c44d4d',
+  panel:     'rgba(10,6,8,0.95)',
+};
+
+let yeastParticles = [];
+ let compoundParticles = [];
+let trailLayer;
+let bgLayer;
+let sparklines = { mp:[], fan:[], h2s:[] };
+let dayCounter = 0;
+let stirImpulse = 0;
+let simSpeed = 2; // days per second
+let lastTime = 0;
+let mannoprotein = 0;
+let fanRelease = 0;
+let h2sAccum = 0;
+let textureIndex = 0;
+
+// Spark canvases
+let cvsMp, cvsFan, cvsH2s;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+  colorMode(HSB, 360, 100, 100, 100);
+
+  trailLayer = createGraphics(width, height);
+  trailLayer.colorMode(HSB, 360, 100, 100, 100);
+  bgLayer = createGraphics(width, height);
+  renderBackground();
+
+  initYeast(CONFIG.leesLoading);
+
+  cvsMp = document.getElementById('spark-mp');
+  cvsFan = document.getElementById('spark-fan');
+  cvsH2s = document.getElementById('spark-h2s');
+
+  bindUI();
+}
+
+function renderBackground() {
+  bgLayer.background(10, 22, 7); // deep burgundy in HSB approx
+  // Create a subtle noise texture mimicking wine depth
+  bgLayer.loadPixels();
+  for (let y = 0; y < bgLayer.height; y++) {
+    for (let x = 0; x < bgLayer.width; x += 2) { // skip for perf
+      let n = noise(x*0.003, y*0.003);
+      let v = map(n, 0, 1, 5, 18);
+      let idx = 4*(y*bgLayer.width + x);
+      bgLayer.pixels[idx] = v;     // H deep red-brown
+      bgLayer.pixels[idx+1] = 70;  // S
+      bgLayer.pixels[idx+2] = map(y, 0, bgLayer.height, 16, 8); // B darker at top
+      bgLayer.pixels[idx+3] = 255;
+    }
+  }
+  bgLayer.updatePixels();
+}
+
+function initYeast(loadingPct) {
+  yeastParticles = [];
+  let count = Math.floor(map(loadingPct, 1, 25, 80, 900));
+  for (let i = 0; i < count; i++) {
+    yeastParticles.push(new YeastCell());
+  }
+}
+
+class YeastCell {
+  constructor() {
+    this.x = random(width);
+    this.y = random(height * 0.35, height);
+    this.r = random(2, 5);
+    this.vx = random(-0.3, 0.3);
+    this.vy = random(-0.1, 0.3);
+    this.alive = true;
+    this.lysed = false;
+    this.lysisTimer = random(10, 60); // days until lysis
+    this.age = random(0, 30);
+    this.hue = random(35, 55);
+    this.oscOff = random(1000);
+  }
+
+  update(dt, temp, stir) {
+    if (this.lysed) return;
+    this.age += dt;
+
+    if (this.alive) {
+      // Lysis probability increases with temperature and age
+      let lysisRate = map(temp, 4, 25, 0.3, 2.5);
+      if (this.age > this.lysisTimer) {
+        if (random() < 0.005 * lysisRate) {
+          this.lyse();
+        }
+      }
+    }
+
+    // Physics
+    let buoyancy = map(temp, 4, 25, -0.01, 0.08); // warm = slight rise
+    if (!this.alive) buoyancy *= 0.2;
+
+    let settle = 0.04;
+    let noiseForce = noise(this.x*0.005, this.y*0.005, millis()*0.0002);
+    let nx = (noiseForce - 0.5) * 0.2;
+
+    this.vx += nx + stir * random(-2, 2);
+    this.vy += buoyancy - settle + stir * random(-3, 1);
+    this.vx *= 0.96;
+    this.vy *= 0.96;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Boundaries — bidirectional wall enforcement
+    if (this.x > width) { this.x = width - 1; this.vx = -Math.abs(this.vx); }
+    else if (this.x < 0) { this.x = 1; this.vx = Math.abs(this.vx); }
+
+    // Bottom sediment accumulation with profile
+    let sedimentY = height - map(this.r, 2, 5, 20, 50);
+    if (this.y > sedimentY) {
+      this.y = sedimentY - random(0, 10);
+      this.vy = -Math.abs(this.vy) * 0.3;
+    }
+    if (this.y < 0) { this.y = 1; this.vy = Math.abs(this.vy); }
+  }
+
+  lyse() {
+    this.alive = false;
+    this.lysed = true;
+    // Release compound burst
+    let n = floor(random(3, 8));
+    for (let i = 0; i < n; i++) {
+      compoundParticles.push(new Compound(this.x, this.y));
+    }
+    // Simulation metrics
+    let tempFactor = map(CONFIG.cellarTemp, 4, 25, 0.5, 2.0);
+    mannoprotein += 2.5 * tempFactor;
+    fanRelease += 1.2 * tempFactor;
+    // H2S risk: high temp + low stir + reductive conditions
+    let reductive = CONFIG.stirFreqDays < 3 ? 1.5 : 0.6;
+    h2sAccum += 0.08 * tempFactor * reductive;
+  }
+
+  display(ctx) {
+    if (this.lysed) return;
+    let alpha = this.alive ? 75 : 55;
+    let s = this.alive ? 55 : 35;
+    let b = this.alive ? 90 : 70;
+    ctx.fill(this.hue, s, b, alpha);
+    ctx.noStroke();
+    ctx.ellipse(this.x, this.y, this.r*2, this.r*2);
+    // Subtle highlight
+    ctx.fill(this.hue, s*0.4, 100, 30);
+    ctx.ellipse(this.x - this.r*0.3, this.y - this.r*0.3, this.r*0.6, this.r*0.6);
+  }
+}
+
+class Compound {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.r = random(1, 2.5);
+    this.vx = random(-0.5, 0.5);
+    this.vy = random(-0.8, 0.2);
+    this.life = random(0.6, 1.0);
+    this.decay = random(0.003, 0.008);
+    this.type = random() < 0.7 ? 'manno' : 'fan';
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vx *= 0.98;
+    this.vy *= 0.98;
+    this.life -= this.decay;
+  }
+
+  display(ctx) {
+    if (this.life <= 0) return;
+    let h = this.type === 'manno' ? 95 : 130;
+    ctx.fill(h, 45, 85, this.life * 40);
+    ctx.noStroke();
+    ctx.ellipse(this.x, this.y, this.r*2 * this.life, this.r*2 * this.life);
+  }
+}
+
+function draw() {
+  if (CONFIG.paused) return;
+  let now = millis();
+  if (lastTime === 0) lastTime = now;
+  let elapsed = (now - lastTime) / 1000;
+  lastTime = now;
+
+  // Simulation time step
+  dayCounter += elapsed * simSpeed;
+  if (dayCounter > CONFIG.durationMonths * 30) {
+    dayCounter = CONFIG.durationMonths * 30;
+    CONFIG.paused = true;
+  }
+
+  // Bâtonnage impulse decay
+  stirImpulse *= 0.93;
+
+  // Background
+  image(bgLayer, 0, 0);
+
+  // Trail / bloom layer (yeast sediment persistence)
+  trailLayer.fill(10, 60, 4, 3);
+  trailLayer.rect(0, 0, width, height);
+
+  // Update yeast
+  for (let yc of yeastParticles) {
+    yc.update(elapsed * simSpeed, CONFIG.cellarTemp, stirImpulse);
+    yc.display(trailLayer);
+  }
+
+  // Update compounds
+  for (let i = compoundParticles.length - 1; i >= 0; i--) {
+    let cp = compoundParticles[i];
+    cp.update();
+    cp.display(trailLayer);
+    if (cp.life <= 0) compoundParticles.splice(i, 1);
+  }
+
+  image(trailLayer, 0, 0);
+
+  // HUD on canvas: sediment line
+  stroke(40, 35, 60, 20);
+  strokeWeight(1);
+  let sedY = height - 40;
+  line(0, sedY, width, sedY);
+
+  // Texture index update
+  let aliveCount = yeastParticles.filter(y => y.alive && !y.lysed).length;
+  let total = yeastParticles.length;
+  let lyseRatio = 1 - (aliveCount / total);
+  textureIndex = lyseRatio * (mannoprotein * 0.1) * (1 + fanRelease * 0.05);
+  if (textureIndex > 10) textureIndex = 10;
+
+  // Readouts
+  updateDOM();
+  drawSparklines();
+}
+
+function updateDOM() {
+  document.getElementById('read-day').textContent = Math.floor(dayCounter);
+  document.getElementById('read-target').textContent = Math.round(CONFIG.durationMonths * 30);
+  document.getElementById('read-mp').textContent = mannoprotein.toFixed(1);
+  document.getElementById('read-fan').textContent = fanRelease.toFixed(1);
+  let h2sLevel = h2sAccum < 1 ? 'low' : h2sAccum < 2.5 ? 'moderate' : 'HIGH';
+  let h2sEl = document.getElementById('read-h2s');
+  h2sEl.textContent = h2sLevel;
+  h2sEl.style.color = h2sAccum < 1 ? 'var(--accent2)' : h2sAccum < 2.5 ? '#d4a853' : '#e05050';
+  document.getElementById('read-txt').textContent = textureIndex.toFixed(2);
+}
+
+function drawSparklines() {
+  // Push values
+  sparklines.mp.push(mannoprotein);
+  sparklines.fan.push(fanRelease);
+  sparklines.h2s.push(h2sAccum);
+  if (sparklines.mp.length > 120) sparklines.mp.shift();
+  if (sparklines.fan.length > 120) sparklines.fan.shift();
+  if (sparklines.h2s.length > 120) sparklines.h2s.shift();
+
+  drawSpark(cvsMp, sparklines.mp, 0, Math.max(60, mannoprotein*1.2), '#8ebf75');
+  drawSpark(cvsFan, sparklines.fan, 0, Math.max(40, fanRelease*1.2 + 5), '#c9a86c');
+  drawSpark(cvsH2s, sparklines.h2s, 0, Math.max(4, h2sAccum*1.3 + 1), '#c44d4d');
+}
+
+function drawSpark(cvs, data, minV, maxV, color) {
+  let ctx = cvs.getContext('2d');
+  let W = cvs.width, H = cvs.height;
+  ctx.clearRect(0,0,W,H);
+  if (data.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    let x = (i / (120-1)) * W;
+    let y = H - map(constrain(data[i], minV, maxV), minV, maxV, 2, H-2);
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  // fill
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.fillStyle = color + '22'; // ~13% alpha hex
+  ctx.fill();
+}
+
+// Bâtonnage
+function triggerBat() {
+  stirImpulse = 1.0;
+  for (let yc of yeastParticles) {
+    yc.vx += random(-6, 6);
+    yc.vy += random(-12, -2);
+  }
+}
+
+// UI bindings
+function bindUI() {
+  const dur = document.getElementById('duration');
+  const tmp = document.getElementById('temp');
+  const load = document.getElementById('loading');
+  const stir = document.getElementById('stir');
+  const btn = document.getElementById('batBtn');
+
+  dur.addEventListener('input', e => { CONFIG.durationMonths = +e.target.value; document.getElementById('val-duration').textContent = e.target.value; resetSim(); });
+  tmp.addEventListener('input', e => { CONFIG.cellarTemp = +e.target.value; document.getElementById('val-temp').textContent = e.target.value; });
+  load.addEventListener('input', e => { CONFIG.leesLoading = +e.target.value; document.getElementById('val-loading').textContent = e.target.value; initYeast(CONFIG.leesLoading); });
+  stir.addEventListener('input', e => { CONFIG.stirFreqDays = +e.target.value; document.getElementById('val-stir').textContent = e.target.value; });
+  btn.addEventListener('click', triggerBat);
+}
+
+function resetSim() {
+  dayCounter = 0;
+  mannoprotein = 0;
+  fanRelease = 0;
+  h2sAccum = 0;
+  textureIndex = 0;
+  sparklines.mp = [];
+  sparklines.fan = [];
+  sparklines.h2s = [];
+  compoundParticles = [];
+  initYeast(CONFIG.leesLoading);
+  CONFIG.paused = false;
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  trailLayer = createGraphics(width, height);
+  trailLayer.colorMode(HSB, 360, 100, 100, 100);
+  bgLayer = createGraphics(width, height);
+  renderBackground();
+}
+
+function keyPressed() {
+  if (key === ' ') { CONFIG.paused = !CONFIG.paused; lastTime = millis(); }
+  if (key === 'r' || key === 'R') resetSim();
+  if (key === 'b' || key === 'B') triggerBat();
+}
+</script>
+</body>
+</html>
