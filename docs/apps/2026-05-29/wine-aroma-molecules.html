@@ -58,13 +58,28 @@
   @media(max-width:768px){
     body{overflow-y:auto;-webkit-overflow-scrolling:touch;}
     #canvas-container{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;}
-    #ui-layer{position:relative;top:auto;left:auto;right:auto;bottom:auto;display:block;padding:44px 10px 20px;z-index:10;}
-    .panel{position:relative !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;width:100% !important;max-width:none !important;margin-bottom:10px;}
+    #ui-layer{position:relative;top:auto;left:auto;right:auto;bottom:auto;display:block;padding:36px 8px 12px;z-index:10;}
+    .panel{position:relative !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;width:100% !important;max-width:none !important;margin-bottom:8px;background:rgba(16,16,24,0.65);padding:0.7rem 0.9rem;border-radius:10px;}
+    .panel h2{font-size:0.88rem;}
+    .panel h3{font-size:0.76rem;}
+    .panel p{font-size:0.78rem;}
+    .info-row{font-size:0.72rem;}
+    .bar-label{font-size:0.68rem;width:60px;}
+    .mol-name{font-size:0.78rem;}
+    .mol-sub{font-size:0.68rem;}
+    .chip{font-size:0.68rem;padding:0.14rem 0.45rem;}
+    .btn{font-size:0.72rem;padding:0.35rem 0.6rem;}
     #molecule-panel{max-height:none;}
-    #controls{position:relative;bottom:auto;left:auto;padding:0 0 10px 0;display:flex;flex-wrap:wrap;}
+    #controls{position:relative;bottom:auto;left:auto;padding:0 0 8px 0;display:flex;flex-wrap:wrap;gap:0.4rem;}
+    #tooltip{font-size:0.72rem;}
   }
 
-  /* Scrollbar for molecule panel */
+  /* Panel close toggle */
+  #panel-toggle{position:absolute;top:6px;right:10px;z-index:60;background:rgba(20,20,28,0.8);border:1px solid var(--border);color:var(--text);padding:0.25rem 0.5rem;border-radius:6px;font-size:0.72rem;cursor:pointer;display:none;}
+  @media(max-width:768px){ #panel-toggle{display:block;}
+    #ui-layer.collapsed .panel,#ui-layer.collapsed #controls,#ui-layer.collapsed #panel-toggle{display:none;}
+    #ui-layer.collapsed::before{content:"Tap to show controls";display:block;text-align:center;padding:12px;color:var(--muted);font-size:0.8rem;cursor:pointer;}
+  }
   #molecule-panel::-webkit-scrollbar{width:5px;}
   #molecule-panel::-webkit-scrollbar-track{background:transparent;}
   #molecule-panel::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px;}
@@ -84,6 +99,7 @@
 <div id="canvas-container"></div>
 
 <div id="ui-layer">
+  <button id="panel-toggle">✕ Close</button>
   <div class="panel" id="molecule-panel">
     <h2>Aroma Molecules</h2>
     <div id="mol-list"></div>
@@ -443,9 +459,12 @@ function selectMolecule(key){
   controls.update();
 }
 
-/* Controls */
+/* Controls + panel toggle */
 const btnRotate = document.getElementById('btn-rotate');
 const btnBond = document.getElementById('btn-bond');
+const panelToggle = document.getElementById('panel-toggle');
+const uiLayer = document.getElementById('ui-layer');
+
 btnRotate.addEventListener('click', ()=>{
   autoRotate = !autoRotate;
   btnRotate.classList.toggle('active', autoRotate);
@@ -456,6 +475,20 @@ btnBond.addEventListener('click', ()=>{
   const mol = MOLECULES.find(m => m.key === currentKey);
   if (mol) buildMolecule(mol);
 });
+
+/* Mobile panel collapse */
+if (panelToggle && uiLayer) {
+  panelToggle.addEventListener('click', ()=>{
+    uiLayer.classList.toggle('collapsed');
+    panelToggle.textContent = uiLayer.classList.contains('collapsed') ? '☰ Show' : '✕ Close';
+  });
+  uiLayer.addEventListener('click', (e)=>{
+    if (e.target === uiLayer && uiLayer.classList.contains('collapsed')) {
+      uiLayer.classList.remove('collapsed');
+      panelToggle.textContent = '✕ Close';
+    }
+  });
+}
 
 /* Mouse events */
 function onMouseMove(e){
