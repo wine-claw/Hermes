@@ -9,18 +9,18 @@
   html,body{margin:0;padding:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;touch-action:manipulation;}
   canvas{display:block;}
   #canvas-container{position:fixed;inset:0;z-index:0;}
-  #ui-layer{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;display:flex;}
-  #ui-layer > *{pointer-events:auto;}
 
-  .disclaimer{position:sticky;top:0;background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);padding:0.6rem 1rem;text-align:center;font-size:0.82rem;z-index:200;}
+  .disclaimer{position:fixed;top:0;left:0;right:0;background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);padding:0.55rem 1rem;text-align:center;font-size:0.78rem;z-index:200;}
   .disclaimer strong{font-weight:600;}
 
+  /* === DESKTOP: floating panels === */
+  #ui-layer{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;display:flex;}
+  #ui-layer > *{pointer-events:auto;}
   .panel{position:absolute;background:rgba(16,16,24,0.92);border:1px solid var(--border);border-radius:12px;padding:1rem 1.15rem;backdrop-filter:blur(6px);}
   .panel h2{margin:0 0 0.4rem 0;font-size:0.95rem;color:var(--accent);font-weight:600;}
   .panel h3{margin:0.6rem 0 0.3rem 0;font-size:0.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
   .panel p{font-size:0.83rem;color:var(--muted);line-height:1.45;margin:0.2rem 0;}
 
-  /* Left molecule selector */
   #molecule-panel{top:52px;left:14px;width:min(260px,calc(100vw - 28px));bottom:auto;max-height:calc(100vh - 70px);overflow-y:auto;}
   .mol-card{display:flex;align-items:center;gap:0.7rem;padding:0.55rem 0.7rem;border-radius:8px;border:1px solid transparent;margin-bottom:0.35rem;cursor:pointer;transition:border-color .15s,background .15s;touch-action:manipulation;}
   .mol-card:hover{background:rgba(201,168,108,0.06);}
@@ -29,61 +29,67 @@
   .mol-name{font-size:0.82rem;font-weight:500;color:var(--text);line-height:1.2;}
   .mol-sub{font-size:0.72rem;color:var(--muted);}
 
-  /* Right info panel */
   #info-panel{top:52px;right:14px;width:min(260px,calc(100vw - 28px));bottom:auto;}
-
   .info-row{display:flex;justify-content:space-between;font-size:0.78rem;margin:0.3rem 0;color:var(--muted);}
   .info-row .val{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums;}
-
   .bar-wrap{display:flex;align-items:center;gap:0.5rem;margin:0.25rem 0;}
   .bar-label{font-size:0.72rem;color:var(--muted);width:72px;flex-shrink:0;}
   .bar-track{flex:1;height:7px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;}
   .bar-fill{height:100%;border-radius:4px;width:0%;transition:width .8s cubic-bezier(.2,.8,.2,1);}
-
   .wine-chips{display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.4rem;}
   .chip{font-size:0.72rem;padding:0.18rem 0.55rem;border-radius:20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:var(--muted);}
 
   #tooltip{position:absolute;background:rgba(10,10,15,0.95);border:1px solid var(--border);border-radius:6px;padding:0.35rem 0.6rem;font-size:0.78rem;color:var(--text);pointer-events:none;opacity:0;transition:opacity .1s;z-index:50;white-space:nowrap;}
 
-  /* bottom controls */
   #controls{position:absolute;bottom:14px;left:14px;display:flex;gap:0.5rem;}
   .btn{background:rgba(20,20,28,0.85);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.7rem;border-radius:6px;font-size:0.75rem;cursor:pointer;pointer-events:auto;touch-action:manipulation;backdrop-filter:blur(4px);}
   .btn:hover{border-color:var(--accent);}
   .btn.active{border-color:var(--accent);background:rgba(201,168,108,0.12);}
 
-  /* aroma canvas */
   #aroma-canvas{width:100%;height:90px;margin-top:0.3rem;border-radius:6px;background:rgba(255,255,255,0.02);}
 
-  /* Mobile */
+  /* === MOBILE: bottom bar + drawer === */
   @media(max-width:768px){
-    body{overflow-y:auto;-webkit-overflow-scrolling:touch;}
-    #canvas-container{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;}
-    #ui-layer{position:relative;top:auto;left:auto;right:auto;bottom:auto;display:block;padding:36px 8px 12px;z-index:10;}
-    .panel{position:relative !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;width:100% !important;max-width:none !important;margin-bottom:8px;background:rgba(16,16,24,0.65);padding:0.7rem 0.9rem;border-radius:10px;}
-    .panel h2{font-size:0.88rem;}
-    .panel h3{font-size:0.76rem;}
-    .panel p{font-size:0.78rem;}
-    .info-row{font-size:0.72rem;}
-    .bar-label{font-size:0.68rem;width:60px;}
-    .mol-name{font-size:0.78rem;}
-    .mol-sub{font-size:0.68rem;}
-    .chip{font-size:0.68rem;padding:0.14rem 0.45rem;}
-    .btn{font-size:0.72rem;padding:0.35rem 0.6rem;}
-    #molecule-panel{max-height:none;}
-    #controls{position:relative;bottom:auto;left:auto;padding:0 0 8px 0;display:flex;flex-wrap:wrap;gap:0.4rem;}
-    #tooltip{font-size:0.72rem;}
+    /* disclaimer no longer sticky — it's fixed at top */
+    body{overflow:hidden;} /* keep canvas filling screen */
+
+    /* Canvas always fills viewport */
+    #canvas-container{position:fixed;inset:0;z-index:0;}
+
+    /* UI layer becomes a bottom bar only */
+    #ui-layer{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;pointer-events:none;z-index:10;display:block;padding:0;}
+    #ui-layer > *{pointer-events:auto;}
+
+    /* Desktop panels hidden by default */
+    .panel{display:none;}
+
+    /* Bottom bar */
+    #mobile-bar{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;background:rgba(10,10,15,0.85);border-top:1px solid var(--border);z-index:20;backdrop-filter:blur(8px);pointer-events:auto;}
+    #mobile-bar .mol-name-btn{background:rgba(20,20,28,0.9);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.7rem;border-radius:6px;font-size:0.8rem;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-align:left;}
+    #mobile-bar .mol-name-btn span{color:var(--accent);font-weight:500;}
+    #mobile-bar .bar-btn{background:rgba(20,20,28,0.9);border:1px solid var(--border);color:var(--text);padding:0.35rem 0.55rem;border-radius:6px;font-size:0.75rem;cursor:pointer;flex-shrink:0;}
+    #mobile-bar .bar-btn.active{border-color:var(--accent);background:rgba(201,168,108,0.12);}
+
+    /* Slide-up drawer */
+    #drawer{position:fixed;left:0;right:0;bottom:0;background:rgba(14,14,22,0.95);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:1rem 1.1rem 5rem;max-height:70vh;overflow-y:auto;transform:translateY(110%);transition:transform .3s cubic-bezier(.2,.8,.2,1);z-index:30;pointer-events:auto;display:none;}
+    #drawer.open{display:block;transform:translateY(0);}
+    #drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:25;opacity:0;pointer-events:none;transition:opacity .2s;}
+    #drawer-backdrop.open{opacity:1;pointer-events:auto;}
+    #drawer-close{position:absolute;top:10px;right:14px;background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;padding:0.2rem;}
+    #drawer h2{margin:0 0 0.5rem 0;font-size:0.95rem;color:var(--accent);}
+    #drawer h3{margin:0.6rem 0 0.3rem 0;font-size:0.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
+    #drawer p{font-size:0.83rem;color:var(--muted);line-height:1.45;}
+    #drawer .info-row{font-size:0.78rem;}
+    #drawer .chip{font-size:0.72rem;}
+    #drawer .mol-card{margin-bottom:0.3rem;}
+    #drawer-mol-list{margin-bottom:0.8rem;}
   }
 
-  /* Panel close toggle */
-  #panel-toggle{position:absolute;top:6px;right:10px;z-index:60;background:rgba(20,20,28,0.8);border:1px solid var(--border);color:var(--text);padding:0.25rem 0.5rem;border-radius:6px;font-size:0.72rem;cursor:pointer;display:none;}
-  @media(max-width:768px){ #panel-toggle{display:block;}
-    #ui-layer.collapsed .panel,#ui-layer.collapsed #controls,#ui-layer.collapsed #panel-toggle{display:none;}
-    #ui-layer.collapsed::before{content:"Tap to show controls";display:block;text-align:center;padding:12px;color:var(--muted);font-size:0.8rem;cursor:pointer;}
-  }
+  /* Scrollbar for molecule panel */
   #molecule-panel::-webkit-scrollbar{width:5px;}
   #molecule-panel::-webkit-scrollbar-track{background:transparent;}
   #molecule-panel::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px;}
-</style>
+  </style>
 <script type="importmap">
 {
   "imports": {
@@ -99,7 +105,6 @@
 <div id="canvas-container"></div>
 
 <div id="ui-layer">
-  <button id="panel-toggle">✕ Close</button>
   <div class="panel" id="molecule-panel">
     <h2>Aroma Molecules</h2>
     <div id="mol-list"></div>
@@ -120,6 +125,22 @@
   <div id="controls">
     <button class="btn active" id="btn-rotate">Auto Rotate</button>
     <button class="btn" id="btn-bond">Bond Glow</button>
+  </div>
+
+  <!-- Mobile bottom bar -->
+  <div id="mobile-bar" style="display:none;">
+    <button class="mol-name-btn" id="mobile-mol-btn"><span id="mobile-mol-name">Vanillin</span></button>
+    <button class="bar-btn active" id="mobile-rotate">Rotate</button>
+    <button class="bar-btn" id="mobile-bond">Glow</button>
+    <button class="bar-btn" id="mobile-info">Info</button>
+  </div>
+
+  <!-- Mobile drawer -->
+  <div id="drawer-backdrop"></div>
+  <div id="drawer">
+    <button id="drawer-close">✕</button>
+    <div id="drawer-mol-list"></div>
+    <div id="drawer-info"></div>
   </div>
 </div>
 
@@ -452,6 +473,7 @@ function selectMolecule(key){
   buildMolecule(mol);
   buildInfoPanel(mol);
   createMolList(); // refresh active state
+  updateMobileBar(); // update mobile bottom bar text
 
   // Reset camera slightly for drama
   camera.position.set(0, 2, 10);
@@ -459,11 +481,9 @@ function selectMolecule(key){
   controls.update();
 }
 
-/* Controls + panel toggle */
+/* Controls */
 const btnRotate = document.getElementById('btn-rotate');
 const btnBond = document.getElementById('btn-bond');
-const panelToggle = document.getElementById('panel-toggle');
-const uiLayer = document.getElementById('ui-layer');
 
 btnRotate.addEventListener('click', ()=>{
   autoRotate = !autoRotate;
@@ -476,19 +496,131 @@ btnBond.addEventListener('click', ()=>{
   if (mol) buildMolecule(mol);
 });
 
-/* Mobile panel collapse */
-if (panelToggle && uiLayer) {
-  panelToggle.addEventListener('click', ()=>{
-    uiLayer.classList.toggle('collapsed');
-    panelToggle.textContent = uiLayer.classList.contains('collapsed') ? '☰ Show' : '✕ Close';
-  });
-  uiLayer.addEventListener('click', (e)=>{
-    if (e.target === uiLayer && uiLayer.classList.contains('collapsed')) {
-      uiLayer.classList.remove('collapsed');
-      panelToggle.textContent = '✕ Close';
+/* ===== MOBILE BOTTOM BAR + DRAWER ===== */
+const mobileBar = document.getElementById('mobile-bar');
+const mobileRotate = document.getElementById('mobile-rotate');
+const mobileBond = document.getElementById('mobile-bond');
+const mobileInfo = document.getElementById('mobile-info');
+const mobileMolBtn = document.getElementById('mobile-mol-btn');
+const mobileMolName = document.getElementById('mobile-mol-name');
+const drawer = document.getElementById('drawer');
+const drawerBackdrop = document.getElementById('drawer-backdrop');
+const drawerClose = document.getElementById('drawer-close');
+const drawerMolList = document.getElementById('drawer-mol-list');
+const drawerInfo = document.getElementById('drawer-info');
+
+function isMobile(){ return window.innerWidth <= 768; }
+
+function openDrawer(mode){
+  drawer.classList.add('open');
+  drawerBackdrop.classList.add('open');
+  drawerMolList.innerHTML = '';
+  drawerInfo.innerHTML = '';
+  if (mode === 'molecules') {
+    drawerMolList.innerHTML = document.getElementById('mol-list').innerHTML;
+    // Re-bind click handlers on cloned cards
+    drawerMolList.querySelectorAll('.mol-card').forEach(card => {
+      card.addEventListener('click', () => selectMolecule(card.dataset.key));
+    });
+  } else if (mode === 'info') {
+    const mol = MOLECULES.find(m => m.key === currentKey);
+    if (!mol) return;
+    drawerInfo.innerHTML = `
+      <h2>${mol.name}</h2>
+      <p>${mol.desc}</p>
+      <div class="info-row"><span>Formula</span><span class="val">${mol.formula}</span></div>
+      <div class="info-row"><span>Threshold</span><span class="val">${mol.threshold}</span></div>
+      <div class="info-row"><span>MW</span><span class="val">${mol.mw}</span></div>
+      <h3>Aroma Profile</h3>
+      <div style="height:90px;" id="drawer-aroma-wrap"></div>
+      <h3>Common in</h3>
+      <div class="wine-chips">${mol.wineTypes.map(t => `<span class="chip">${t}</span>`).join('')}</div>
+    `;
+    // Draw aroma chart on a new canvas
+    const wrap = document.getElementById('drawer-aroma-wrap');
+    if (wrap) {
+      const c = document.createElement('canvas');
+      c.width = wrap.clientWidth * 2;
+      c.height = 180;
+      c.style.width = '100%';
+      c.style.height = '90px';
+      wrap.appendChild(c);
+      drawAromaCanvasOn(c, mol.aromaProfile, wrap.clientWidth, 90);
     }
-  });
+  }
 }
+
+function closeDrawer(){
+  drawer.classList.remove('open');
+  drawerBackdrop.classList.remove('open');
+}
+
+drawerClose.addEventListener('click', closeDrawer);
+drawerBackdrop.addEventListener('click', closeDrawer);
+
+mobileRotate.addEventListener('click', ()=>{
+  autoRotate = !autoRotate;
+  mobileRotate.classList.toggle('active', autoRotate);
+  if (btnRotate) btnRotate.classList.toggle('active', autoRotate);
+});
+mobileBond.addEventListener('click', ()=>{
+  bondGlowEnabled = !bondGlowEnabled;
+  mobileBond.classList.toggle('active', bondGlowEnabled);
+  if (btnBond) btnBond.classList.toggle('active', bondGlowEnabled);
+  const mol = MOLECULES.find(m => m.key === currentKey);
+  if (mol) buildMolecule(mol);
+});
+mobileMolBtn.addEventListener('click', ()=> openDrawer('molecules'));
+mobileInfo.addEventListener('click', ()=> openDrawer('info'));
+
+function updateMobileBar(){
+  if (!isMobile()) {
+    if (mobileBar) mobileBar.style.display = 'none';
+    closeDrawer();
+    return;
+  }
+  if (mobileBar) mobileBar.style.display = 'flex';
+  const mol = MOLECULES.find(m => m.key === currentKey);
+  if (mol && mobileMolName) mobileMolName.textContent = mol.name;
+}
+
+function drawAromaCanvasOn(c, profile, cw, ch){
+  const ctx = c.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  c.width = cw * dpr;
+  c.height = ch * dpr;
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.scale(dpr, dpr);
+  const cols = {
+    floral:  '#c084a0', fruity:  '#d4a06a', spicy:   '#c95a3a',
+    oaky:    '#8e6b3d', herbal:  '#5a8e5a', earthy:  '#7a6a5a'
+  };
+  const labels = {floral:'Floral',fruity:'Fruity',spicy:'Spicy',oaky:'Oak/Toast',herbal:'Herbal',earthy:'Earthy'};
+  const keys = Object.keys(profile);
+  const pad = 10, barW = (cw - pad*2 - (keys.length-1)*6) / keys.length;
+  keys.forEach((k,i)=>{
+    const v = profile[k];
+    const x = pad + i*(barW+6);
+    const bh = (ch - 18) * v;
+    const y = ch - 14 - bh;
+    const grad = ctx.createLinearGradient(0, y, 0, y+bh);
+    grad.addColorStop(0, cols[k] + 'cc');
+    grad.addColorStop(1, cols[k] + '44');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, bh, 3);
+    ctx.fill();
+    ctx.fillStyle = '#9b958e';
+    ctx.font = '9px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(labels[k].split(' ')[0], x + barW/2, ch - 3);
+  });
+  ctx.setTransform(1,0,0,1,0,0);
+}
+
+window.addEventListener('resize', ()=>{
+  updateMobileBar();
+});
 
 /* Mouse events */
 function onMouseMove(e){
@@ -565,6 +697,7 @@ animate();
 
 /* Init */
 selectMolecule('vanillin');
+updateMobileBar();
 </script>
 </body>
 </html>
