@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Aroma Molecule Explorer</title>
+<style>
+  :root{ --bg:#0a0a0f; --surface:#14141c; --border:#2a2a3a; --text:#e8e4df; --muted:#9b958e; --accent:#c9a86c; --accent2:#8e6b3d; --accent3:#a8453a; --blue:#4a7ab8; --green:#5a8e5a; --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080; }
+  html,body{margin:0;padding:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;touch-action:manipulation;}
+  canvas{display:block;}
+  #canvas-container{position:fixed;inset:0;z-index:0;}
+  #ui-layer{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;display:flex;}
+  #ui-layer > *{pointer-events:auto;}
+
+  .disclaimer{position:sticky;top:0;background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);padding:0.6rem 1rem;text-align:center;font-size:0.82rem;z-index:200;}
+  .disclaimer strong{font-weight:600;}
+
+  .panel{position:absolute;background:rgba(16,16,24,0.92);border:1px solid var(--border);border-radius:12px;padding:1rem 1.15rem;backdrop-filter:blur(6px);}
+  .panel h2{margin:0 0 0.4rem 0;font-size:0.95rem;color:var(--accent);font-weight:600;}
+  .panel h3{margin:0.6rem 0 0.3rem 0;font-size:0.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
+  .panel p{font-size:0.83rem;color:var(--muted);line-height:1.45;margin:0.2rem 0;}
+
+  /* Left molecule selector */
+  #molecule-panel{top:52px;left:14px;width:min(260px,calc(100vw - 28px));bottom:auto;max-height:calc(100vh - 70px);overflow-y:auto;}
+  .mol-card{display:flex;align-items:center;gap:0.7rem;padding:0.55rem 0.7rem;border-radius:8px;border:1px solid transparent;margin-bottom:0.35rem;cursor:pointer;transition:border-color .15s,background .15s;touch-action:manipulation;}
+  .mol-card:hover{background:rgba(201,168,108,0.06);}
+  .mol-card.active{background:rgba(201,168,108,0.12);border-color:var(--accent);}
+  .mol-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .mol-name{font-size:0.82rem;font-weight:500;color:var(--text);line-height:1.2;}
+  .mol-sub{font-size:0.72rem;color:var(--muted);}
+
+  /* Right info panel */
+  #info-panel{top:52px;right:14px;width:min(260px,calc(100vw - 28px));bottom:auto;}
+
+  .info-row{display:flex;justify-content:space-between;font-size:0.78rem;margin:0.3rem 0;color:var(--muted);}
+  .info-row .val{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums;}
+
+  .bar-wrap{display:flex;align-items:center;gap:0.5rem;margin:0.25rem 0;}
+  .bar-label{font-size:0.72rem;color:var(--muted);width:72px;flex-shrink:0;}
+  .bar-track{flex:1;height:7px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:4px;width:0%;transition:width .8s cubic-bezier(.2,.8,.2,1);}
+
+  .wine-chips{display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.4rem;}
+  .chip{font-size:0.72rem;padding:0.18rem 0.55rem;border-radius:20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:var(--muted);}
+
+  #tooltip{position:absolute;background:rgba(10,10,15,0.95);border:1px solid var(--border);border-radius:6px;padding:0.35rem 0.6rem;font-size:0.78rem;color:var(--text);pointer-events:none;opacity:0;transition:opacity .1s;z-index:50;white-space:nowrap;}
+
+  /* bottom controls */
+  #controls{position:absolute;bottom:14px;left:14px;display:flex;gap:0.5rem;}
+  .btn{background:rgba(20,20,28,0.85);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.7rem;border-radius:6px;font-size:0.75rem;cursor:pointer;pointer-events:auto;touch-action:manipulation;backdrop-filter:blur(4px);}
+  .btn:hover{border-color:var(--accent);}
+  .btn.active{border-color:var(--accent);background:rgba(201,168,108,0.12);}
+
+  /* aroma canvas */
+  #aroma-canvas{width:100%;height:90px;margin-top:0.3rem;border-radius:6px;background:rgba(255,255,255,0.02);}
+
+  /* Mobile */
+  @media(max-width:768px){
+    body{overflow-y:auto;-webkit-overflow-scrolling:touch;}
+    #canvas-container{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;}
+    #ui-layer{position:relative;top:auto;left:auto;right:auto;bottom:auto;display:block;padding:44px 10px 20px;z-index:10;}
+    .panel{position:relative !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;width:100% !important;max-width:none !important;margin-bottom:10px;}
+    #molecule-panel{max-height:none;}
+    #controls{position:relative;bottom:auto;left:auto;padding:0 0 10px 0;display:flex;flex-wrap:wrap;}
+  }
+
+  /* Scrollbar for molecule panel */
+  #molecule-panel::-webkit-scrollbar{width:5px;}
+  #molecule-panel::-webkit-scrollbar-track{background:transparent;}
+  #molecule-panel::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px;}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div class="panel" id="molecule-panel">
+    <h2>Aroma Molecules</h2>
+    <div id="mol-list"></div>
+  </div>
+
+  <div class="panel" id="info-panel">
+    <h2 id="mol-title">Select a molecule</h2>
+    <p id="mol-desc">Explore wine aroma chemistry in 3D.</p>
+    <div class="info-row"><span>Formula</span><span class="val" id="mol-formula">—</span></div>
+    <div class="info-row"><span>Threshold</span><span class="val" id="mol-threshold">—</span></div>
+    <div class="info-row"><span>MW</span><span class="val" id="mol-mw">—</span></div>
+    <h3>Aroma Profile</h3>
+    <canvas id="aroma-canvas" height="90"></canvas>
+    <h3>Common in</h3>
+    <div class="wine-chips" id="wine-chips"></div>
+  </div>
+
+  <div id="controls">
+    <button class="btn active" id="btn-rotate">Auto Rotate</button>
+    <button class="btn" id="btn-bond">Bond Glow</button>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ===== MOLECULE DATA (approximate / artistic ball-and-stick models) ===== */
+const ATOM = {
+  C: { radius: 0.35, color: 0xcccccc, name: 'Carbon' },
+  H: { radius: 0.18, color: 0xffffff, name: 'Hydrogen' },
+  O: { radius: 0.30, color: 0xff4422, name: 'Oxygen' },
+  N: { radius: 0.30, color: 0x3344ff, name: 'Nitrogen' }
+};
+
+function atom(type, x, y, z){ return {type, x, y, z}; }
+function bond(a, b){ return [a, b]; }
+
+const MOLECULES = [
+  {
+    key:'vanillin',
+    name:'Vanillin',
+    desc:'The signature vanilla aroma compound extracted from toasted oak barrels during aging. Adds sweetness, structure, and creamy warmth to Chardonnay and Pinot Noir.',
+    formula:'C₈H₈O₃',
+    mw:'152.15 u',
+    threshold:'0.2 µg/L',
+    wineTypes:['Bourbon-aged Chardonnay','Barrel Pinot Noir','Rioja Reserva','Napa Cabernet'],
+    aromaProfile:{floral:0.15,fruity:0.05,spicy:0.35,oaky:0.95,herbal:0.05,earthy:0.1},
+    atoms:[
+      atom('C',0,0,0), atom('C',1.39,0,0), atom('C',2.08,1.2,0), atom('C',1.39,2.4,0),
+      atom('C',0,2.4,0), atom('C',-0.69,1.2,0), atom('O',3.3,1.2,0), atom('O',0,3.6,0),
+      atom('C',-1.2,3.6,0), atom('O',-2.2,3.6,0), atom('C',0,-1.4,0), atom('O',-0.5,-2.2,0),
+      atom('H',-1.0,0,0), atom('H',1.8,3.3,0), atom('H',2.2,3.3,0), atom('H',-0.8,3.3,0),
+      atom('H',3.3,1.9,0), atom('H',0,-1.8,0.7), atom('H',0,-1.8,-0.7), atom('H',-2.8,3.0,0)
+    ],
+    bonds:[bond(0,1),bond(1,2),bond(2,3),bond(3,4),bond(4,5),bond(5,0),bond(2,6),bond(4,7),
+      bond(7,8),bond(8,9),bond(0,10),bond(10,11),bond(0,12),bond(3,13),bond(6,16),bond(8,17),bond(8,18),bond(10,19)]
+  },
+  {
+    key:'isoamyl_acetate',
+    name:'Isoamyl Acetate',
+    desc:'A fruity ester responsible for the pronounced banana and pear-drop aroma in young, carbonic-macerated wines such as Beaujolais Nouveau.',
+    formula:'C₇H₁₄O₂',
+    mw:'130.19 u',
+    threshold:'30 µg/L',
+    wineTypes:['Young Beaujolais','Carbonic Maceration','Pinot Grigio','Müller-Thurgau'],
+    aromaProfile:{floral:0.1,fruity:0.95,spicy:0.05,oaky:0.0,herbal:0.05,earthy:0.0},
+    atoms:[
+      atom('C',0,0,0), atom('C',1.5,0,0), atom('C',2.0,1.3,0), atom('C',0.5,1.3,0),
+      atom('C',3.5,1.3,0), atom('C',4.0,2.6,0), atom('C',3.5,3.9,0),
+      atom('O',-0.8,0.8,0), atom('O',-0.8,-0.8,0), atom('C',-2.4,0.8,0),
+      atom('C',-3.3,-0.2,0), atom('C',-2.4,2.0,0), atom('C',-3.3,1.2,0),
+      atom('H',-2.8,2.6,0), atom('H',-1.8,2.4,0.9), atom('H',-1.8,2.4,-0.9),
+      atom('H',-4.1,-0.2,0), atom('H',-2.9,-1.1,0), atom('H',-1.5,-0.6,0)
+    ],
+    bonds:[bond(0,1),bond(1,2),bond(2,3),bond(2,4),bond(4,5),bond(5,6),bond(0,7),bond(0,8),bond(7,9),
+      bond(9,10),bond(9,11),bond(10,12),bond(11,13),bond(11,14),bond(11,15),bond(12,16),bond(12,17),bond(8,18)]
+  },
+  {
+    key:'linalool',
+    name:'Linalool',
+    desc:'A monoterpenoid alcohol delivering floral, citrus, and rose-petal notes. Found in aromatic white varieties like Muscat, Gewürztraminer, and Riesling.',
+    formula:'C₁₀H₁₈O',
+    mw:'154.25 u',
+    threshold:'6 µg/L',
+    wineTypes:['Riesling Spätlese','Muscat Canelli','Gewürztraminer','Moscato d\'Asti'],
+    aromaProfile:{floral:0.95,fruity:0.45,spicy:0.1,oaky:0.0,herbal:0.15,earthy:0.0},
+    atoms:[
+      atom('C',0,0,0), atom('C',1.4,0,0), atom('C',2.1,1.2,0), atom('C',1.4,2.4,0),
+      atom('C',0,2.4,0), atom('C',-0.7,1.2,0), atom('C',3.5,1.2,0), atom('C',4.2,2.4,0),
+      atom('C',4.2,0,0), atom('C',5.6,0,0), atom('O',3.5,-0.8,0),
+      atom('H',-0.9,-0.6,0), atom('H',1.8,-0.6,0.8), atom('H',1.8,-0.6,-0.8),
+      atom('H',0,3.4,0), atom('H',-0.9,2.8,0), atom('H',3.0,2.8,0), atom('H',5.0,2.8,0),
+      atom('H',5.0,-0.6,0.8), atom('H',5.0,-0.6,-0.8), atom('H',6.2,-0.6,0), atom('H',3.0,-1.5,0)
+    ],
+    bonds:[bond(0,1),bond(1,2),bond(2,3),bond(3,4),bond(4,5),bond(5,0),bond(2,6),bond(6,7),bond(6,8),bond(8,9),bond(8,10),
+      bond(0,11),bond(1,12),bond(1,13),bond(4,14),bond(5,15),bond(7,16),bond(7,17),bond(9,18),bond(9,19),bond(9,20),bond(10,21)]
+  },
+  {
+    key:'beta_ionone',
+    name:'β-ionone',
+    desc:'A key norisoprenoid contributing violet, iris, and dark-fruit aromas. Elevated concentrations define aged Pinot Noir and Syrah bouquets.',
+    formula:'C₁₃H₂₀O',
+    mw:'192.30 u',
+    threshold:'0.09 µg/L',
+    wineTypes:['Aged Pinot Noir','Northern Rhône Syrah','Barolo','Coonawarra Cabernet'],
+    aromaProfile:{floral:0.92,fruity:0.55,spicy:0.25,oaky:0.15,herbal:0.05,earthy:0.1},
+    atoms:[
+      atom('C',0,0,0), atom('C',1.4,0,0), atom('C',2.1,1.2,0), atom('C',1.4,2.4,0),
+      atom('C',0,2.4,0), atom('C',-0.7,1.2,0), atom('C',2.1,2.8,0),
+      atom('C',3.2,1.2,0), atom('C',3.9,0,0), atom('C',5.3,0,0), atom('C',6.0,1.2,0),
+      atom('C',5.3,2.4,0), atom('C',3.9,2.4,0), atom('O',6.7,1.2,0),
+      atom('C',-0.7,-1.0,0), atom('C',-1.7,-1.8,0), atom('C',-0.7,-2.6,0),
+      atom('H',-0.9,3.2,0), atom('H',0.5,3.2,0), atom('H',2.8,3.4,0), atom('H',4.2,3.2,0),
+      atom('H',5.0,3.2,0), atom('H',6.5,0.5,0), atom('H',-1.5,-0.5,0), atom('H',-2.5,-1.5,0),
+      atom('H',-2.2,-2.6,0), atom('H',0.1,-3.2,0)
+    ],
+    bonds:[bond(0,1),bond(1,2),bond(2,3),bond(3,4),bond(4,5),bond(5,0),bond(3,6),bond(2,7),bond(7,8),bond(8,9),bond(9,10),bond(10,11),bond(11,12),bond(8,12),bond(10,13),bond(0,14),bond(14,15),bond(15,16),bond(14,16),bond(4,17),bond(3,18),bond(6,19),bond(12,20),bond(11,21),bond(9,22),bond(14,23),bond(15,24),bond(16,25),bond(16,26)]
+  },
+  {
+    key:'ethyl_guaiacol',
+    name:'4-Ethylguaiacol',
+    desc:'A phenotic compound imparting smoky, spicy, clove-like aroma. A hallmark of Brettanomyces-influenced wines and heavily toasted barrels.',
+    formula:'C₉H₁₂O₂',
+    mw:'152.20 u',
+    threshold:'47 µg/L',
+    wineTypes:['Brett-influenced Red','Heavy-toast Barrel','Mezcal Cask Finish','Priorat'],
+    aromaProfile:{floral:0.05,fruity:0.05,spicy:0.88,oaky:0.75,herbal:0.15,earthy:0.35},
+    atoms:[
+      atom('C',0,0,0), atom('C',1.4,0,0), atom('C',2.1,1.2,0), atom('C',1.4,2.4,0),
+      atom('C',0,2.4,0), atom('C',-0.7,1.2,0), atom('O',-1.4,3.2,0), atom('C',-2.4,3.2,0),
+      atom('O',-0.8,-0.9,0), atom('C',2.1,3.6,0), atom('C',2.1,4.9,0), atom('C',2.1,6.2,0),
+      atom('H',-0.9,-0.3,0), atom('H',-1.5,-1.5,0), atom('H',1.8,-0.6,0.8), atom('H',1.8,-0.6,-0.8),
+      atom('H',3.0,1.2,0), atom('H',1.8,3.0,0), atom('H',2.8,3.6,0), atom('H',1.4,4.9,0.9),
+      atom('H',1.4,4.9,-0.9), atom('H',3.0,6.2,0), atom('H',1.4,6.9,0), atom('H',2.8,6.9,0), atom('H',-3.0,2.5,0)
+    ],
+    bonds:[bond(0,1),bond(1,2),bond(2,3),bond(3,4),bond(4,5),bond(5,0),bond(4,6),bond(6,7),bond(0,8),bond(3,9),bond(9,10),bond(10,11),
+      bond(9,17),bond(9,18),bond(10,19),bond(10,20),bond(11,21),bond(11,22),bond(11,23),bond(7,24),bond(8,12),bond(8,13),bond(1,14),bond(1,15),bond(2,16)]
+  },
+  {
+    key:'ibmp',
+    name:'IBMP',
+    desc:'3-isobutyl-2-methoxypyrazine — the potent pyrazine behind green bell pepper, asparagus, and leafy notes. Signature of cool-climate Sauvignon Blanc and Cabernet Sauvignon.',
+    formula:'C₉H₁₄N₂O',
+    mw:'166.22 u',
+    threshold:'0.001 µg/L (1 ng/L)',
+    wineTypes:['Sauvignon Blanc','Cool-climate Cabernet','Carmenère','Bordeaux Left Bank'],
+    aromaProfile:{floral:0.05,fruity:0.05,spicy:0.1,oaky:0.0,herbal:0.95,earthy:0.55},
+    atoms:[
+      atom('C',0,0,0), atom('N',1.3,0,0), atom('C',1.8,1.3,0), atom('N',0.8,2.3,0), atom('C',-0.65,1.6,0), atom('C',-0.65,0.3,0),
+      atom('C',-1.9,3.0,0), atom('C',-2.9,2.5,0), atom('C',-1.9,4.5,0), atom('C',2.6,3.0,0), atom('O',3.6,3.0,0),
+      atom('C',3.6,4.3,0), atom('C',4.6,2.5,0),
+      atom('H',-0.9,-0.6,0), atom('H',0.4,-0.7,0), atom('H',1.9,-0.6,0.9), atom('H',1.9,-0.6,-0.9),
+      atom('H',-2.8,3.6,0), atom('H',-2.9,4.8,0), atom('H',-1.0,4.8,0), atom('H',-1.0,4.8,0.8), atom('H',-2.8,4.8,-0.8),
+      atom('H',3.3,4.9,0.9), atom('H',3.3,4.9,-0.9), atom('H',4.3,4.9,0), atom('H',3.6,5.0,0),
+      atom('H',4.6,2.5,0.9), atom('H',5.0,2.0,0), atom('H',5.0,2.9,0)
+    ],
+    bonds:[bond(0,1),bond(1,2),bond(2,3),bond(3,4),bond(4,5),bond(5,0),bond(4,6),bond(6,7),bond(6,8),bond(6,9),bond(9,10),bond(10,11),bond(10,12),
+      bond(0,13),bond(0,14),bond(1,15),bond(1,16),bond(7,17),bond(8,18),bond(8,19),bond(8,20),bond(8,21),bond(11,22),bond(11,23),bond(11,24),bond(11,25),bond(12,26),bond(12,27),bond(12,28)]
+  }
+];
+
+/* ===== THREE.JS SETUP ===== */
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0a0a0f, 0.035);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 2, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x0a0a0f, 1);
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 3;
+controls.maxDistance = 18;
+
+/* Lighting */
+const ambient = new THREE.AmbientLight(0x404050, 1.8);
+scene.add(ambient);
+
+const keyLight = new THREE.DirectionalLight(0xffeedd, 2.5);
+keyLight.position.set(5, 8, 5);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x88aaff, 0.8);
+fillLight.position.set(-5, 3, -5);
+scene.add(fillLight);
+
+const rim = new THREE.PointLight(0xc9a86c, 2.0, 20);
+rim.position.set(0, -3, 6);
+scene.add(rim);
+
+const back = new THREE.PointLight(0x883333, 1.5, 20);
+back.position.set(0, 4, -8);
+scene.add(back);
+
+/* Background particles */
+const partGeo = new THREE.BufferGeometry();
+const partCount = 400;
+const pPos = new Float32Array(partCount * 3);
+for (let i = 0; i < partCount * 3; i++) pPos[i] = (Math.random() - 0.5) * 30;
+partGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const partMat = new THREE.PointsMaterial({ color: 0x665544, size: 0.04, transparent: true, opacity: 0.5 });
+scene.add(new THREE.Points(partGeo, partMat));
+
+/* Current molecule group */
+let currentMolGroup = new THREE.Group();
+scene.add(currentMolGroup);
+let currentHover = null;
+let bondGlowEnabled = true;
+let autoRotate = true;
+
+/* Raycaster */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2(-99, -99);
+const tooltip = document.getElementById('tooltip');
+
+/* Build molecule mesh from data */
+function buildMolecule(mol){
+  scene.remove(currentMolGroup);
+  currentMolGroup = new THREE.Group();
+
+  // Center atoms
+  let cx = 0, cy = 0, cz = 0;
+  for (const a of mol.atoms) { cx += a.x; cy += a.y; cz += a.z; }
+  cx /= mol.atoms.length; cy /= mol.atoms.length; cz /= mol.atoms.length;
+
+  const atomMeshes = [];
+  for (const a of mol.atoms) {
+    const spec = ATOM[a.type];
+    const geo = new THREE.SphereGeometry(spec.radius, 28, 20);
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: spec.color, metalness: 0.1, roughness: 0.3,
+      clearcoat: 0.6, clearcoatRoughness: 0.2,
+      emissive: spec.color, emissiveIntensity: 0.15
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(a.x - cx, a.y - cy, a.z - cz);
+    mesh.userData = { atomType: a.type, atomName: spec.name };
+    currentMolGroup.add(mesh);
+    atomMeshes.push(mesh);
+  }
+
+  for (const b of mol.bonds) {
+    const a1 = mol.atoms[b[0]], a2 = mol.atoms[b[1]];
+    if (!a1 || !a2) continue;
+    const p1 = new THREE.Vector3(a1.x - cx, a1.y - cy, a1.z - cz);
+    const p2 = new THREE.Vector3(a2.x - cx, a2.y - cy, a2.z - cz);
+    const len = p1.distanceTo(p2);
+    const mid = p1.clone().add(p2).multiplyScalar(0.5);
+    const geo = new THREE.CylinderGeometry(0.07, 0.07, len, 12);
+    const mat = new THREE.MeshStandardMaterial({
+      color: bondGlowEnabled ? 0x887766 : 0x554433,
+      metalness: 0.6, roughness: 0.4,
+      emissive: bondGlowEnabled ? 0x332211 : 0x000000, emissiveIntensity: bondGlowEnabled ? 0.4 : 0
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(mid);
+    mesh.lookAt(p2);
+    mesh.rotateX(Math.PI / 2);
+    currentMolGroup.add(mesh);
+  }
+
+  scene.add(currentMolGroup);
+}
+
+/* UI builders */
+function createMolList(){
+  const el = document.getElementById('mol-list');
+  el.innerHTML = '';
+  for (const m of MOLECULES) {
+    const card = document.createElement('div');
+    card.className = 'mol-card' + (m.key === (currentKey||'') ? ' active' : '');
+    card.dataset.key = m.key;
+    card.innerHTML = `<div class="mol-dot" style="background:rgba(201,168,108,0.8);"></div><div><div class="mol-name">${m.name}</div><div class="mol-sub">${m.formula}</div></div>`;
+    card.addEventListener('click', () => selectMolecule(m.key));
+    el.appendChild(card);
+  }
+}
+
+function drawAromaCanvas(profile){
+  const c = document.getElementById('aroma-canvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  const w = c.clientWidth * dpr, h = c.clientHeight * dpr;
+  if (c.width !== w) { c.width = w; c.height = h; }
+  ctx.clearRect(0, 0, w, h);
+  ctx.scale(dpr, dpr);
+  const cols = {
+    floral:  '#c084a0',
+    fruity:  '#d4a06a',
+    spicy:   '#c95a3a',
+    oaky:    '#8e6b3d',
+    herbal:  '#5a8e5a',
+    earthy:  '#7a6a5a'
+  };
+  const labels = {floral:'Floral',fruity:'Fruity',spicy:'Spicy',oaky:'Oak/Toast',herbal:'Herbal',earthy:'Earthy'};
+  const keys = Object.keys(profile);
+  const pad = 10, cw = c.clientWidth - pad*2, ch = c.clientHeight;
+  const barW = (cw - (keys.length-1)*6) / keys.length;
+  keys.forEach((k,i)=>{
+    const v = profile[k];
+    const x = pad + i*(barW+6);
+    const bh = (ch - 18) * v;
+    const y = ch - 14 - bh;
+    // bar
+    const grad = ctx.createLinearGradient(0, y, 0, y+bh);
+    grad.addColorStop(0, cols[k] + 'cc');
+    grad.addColorStop(1, cols[k] + '44');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, bh, 3);
+    ctx.fill();
+    // label
+    ctx.fillStyle = '#9b958e';
+    ctx.font = '9px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(labels[k].split(' ')[0], x + barW/2, ch - 3);
+  });
+  ctx.setTransform(1,0,0,1,0,0);
+}
+
+function buildInfoPanel(mol){
+  document.getElementById('mol-title').textContent = mol.name;
+  document.getElementById('mol-desc').textContent = mol.desc;
+  document.getElementById('mol-formula').textContent = mol.formula;
+  document.getElementById('mol-threshold').textContent = mol.threshold;
+  document.getElementById('mol-mw').textContent = mol.mw;
+
+  const chips = document.getElementById('wine-chips');
+  chips.innerHTML = mol.wineTypes.map(t => `<span class="chip">${t}</span>`).join('');
+
+  drawAromaCanvas(mol.aromaProfile);
+}
+
+let currentKey = null;
+function selectMolecule(key){
+  currentKey = key;
+  const mol = MOLECULES.find(m => m.key === key);
+  if (!mol) return;
+  buildMolecule(mol);
+  buildInfoPanel(mol);
+  createMolList(); // refresh active state
+
+  // Reset camera slightly for drama
+  camera.position.set(0, 2, 10);
+  controls.target.set(0,0,0);
+  controls.update();
+}
+
+/* Controls */
+const btnRotate = document.getElementById('btn-rotate');
+const btnBond = document.getElementById('btn-bond');
+btnRotate.addEventListener('click', ()=>{
+  autoRotate = !autoRotate;
+  btnRotate.classList.toggle('active', autoRotate);
+});
+btnBond.addEventListener('click', ()=>{
+  bondGlowEnabled = !bondGlowEnabled;
+  btnBond.classList.toggle('active', bondGlowEnabled);
+  const mol = MOLECULES.find(m => m.key === currentKey);
+  if (mol) buildMolecule(mol);
+});
+
+/* Mouse events */
+function onMouseMove(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(currentMolGroup.children);
+  const atomHit = intersects.find(i => i.object.userData && i.object.userData.atomName);
+  if (atomHit) {
+    tooltip.style.opacity = '1';
+    tooltip.textContent = atomHit.object.userData.atomName;
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY + 14) + 'px';
+    if (currentHover !== atomHit.object) {
+      if (currentHover) currentHover.material.emissiveIntensity = 0.15;
+      currentHover = atomHit.object;
+      currentHover.material.emissiveIntensity = 0.6;
+    }
+  } else {
+    tooltip.style.opacity = '0';
+    if (currentHover) {
+      currentHover.material.emissiveIntensity = 0.15;
+      currentHover = null;
+    }
+  }
+}
+window.addEventListener('mousemove', onMouseMove);
+window.addEventListener('touchmove', (e)=>{
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    onMouseMove({ clientX: t.clientX, clientY: t.clientY });
+  }
+}, { passive: true });
+
+/* Resize */
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  if (currentKey) {
+    const mol = MOLECULES.find(m => m.key === currentKey);
+    if (mol) drawAromaCanvas(mol.aromaProfile);
+  }
+});
+
+/* Animation loop */
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  controls.update();
+
+  if (autoRotate && currentMolGroup) {
+    currentMolGroup.rotation.y += 0.004;
+    currentMolGroup.rotation.x = Math.sin(t * 0.3) * 0.12;
+  }
+
+  // Animate background particles
+  const positions = scene.children.find(c => c.isPoints)?.geometry.attributes.position;
+  if (positions) {
+    for (let i = 0; i < partCount; i++) {
+      let y = positions.getY(i);
+      y += Math.sin(t * 0.2 + i * 0.1) * 0.003;
+      positions.setY(i, y);
+    }
+    positions.needsUpdate = true;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* Init */
+selectMolecule('vanillin');
+</script>
+</body>
+</html>
