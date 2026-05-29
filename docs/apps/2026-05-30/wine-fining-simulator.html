@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Fining &amp; Clarification Simulator</title>
+<style>
+  :root {
+    --bg: #0b0e12;
+    --panel: rgba(14, 20, 30, 0.93);
+    --border: #2a3544;
+    --text: #c9d5e4;
+    --muted: #7a8a9e;
+    --accent: #4fc1e9;
+    --accent2: #a78bfa;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow: hidden; width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; }
+
+  /* Disclaimer */
+  .disclaimer {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    background: linear-gradient(90deg, #2a1a10, #3a2010);
+    border-bottom: 1px solid #6b4423;
+    color: #e8c090;
+    padding: 0.55rem 1rem;
+    text-align: center;
+    font-size: 0.82rem;
+    letter-spacing: 0.01em;
+  }
+
+  canvas { display: block; position: fixed; top: 0; left: 0; z-index: 0; }
+
+  /* UI layer */
+  #ui-layer {
+    position: absolute; top: 38px; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10; display: flex; flex-direction: column;
+    padding: 10px; gap: 10px;
+  }
+  #ui-layer > * { pointer-events: auto; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+    max-width: min(300px, calc(100vw - 28px));
+  }
+  .panel h2 {
+    font-size: 0.92rem; color: var(--accent); margin-bottom: 0.5rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .panel .row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.5rem; margin: 0.35rem 0; font-size: 0.82rem;
+  }
+  .panel label { color: var(--muted); flex: 1; }
+  .panel input[type=range] {
+    flex: 1; accent-color: var(--accent); cursor: pointer;
+    min-width: 80px;
+  }
+  .panel .val { width: 2.8rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+
+  .badge {
+    display: inline-block; font-size: 0.65rem; padding: 0.15rem 0.35rem;
+    border-radius: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    margin-right: 0.35rem;
+  }
+  .b-bent { background: #eab308; color: #1a1500; }
+  .b-gel  { background: #f472b6; color: #1a050f; }
+  .b-pvpp { background: #22d3ee; color: #001a1a; }
+  .b-case { background: #f8fafc; color: #0f172a; }
+  .b-sil  { background: #94a3b8; color: #0b0f14; }
+
+  .btn {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border: none; border-radius: 6px; color: #fff; padding: 0.45rem 0.9rem;
+    font-size: 0.8rem; font-weight: 600; cursor: pointer; pointer-events: auto;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .9; }
+  .btn-outline {
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+  }
+
+  #metrics-canvas { width: 100%; height: 80px; border-radius: 6px; background: rgba(0,0,0,0.25); }
+
+  /* Right-side legend/metrics */
+  .right-col { position: absolute; top: 48px; right: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .right-col .panel { max-width: 260px; }
+
+  /* Mobile overrides */
+  @media (max-width: 768px) {
+    body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    canvas { position: fixed; top: 0; left: 0; z-index: 0; }
+    #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 46px 8px 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+    .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; padding: 0.7rem 0.85rem; }
+    .right-col { position: relative; top: auto; right: auto; }
+  }
+
+  .small-note { font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; line-height: 1.35; }
+  .metric-row { display: flex; justify-content: space-between; font-size: 0.8rem; margin: 0.2rem 0; }
+  .metric-row .label { color: var(--muted); }
+  .metric-row .num { font-variant-numeric: tabular-nums; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="disclaimer">
+  <strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.
+</div>
+
+<canvas id="sim"></canvas>
+
+<div id="ui-layer">
+  <div class="panel" style="align-self:flex-start;">
+    <h2>Fining Agents</h2>
+    <div class="row"><label><span class="badge b-bent">Bent</span> Bentonite</label><input type="range" id="bentonite" min="0" max="100" value="40"><span class="val" id="v-bentonite">40</span></div>
+    <div class="row"><label><span class="badge b-gel">Gel</span> Gelatin</label><input type="range" id="gelatin" min="0" max="100" value="20"><span class="val" id="v-gelatin">20</span></div>
+    <div class="row"><label><span class="badge b-pvpp">PVPP</span> Polyclar</label><input type="range" id="pvpp" min="0" max="100" value="30"><span class="val" id="v-pvpp">30</span></div>
+    <div class="row"><label><span class="badge b-case">Case</span> Casein</label><input type="range" id="casein" min="0" max="100" value="10"><span class="val" id="v-casein">10</span></div>
+    <div class="row"><label><span class="badge b-sil">SiO₂</span> Silica sol</label><input type="range" id="silica" min="0" max="100" value="15"><span class="val" id="v-silica">15</span></div>
+    <div class="small-note">Dose = relative addition rate (g/hL proxy). Adjust to see selective adsorption.</div>
+  </div>
+
+  <div class="panel" style="align-self:flex-start;">
+    <h2>Conditions</h2>
+    <div class="row"><label>Temperature</label><input type="range" id="temp" min="0" max="30" value="12"><span class="val" id="v-temp">12°C</span></div>
+    <div class="row"><label>pH</label><input type="range" id="ph" min="2.8" max="4.2" step="0.05" value="3.4"><span class="val" id="v-ph">3.4</span></div>
+    <div class="row"><label>Contact time</label><input type="range" id="time" min="1" max="14" value="5"><span class="val" id="v-time">5d</span></div>
+    <div style="margin-top:0.5rem; display:flex; gap:6px;">
+      <button class="btn" id="btn-reset">Reset</button>
+      <button class="btn btn-outline" id="btn-pause">Pause</button>
+    </div>
+  </div>
+</div>
+
+<div class="right-col" id="right-col">
+  <div class="panel">
+    <h2>Live Metrics</h2>
+    <div class="metric-row"><span class="label">Turbidity (NTU)</span><span class="num" id="m-turbidity">120</span></div>
+    <div class="metric-row"><span class="label">Clarity index</span><span class="num" id="m-clarity">24%</span></div>
+    <div class="metric-row"><span class="label">Protein remaining</span><span class="num" id="m-protein">100%</span></div>
+    <div class="metric-row"><span class="label">Tannin remaining</span><span class="num" id="m-tannin">100%</span></div>
+    <div class="metric-row"><span class="label">Color loss (ΔA)</span><span class="num" id="m-color">0%</span></div>
+    <canvas id="metrics-canvas" width="500" height="160"></canvas>
+    <div class="small-note">Sparklines show target-compound concentration vs. time.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Legend</h2>
+    <div class="small-note" style="margin-top:0;">
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#60a5fa;margin-right:4px;"></span>Proteins (haze-forming)<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a855f7;margin-right:4px;"></span>Tannins<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:4px;"></span>Anthocyanins<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:4px;"></span>Ochratoxin A<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f97316;margin-right:4px;"></span>Oxidized phenolics<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eab308;margin-right:4px;"></span>Bentonite platelets<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f472b6;margin-right:4px;"></span>Gelatin strands<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#22d3ee;margin-right:4px;"></span>PVPP beads<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f8fafc;margin-right:4px;"></span>Casein micelles<br>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#94a3b8;margin-right:4px;"></span>Silica spheres
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Wine Fining Simulator
+   Vanilla Canvas 2D + bloom/post-processing
+   ========================= */
+
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+const off = document.createElement('canvas');
+const octx = off.getContext('2d');
+
+// Config
+const CONFIG = {
+  paused: false,
+  temp: 12,      // °C
+  ph: 3.4,
+  contactDays: 5,
+  bentonite: 40,
+  gelatin: 20,
+  pvpp: 30,
+  casein: 10,
+  silica: 15,
+  dt: 0.016,
+};
+
+// Particle counts by dose (arbitrary scaling)
+function agentCount(dose) { return Math.floor(6 + dose * 0.35); }
+function targetCount() { return 350; }
+
+// Physics constants
+const K_BROWN = 0.8; // Brownian base speed
+const K_ATTRACT = 0.9; // attraction multiplier
+const ADSORB_DIST = 12; // px
+const ADSORB_CHANCE = 0.04; // per frame when close
+const SINK_SPEED = 15; // px/s downward for aggregates
+
+// Target compound types
+const TARGETS = [
+  { key: 'protein',  name: 'Protein',    color: '#60a5fa', radius: 3.5, count: 90, removableBy: ['bentonite','silica'] },
+  { key: 'tannin',   name: 'Tannin',     color: '#a855f7', radius: 3.0, count: 80, removableBy: ['gelatin'] },
+  { key: 'antho',    name: 'Anthocyanin',color: '#ef4444', radius: 2.8, count: 70, removableBy: ['pvpp'] },
+  { key: 'ota',      name: 'OTA',        color: '#22c55e', radius: 2.5, count: 40, removableBy: [] },
+  { key: 'oxidized', name: 'Oxidized',   color: '#f97316', radius: 3.2, count: 70, removableBy: ['casein'] },
+];
+
+// Agent types
+const AGENTS = [
+  { key: 'bentonite', name: 'Bentonite', color: '#eab308', radius: 5.5, shape: 'rect' },
+  { key: 'gelatin',   name: 'Gelatin',   color: '#f472b6', radius: 4.5, shape: 'line' },
+  { key: 'pvpp',      name: 'PVPP',      color: '#22d3ee', radius: 4.0, shape: 'circle' },
+  { key: 'casein',    name: 'Casein',    color: '#f8fafc', radius: 4.5, shape: 'soft' },
+  { key: 'silica',    name: 'Silica',    color: '#94a3b8', radius: 3.5, shape: 'circle' },
+];
+
+const AGENT_MAP = {};
+AGENTS.forEach(a => AGENT_MAP[a.key] = a);
+
+function randomRange(a, b) { return a + Math.random() * (b - a); }
+
+class Particle {
+  constructor(x, y, type, subtype) {
+    this.x = x; this.y = y;
+    this.vx = randomRange(-1, 1);
+    this.vy = randomRange(-1, 1);
+    this.type = type; // 'target' | 'agent'
+    this.subtype = subtype; // key string
+    this.info = type === 'target' ? TARGETS.find(t => t.key === subtype) : AGENT_MAP[subtype];
+    this.radius = this.info.radius;
+    this.color = this.info.color;
+    this.adsorbed = false;
+    this.dead = false;
+    this.age = 0;
+    this.adsorbPartner = null;
+  }
+}
+
+let particles = [];
+let history = []; // arrays of {t, protein, tannin, antho, oxidized}
+let tSim = 0;
+
+function spawnTargets() {
+  TARGETS.forEach(t => {
+    for (let i = 0; i < t.count; i++) {
+      particles.push(new Particle(randomRange(40, W - 40), randomRange(80, H - 80), 'target', t.key));
+    }
+  });
+}
+
+function spawnAgents() {
+  AGENTS.forEach(a => {
+    const dose = CONFIG[a.key];
+    const count = agentCount(dose);
+    for (let i = 0; i < count; i++) {
+      // spawn from top edges with some randomness
+      let x = randomRange(20, W - 20);
+      let y = randomRange(-40, 40);
+      if (Math.random() < 0.3) { x = randomRange(-30, 30); y = randomRange(60, H - 60); }
+      particles.push(new Particle(x, y, 'agent', a.key));
+    }
+  });
+}
+
+function resetSim() {
+  particles = [];
+  history = [];
+  tSim = 0;
+  spawnTargets();
+  spawnAgents();
+}
+
+resetSim();
+
+// Slider wiring
+document.querySelectorAll('input[type=range]').forEach(sl => {
+  sl.addEventListener('input', () => {
+    const id = sl.id;
+    let val = sl.value;
+    CONFIG[id] = parseFloat(val);
+    const disp = document.getElementById('v-' + id);
+    if (disp) {
+      if (id === 'temp') disp.textContent = val + '°C';
+      else if (id === 'ph') disp.textContent = parseFloat(val).toFixed(2);
+      else if (id === 'time') disp.textContent = val + 'd';
+      else disp.textContent = val;
+    }
+    // Respawn agents if dose changed
+    if (['bentonite','gelatin','pvpp','casein','silica'].includes(id)) {
+      // remove old agents of this type, respawn
+      particles = particles.filter(p => !(p.type === 'agent' && p.subtype === id));
+      const count = agentCount(CONFIG[id]);
+      for (let i = 0; i < count; i++) {
+        let x = randomRange(20, W - 20), y = randomRange(-40, 40);
+        if (Math.random() < 0.3) { x = randomRange(-30, 30); y = randomRange(60, H - 60); }
+        particles.push(new Particle(x, y, 'agent', id));
+      }
+    }
+  });
+});
+
+document.getElementById('btn-reset').addEventListener('click', resetSim);
+document.getElementById('btn-pause').addEventListener('click', () => {
+  CONFIG.paused = !CONFIG.paused;
+  document.getElementById('btn-pause').textContent = CONFIG.paused ? 'Resume' : 'Pause';
+});
+
+// Mouse interaction: gentle repel/attract
+let mx = -999, my = -999;
+canvas.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+canvas.addEventListener('mouseleave', () => { mx = -999; my = -999; });
+
+// Spatial hash for nearest neighbor (coarse grid)
+function updatePhysics() {
+  if (CONFIG.paused) return;
+  const dt = CONFIG.dt;
+  const brown = K_BROWN * (1 + (CONFIG.temp - 10) * 0.03); // temp increases Brownian motion
+  const adsorbDist = ADSORB_DIST;
+  const attract = K_ATTRACT * (1 + (CONFIG.ph - 3.3) * 0.15); // pH affects electrostatic interactions
+
+  // Build coarse grid: cell size ~ 30 px
+  const cellSize = 40;
+  const grid = new Map();
+  function key(cx, cy) { return cx + ',' + cy; }
+  for (let p of particles) {
+    if (p.dead) continue;
+    const cx = Math.floor(p.x / cellSize);
+    const cy = Math.floor(p.y / cellSize);
+    const k = key(cx, cy);
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(p);
+  }
+
+  const nextParticles = [];
+  for (let p of particles) {
+    if (p.dead) continue;
+    p.age += dt;
+
+    if (p.adsorbed) {
+      // adsorbed particles sink as aggregates
+      p.vy += SINK_SPEED * dt * 0.5; // gravity-like
+      // follow partner loosely if exists
+      if (p.adsorbPartner && !p.adsorbPartner.dead) {
+        const dx = p.adsorbPartner.x - p.x;
+        const dy = p.adsorbPartner.y - p.y;
+        p.vx += dx * 0.05 * dt;
+        p.vy += dy * 0.05 * dt;
+      }
+    } else {
+      // Brownian random kick
+      p.vx += (Math.random() - 0.5) * brown * dt * 60;
+      p.vy += (Math.random() - 0.5) * brown * dt * 60;
+
+      // Damping
+      p.vx *= 0.96;
+      p.vy *= 0.96;
+
+      // Mouse repel (gentle)
+      if (mx > -900) {
+        const dx = p.x - mx, dy = p.y - my;
+        const d2 = dx*dx + dy*dy;
+        if (d2 < 25000) {
+          const push = (25000 - d2) / 25000 * 40 * dt;
+          p.vx += (dx / Math.sqrt(d2 || 1)) * push;
+          p.vy += (dy / Math.sqrt(d2 || 1)) * push;
+        }
+      }
+    }
+
+    // Apply velocity
+    if (!p.adsorbed) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+    } else {
+      p.x += p.vx * dt * 0.6;
+      p.y += p.vy * dt * 0.6;
+    }
+
+    // Boundary
+    if (p.x < 20) { p.x = 20; p.vx *= -0.5; }
+    if (p.x > W - 20) { p.x = W - 20; p.vx *= -0.5; }
+    if (p.y < 40) { p.y = 40; p.vy *= -0.5; }
+    if (p.y > H - 20) { p.y = H - 20; if (p.adsorbed) { p.dead = true; } else { p.vy *= -0.5; } }
+
+    // Resolve agent-target attraction & adsorption
+    if (p.type === 'agent' && !p.adsorbed) {
+      const cx = Math.floor(p.x / cellSize);
+      const cy = Math.floor(p.y / cellSize);
+      for (let dxo = -1; dxo <= 1; dxo++) {
+        for (let dyo = -1; dyo <= 1; dyo++) {
+          const cell = grid.get(key(cx + dxo, cy + dyo));
+          if (!cell) continue;
+          for (let other of cell) {
+            if (other === p || other.dead || other.type !== 'target') continue;
+            if (other.adsorbed) continue;
+            // Check if this agent targets this compound
+            const agentInfo = AGENT_MAP[p.subtype];
+            const targetInfo = TARGETS.find(t => t.key === other.subtype);
+            if (!targetInfo || !targetInfo.removableBy.includes(p.subtype)) continue;
+
+            const dx = other.x - p.x;
+            const dy = other.y - p.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < adsorbDist && dist > 0.5) {
+              // Pull
+              const pull = attract * 80 * dt / (dist + 4);
+              p.vx += (dx / dist) * pull;
+              p.vy += (dy / dist) * pull;
+              other.vx -= (dx / dist) * pull * 0.6;
+              other.vy -= (dy / dist) * pull * 0.6;
+
+              // Adsorb chance when very close
+              if (dist < 6 && Math.random() < ADSORB_CHANCE * (1 + CONFIG.contactDays * 0.05)) {
+                p.adsorbed = true;
+                other.adsorbed = true;
+                p.adsorbPartner = other;
+                other.adsorbPartner = p;
+                p.vx *= 0.3; p.vy *= 0.3;
+                other.vx = p.vx; other.vy = p.vy;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!p.dead) nextParticles.push(p);
+  }
+  particles = nextParticles;
+  tSim += dt;
+}
+
+// Metrics
+function updateMetrics() {
+  const totalTargets = TARGETS.reduce((s, t) => s + t.count, 0);
+  let remProtein = 0, remTannin = 0, remAntho = 0, remOxidized = 0;
+  let removed = 0;
+  for (let p of particles) {
+    if (p.type !== 'target') continue;
+    if (p.dead) { removed++; continue; }
+    if (p.adsorbed) { removed++; continue; }
+    if (p.subtype === 'protein') remProtein++;
+    if (p.subtype === 'tannin') remTannin++;
+    if (p.subtype === 'antho') remAntho++;
+    if (p.subtype === 'oxidized') remOxidized++;
+  }
+  const alive = particles.filter(p => p.type === 'target' && !p.dead && !p.adsorbed).length;
+  const clarity = Math.min(100, Math.round((removed / totalTargets) * 100));
+  const turbidity = Math.round(10 + (alive / totalTargets) * 160);
+
+  document.getElementById('m-turbidity').textContent = turbidity;
+  document.getElementById('m-clarity').textContent = clarity + '%';
+  document.getElementById('m-protein').textContent = Math.round((remProtein / 90) * 100) + '%';
+  document.getElementById('m-tannin').textContent = Math.round((remTannin / 80) * 100) + '%';
+  const colorLoss = Math.max(0, 100 - Math.round((remAntho / 70) * 100));
+  document.getElementById('m-color').textContent = colorLoss + '%';
+
+  // history
+  if (history.length === 0 || tSim - history[history.length - 1].t > 0.3) {
+    history.push({ t: tSim, protein: remProtein/90, tannin: remTannin/80, antho: remAntho/70, oxidized: remOxidized/70 });
+    if (history.length > 120) history.shift();
+  }
+}
+
+// Render sparklines on metrics canvas
+function drawMetrics() {
+  const mc = document.getElementById('metrics-canvas');
+  const mctx = mc.getContext('2d');
+  const mw = mc.width, mh = mc.height;
+  mctx.clearRect(0, 0, mw, mh);
+  if (history.length < 2) return;
+
+  function drawLine(key, color) {
+    mctx.strokeStyle = color;
+    mctx.lineWidth = 2;
+    mctx.beginPath();
+    for (let i = 0; i < history.length; i++) {
+      const x = (i / (history.length - 1)) * mw;
+      const y = mh - history[i][key] * mh * 0.9 - 4;
+      if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y);
+    }
+    mctx.stroke();
+  }
+  drawLine('protein', '#60a5fa');
+  drawLine('tannin', '#a855f7');
+  drawLine('antho', '#ef4444');
+  drawLine('oxidized', '#f97316');
+}
+
+// Main render with bloom
+function drawBackground(g) {
+  // Deep wine gradient
+  const grd = g.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, '#0d1117');
+  grd.addColorStop(0.5, '#140c18');
+  grd.addColorStop(1, '#0f0912');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, W, H);
+
+  // Subtle vignette
+  const rad = Math.max(W, H) * 0.8;
+  const vig = g.createRadialGradient(W/2, H/2, rad * 0.2, W/2, H/2, rad);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+  g.fillStyle = vig;
+  g.fillRect(0, 0, W, H);
+}
+
+function drawParticles(g) {
+  // Sort by type for cleaner overlapping
+  const sorted = particles.slice().sort((a, b) => (a.type === 'agent' ? 1 : -1));
+  for (let p of sorted) {
+    if (p.dead) continue;
+    g.globalAlpha = p.adsorbed ? 0.85 : 1.0;
+    g.fillStyle = p.color;
+    g.shadowBlur = p.type === 'agent' ? 14 : 8;
+    g.shadowColor = p.color;
+
+    if (p.info.shape === 'rect') {
+      const s = p.radius * 2;
+      g.fillRect(p.x - s/2, p.y - s/2, s, s);
+    } else if (p.info.shape === 'line') {
+      // gelatin strand
+      g.beginPath();
+      g.moveTo(p.x - p.radius * 1.5, p.y);
+      g.lineTo(p.x + p.radius * 1.5, p.y);
+      g.lineWidth = p.radius;
+      g.strokeStyle = p.color;
+      g.stroke();
+    } else if (p.info.shape === 'soft') {
+      // casein micelle: soft cloud
+      g.beginPath();
+      g.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = 0.4;
+      g.beginPath();
+      g.arc(p.x - 2, p.y - 2, p.radius * 0.7, 0, Math.PI * 2);
+      g.fill();
+    } else {
+      g.beginPath();
+      g.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    // Draw bond if adsorbed with partner
+    if (p.adsorbed && p.adsorbPartner && !p.adsorbPartner.dead) {
+      g.globalAlpha = 0.6;
+      g.strokeStyle = p.color;
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(p.x, p.y);
+      g.lineTo(p.adsorbPartner.x, p.adsorbPartner.y);
+      g.stroke();
+    }
+  }
+  g.shadowBlur = 0;
+  g.globalAlpha = 1;
+}
+
+function drawOverlay(g) {
+  // Top-left subtle title
+  g.font = '600 14px system-ui';
+  g.fillStyle = 'rgba(200,210,230,0.25)';
+  g.fillText('Wine Fining Simulator · Canvas 2D', 18, H - 16);
+}
+
+// Simple bloom: draw scene to offscreen, then blur-ish composite by scaling down and up
+function applyBloom(srcCtx, dstCtx, w, h) {
+  // Copy to offscreen
+  off.width = w; off.height = h;
+  octx.clearRect(0, 0, w, h);
+  octx.drawImage(srcCtx.canvas, 0, 0);
+
+  // Draw blurred large-glow version via shadow on top
+  // We'll approximate bloom by drawing the image again with additive blending at lower opacity
+  dstCtx.save();
+  dstCtx.globalCompositeOperation = 'screen';
+  dstCtx.filter = 'blur(18px)';
+  dstCtx.globalAlpha = 0.35;
+  dstCtx.drawImage(off, 0, 0, w * 0.5, h * 0.5);
+  dstCtx.restore();
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  CONFIG.dt = dt;
+
+  updatePhysics();
+  updateMetrics();
+  drawMetrics();
+
+  drawBackground(ctx);
+
+  // Particles with glow
+  applyBloom(ctx, ctx, W, H);
+  drawParticles(ctx);
+  drawOverlay(ctx);
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.key === ' ') { CONFIG.paused = !CONFIG.paused; document.getElementById('btn-pause').textContent = CONFIG.paused ? 'Resume' : 'Pause'; }
+  if (e.key === 'r' || e.key === 'R') resetSim();
+});
+</script>
+</body>
+</html>
