@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Winery Mass Balance &amp; Process Flow</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+<style>
+:root{
+  --bg:#0b0f12; --surface:#111820; --panel:#162029; --border:#263542;
+  --text:#d7dce2; --muted:#8094a8; --accent:#e06c75; --accent2:#98c379; --accent3:#61afef;
+  --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;overflow-x:hidden}
+.disclaimer{background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);padding:.7rem 1rem;text-align:center;font-size:.82rem;position:sticky;top:0;z-index:100}
+.disclaimer strong{font-weight:600}
+header{text-align:center;padding:1.5rem 1rem 1rem;border-bottom:1px solid var(--border)}
+header h1{font-size:clamp(1.3rem,4vw,1.8rem);background:linear-gradient(90deg,var(--accent),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
+header p{color:var(--muted);margin-top:.3rem;font-size:.9rem}
+
+.app-container{display:flex;gap:1rem;padding:1rem;max-width:1400px;margin:0 auto}
+.sidebar{width:320px;flex-shrink:0;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1rem;overflow-y:auto;max-height:calc(100vh - 120px);position:sticky;top:80px}
+.sidebar h2{font-size:1.05rem;margin-bottom:.8rem;color:var(--accent3);border-bottom:1px solid var(--border);padding-bottom:.4rem}
+.control-group{margin-bottom:1.1rem}
+.control-group label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:.35rem}
+.control-group .val{display:inline-block;float:right;font-size:.82rem;color:var(--text);font-weight:600}
+.control-group input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+.control-group input[type=number]{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .5rem;font-size:.85rem}
+
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:1.2rem}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem;text-align:center}
+.metric-card .num{font-size:1.15rem;font-weight:700;color:var(--accent3)}
+.metric-card .lbl{font-size:.72rem;color:var(--muted);margin-top:.15rem}
+
+.viz-area{flex:1;min-width:0}
+#sankey{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden}
+#sankey svg{display:block;width:100%;height:auto}
+.node-label{font-size:11px;fill:var(--text);pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+.node-value{font-size:10px;fill:var(--muted);pointer-events:none}
+.link{fill:none;stroke-opacity:.45;transition:stroke-opacity .2s}
+.link:hover{stroke-opacity:.7}
+.node rect{cursor:pointer;transition:filter .2s}
+.node rect:hover{filter:brightness(1.2)}
+.tooltip{position:absolute;background:rgba(11,15,18,.95);border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;color:var(--text);font-size:.82rem;pointer-events:none;opacity:0;transition:opacity .15s;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.4);max-width:220px}
+
+.charts-row{display:flex;gap:1rem;flex-wrap:wrap}
+.chart-box{flex:1;min-width:280px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.8rem}
+.chart-box h3{font-size:.95rem;color:var(--accent2);margin-bottom:.5rem;border-bottom:1px solid var(--border);padding-bottom:.3rem}
+.chart-box svg{display:block;width:100%;height:auto}
+
+@media(max-width:768px){
+  .app-container{flex-direction:column;padding:.6rem}
+  .sidebar{width:100%;position:relative;top:auto;max-height:none}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .charts-row{flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<header>
+  <h1>Winery Mass Balance &amp; Process Flow</h1>
+  <p>Interactive Sankey simulation of mass / volume loss across crush, press, ferment, rack, fine, age, and bottle stages.</p>
+</header>
+
+<div class="app-container">
+<div class="sidebar">
+  <h2>Process Parameters</h2>
+
+  <div class="control-group">
+    <label>Grape Input <span class="val" id="v-input">20 t</span></label>
+    <input type="range" id="s-input" min="1" max="100" value="20">
+  </div>
+  <div class="control-group">
+    <label>Juice Yield <span class="val" id="v-yield">750 L/t</span></label>
+    <input type="range" id="s-yield" min="600" max="900" value="750" step="10">
+  </div>
+  <div class="control-group">
+    <label>Stem / MOG Loss <span class="val" id="v-stem">3.0%</span></label>
+    <input type="range" id="s-stem" min="0" max="10" value="3" step="0.5">
+  </div>
+  <div class="control-group">
+    <label>Press Cake Loss <span class="val" id="v-press">0.0%</span></label>
+    <input type="range" id="s-press" min="0" max="30" value="0" step="1">
+  </div>
+  <div class="control-group">
+    <label>Fermentation Loss <span class="val" id="v-ferm">2.5%</span></label>
+    <input type="range" id="s-ferm" min="0" max="10" value="2.5" step="0.5">
+  </div>
+  <div class="control-group">
+    <label>Racking Loss <span class="val" id="v-rack">5.0%</span></label>
+    <input type="range" id="s-rack" min="0" max="15" value="5" step="0.5">
+  </div>
+  <div class="control-group">
+    <label>Fining / Filtration Loss <span class="val" id="v-fine">1.5%</span></label>
+    <input type="range" id="s-fine" min="0" max="5" value="1.5" step="0.5">
+  </div>
+  <div class="control-group">
+    <label>Aging / Evaporation Loss <span class="val" id="v-age">8.0%</span></label>
+    <input type="range" id="s-age" min="0" max="25" value="8" step="1">
+  </div>
+  <div class="control-group">
+    <label>Bottling Loss <span class="val" id="v-bottle">1.0%</span></label>
+    <input type="range" id="s-bottle" min="0" max="5" value="1" step="0.5">
+  </div>
+
+  <div class="metrics">
+    <div class="metric-card"><div class="num" id="m-volume">0</div><div class="lbl">Bottled (L)</div></div>
+    <div class="metric-card"><div class="num" id="m-cases">0</div><div class="lbl">Cases (12×750mL)</div></div>
+    <div class="metric-card"><div class="num" id="m-eff">0%</div><div class="lbl">Overall Efficiency</div></div>
+    <div class="metric-card"><div class="num" id="m-loss">0</div><div class="lbl">Total Loss (L)</div></div>
+  </div>
+</div>
+
+<div class="viz-area">
+  <div id="sankey"></div>
+  <div class="charts-row">
+    <div class="chart-box" id="bar-chart">
+      <h3>Volume by Stage</h3>
+    </div>
+    <div class="chart-box" id="pie-chart">
+      <h3>Loss Breakdown</h3>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function(){
+  const tooltip = d3.select('#tooltip');
+  function showTip(e, html){
+    tooltip.style('opacity',1).html(html)
+      .style('left',(e.pageX+12)+'px')
+      .style('top',(e.pageY-12)+'px');
+  }
+  function hideTip(){tooltip.style('opacity',0);}
+
+  // Parameters
+  const params = {
+    input: 20, yield: 750, stem: 3, press: 0, ferm: 2.5,
+    rack: 5, fine: 1.5, age: 8, bottle: 1
+  };
+
+  const sliders = [
+    {id:'s-input', key:'input', fmt:v=>v+' t', el:'v-input'},
+    {id:'s-yield', key:'yield', fmt:v=>v+' L/t', el:'v-yield'},
+    {id:'s-stem',  key:'stem',  fmt:v=>v+'%', el:'v-stem'},
+    {id:'s-press', key:'press', fmt:v=>v+'%', el:'v-press'},
+    {id:'s-ferm',  key:'ferm',  fmt:v=>v+'%', el:'v-ferm'},
+    {id:'s-rack',  key:'rack',  fmt:v=>v+'%', el:'v-rack'},
+    {id:'s-fine',  key:'fine',  fmt:v=>v+'%', el:'v-fine'},
+    {id:'s-age',   key:'age',   fmt:v=>v+'%', el:'v-age'},
+    {id:'s-bottle',key:'bottle',fmt:v=>v+'%', el:'v-bottle'},
+  ];
+
+  sliders.forEach(s=>{
+    const el = document.getElementById(s.id);
+    el.addEventListener('input', e=>{
+      params[s.key] = parseFloat(e.target.value);
+      document.getElementById(s.el).textContent = s.fmt(params[s.key]);
+      update();
+    });
+  });
+
+  function calc(){
+    const V0 = params.input * params.yield;
+    const r = k => 1 - params[k]/100;
+
+    const V1 = V0 * r('stem');        // destemmed must
+    const S  = V0 - V1;               // stems
+
+    const V2 = V1 * r('press');       // pressed juice
+    const P  = V1 - V2;               // press cake
+
+    const V3 = V2 * r('ferm');        // young wine
+    const F  = V2 - V3;               // ferm lees
+
+    const V4 = V3 * r('rack');        // racked
+    const R  = V3 - V4;               // rack sediment
+
+    const V5 = V4 * r('fine');       // clarified
+    const Fi = V4 - V5;               // fining waste
+
+    const V6 = V5 * r('age');        // aged
+    const A  = V5 - V6;               // barrel loss
+
+    const V7 = V6 * r('bottle');     // bottled
+    const B  = V6 - V7;               // bottling waste
+
+    return {
+      V0,V1,V2,V3,V4,V5,V6,V7,
+      losses: {S,P,F,R,Fi,A,B},
+      cases: Math.floor(V7/9),
+      eff: (V0>0 ? (V7/V0)*100 : 0)
+    };
+  }
+
+  const nodeDefs = [
+    {name:"Grape Reception",  cat:"input",  color:"#7cb342"},
+    {name:"Destemmed Must",   cat:"must",   color:"#9ccc65"},
+    {name:"Pressed Juice",    cat:"juice",  color:"#dce775"},
+    {name:"Young Wine",       cat:"wine",   color:"#ef5350"},
+    {name:"Racked Wine",      cat:"wine",   color:"#e53935"},
+    {name:"Clarified Wine",   cat:"wine",   color:"#c62828"},
+    {name:"Aged Wine",        cat:"wine",   color:"#b71c1c"},
+    {name:"Bottled Volume",   cat:"output", color:"#5c6bc0"},
+    {name:"Stems",            cat:"loss",   color:"#8d6e63"},
+    {name:"Press Cake",       cat:"loss",   color:"#6d4c41"},
+    {name:"Ferm. Lees",       cat:"loss",   color:"#5d4037"},
+    {name:"Rack Sediment",    cat:"loss",   color:"#4e342e"},
+    {name:"Fining Waste",     cat:"loss",   color:"#3e2723"},
+    {name:"Barrel Loss",      cat:"loss",   color:"#795548"},
+    {name:"Bottling Waste",   cat:"loss",   color:"#5d4037"},
+  ];
+
+  function linksFromCalc(c){
+    return [
+      {source:0,target:1,value:c.V1},
+      {source:0,target:8, value:c.losses.S},
+      {source:1,target:2,value:c.V2},
+      {source:1,target:9, value:c.losses.P},
+      {source:2,target:3,value:c.V3},
+      {source:2,target:10,value:c.losses.F},
+      {source:3,target:4,value:c.V4},
+      {source:3,target:11,value:c.losses.R},
+      {source:4,target:5,value:c.V5},
+      {source:4,target:12,value:c.losses.Fi},
+      {source:5,target:6,value:c.V6},
+      {source:5,target:13,value:c.losses.A},
+      {source:6,target:7,value:c.V7},
+      {source:6,target:14,value:c.losses.B},
+    ];
+  }
+
+  function drawSankey(){
+    const el = document.getElementById('sankey');
+    const w = el.clientWidth || 900;
+    const h = 520;
+    el.innerHTML = '';
+
+    const svg = d3.select('#sankey').append('svg')
+      .attr('viewBox',`0 0 ${w} ${h}`)
+      .attr('preserveAspectRatio','xMidYMid meet');
+
+    const c = calc();
+    const nodes = nodeDefs.map((d,i)=>({...d,index:i}));
+    const links = linksFromCalc(c);
+
+    const sankey = d3.sankey()
+      .nodeWidth(18)
+      .nodePadding(16)
+      .extent([[30,20],[w-20,h-20]]);
+
+    const graph = sankey({
+      nodes: nodes.map(d=>Object.assign({},d)),
+      links: links.map(d=>Object.assign({},d))
+    });
+
+    const grads = svg.append('defs').selectAll('linearGradient')
+      .data(graph.links).enter().append('linearGradient')
+      .attr('id',(d,i)=>'grad-'+i)
+      .attr('gradientUnits','userSpaceOnUse')
+      .attr('x1',d=>d.source.x1).attr('x2',d=>d.target.x0)
+      .attr('y1',d=>d.source.y0+d.source.y1)/2
+      .attr('y2',d=>d.target.y0+d.target.y1)/2;
+
+    grads.append('stop').attr('offset','0%').attr('stop-color',d=>d.source.color);
+    grads.append('stop').attr('offset','100%').attr('stop-color',d=>d.target.color);
+
+    const link = svg.append('g').selectAll('path')
+      .data(graph.links).enter().append('path')
+      .attr('class','link')
+      .attr('d',d3.sankeyLinkHorizontal())
+      .attr('stroke-width',d=>Math.max(1,d.width))
+      .attr('stroke',(d,i)=>'url(#grad-'+i+')')
+      .on('mousemove',(e,d)=>{
+        showTip(e, `<strong>${d.source.name} → ${d.target.name}</strong><br/>${Math.round(d.value).toLocaleString()} L`);
+      })
+      .on('mouseleave',hideTip);
+
+    const node = svg.append('g').selectAll('g')
+      .data(graph.nodes).enter().append('g')
+      .attr('class','node');
+
+    node.append('rect')
+      .attr('x',d=>d.x0).attr('y',d=>d.y0)
+      .attr('width',d=>d.x1-d.x0).attr('height',d=>d.y1-d.y0)
+      .attr('fill',d=>d.color)
+      .attr('rx',3)
+      .on('mousemove',(e,d)=>{
+        const total = Math.round(d.value).toLocaleString();
+        showTip(e, `<strong>${d.name}</strong><br/>Total: ${total} L`);
+      })
+      .on('mouseleave',hideTip);
+
+    node.append('text')
+      .attr('class','node-label')
+      .attr('x',d=>d.x0 < w/2 ? d.x1+8 : d.x0-8)
+      .attr('y',d=>(d.y0+d.y1)/2)
+      .attr('dy','0.35em')
+      .attr('text-anchor',d=>d.x0 < w/2 ? 'start' : 'end')
+      .text(d=>d.name);
+
+    node.append('text')
+      .attr('class','node-value')
+      .attr('x',d=>d.x0 < w/2 ? d.x1+8 : d.x0-8)
+      .attr('y',d=>(d.y0+d.y1)/2 + 14)
+      .attr('dy','0.35em')
+      .attr('text-anchor',d=>d.x0 < w/2 ? 'start' : 'end')
+      .text(d=>Math.round(d.value).toLocaleString()+' L');
+  }
+
+  function drawBar(){
+    const el = document.getElementById('bar-chart');
+    const w = el.clientWidth || 400;
+    const h = 220;
+    const margin = {top:20,right:20,bottom:35,left:50};
+    el.innerHTML = '<h3>Volume by Stage</h3>';
+
+    const c = calc();
+    const data = [
+      {stage:'Reception', vol:c.V0, color:'#7cb342'},
+      {stage:'Must',     vol:c.V1, color:'#9ccc65'},
+      {stage:'Juice',     vol:c.V2, color:'#dce775'},
+      {stage:'Young',     vol:c.V3, color:'#ef5350'},
+      {stage:'Racked',    vol:c.V4, color:'#e53935'},
+      {stage:'Clarified', vol:c.V5, color:'#c62828'},
+      {stage:'Aged',      vol:c.V6, color:'#b71c1c'},
+      {stage:'Bottled',   vol:c.V7, color:'#5c6bc0'},
+    ];
+
+    const svg = d3.select('#bar-chart').append('svg')
+      .attr('viewBox',`0 0 ${w} ${h}`)
+      .attr('preserveAspectRatio','xMidYMid meet');
+
+    const x = d3.scaleBand().domain(data.map(d=>d.stage)).range([margin.left,w-margin.right]).padding(.3);
+    const y = d3.scaleLinear().domain([0, c.V0*1.05]).range([h-margin.bottom,margin.top]);
+
+    svg.append('g').attr('transform',`translate(0,${h-margin.bottom})`).call(d3.axisBottom(x).tickSize(0)).selectAll('text').attr('fill','#8094a8').style('font-size','11px');
+    svg.append('g').attr('transform',`translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0s'))).selectAll('text').attr('fill','#8094a8').style('font-size','11px');
+    svg.selectAll('.domain,.tick line').attr('stroke','#263542');
+
+    svg.selectAll('rect.bar').data(data).enter().append('rect')
+      .attr('x',d=>x(d.stage)).attr('y',d=>y(d.vol))
+      .attr('width',x.bandwidth()).attr('height',d=>y(0)-y(d.vol))
+      .attr('fill',d=>d.color).attr('rx',3)
+      .on('mousemove',(e,d)=>{showTip(e, `<strong>${d.stage}</strong><br/>${Math.round(d.vol).toLocaleString()} L`);})
+      .on('mouseleave',hideTip);
+  }
+
+  function drawPie(){
+    const el = document.getElementById('pie-chart');
+    const w = el.clientWidth || 400;
+    const h = 220;
+    const radius = Math.min(w,h)/2 - 20;
+    el.innerHTML = '<h3>Loss Breakdown</h3>';
+
+    const c = calc();
+    const data = [
+      {label:'Stems', value:c.losses.S, color:'#8d6e63'},
+      {label:'Press Cake', value:c.losses.P, color:'#6d4c41'},
+      {label:'Ferm Lees', value:c.losses.F, color:'#5d4037'},
+      {label:'Rack Sed.', value:c.losses.R, color:'#4e342e'},
+      {label:'Fining', value:c.losses.Fi, color:'#3e2723'},
+      {label:'Barrel', value:c.losses.A, color:'#795548'},
+      {label:'Bottling', value:c.losses.B, color:'#5d4037'},
+    ].filter(d=>d.value>0.1);
+
+    const svg = d3.select('#pie-chart').append('svg')
+      .attr('viewBox',`0 0 ${w} ${h}`)
+      .attr('preserveAspectRatio','xMidYMid meet');
+
+    if(data.length===0){
+      svg.append('text').attr('x',w/2).attr('y',h/2).attr('text-anchor','middle').attr('fill','var(--muted)').text('No losses');
+      return;
+    }
+
+    const pie = d3.pie().value(d=>d.value).sort(null);
+    const arc = d3.arc().innerRadius(radius*0.55).outerRadius(radius);
+
+    const g = svg.append('g').attr('transform',`translate(${w/2},${h/2})`);
+
+    g.selectAll('path').data(pie(data)).enter().append('path')
+      .attr('d',arc).attr('fill',d=>d.data.color)
+      .attr('stroke','var(--surface)').attr('stroke-width',2)
+      .on('mousemove',(e,d)=>{showTip(e, `<strong>${d.data.label}</strong><br/>${Math.round(d.data.value).toLocaleString()} L`);})
+      .on('mouseleave',hideTip)
+      .transition().duration(500).attrTween('d',function(d){const i=d3.interpolate(d.startAngle+0.1,d.endAngle);return t=>{d.endAngle=i(t);return arc(d);}});
+
+    const legend = svg.append('g').attr('transform',`translate(12,${h/2 - data.length*10})`);
+    data.forEach((d,i)=>{
+      const row = legend.append('g').attr('transform',`translate(0,${i*20})`);
+      row.append('rect').attr('width',10).attr('height',10).attr('rx',2).attr('fill',d.color);
+      row.append('text').attr('x',16).attr('y',9).attr('fill','var(--muted)').style('font-size','11px').text(`${d.label}: ${Math.round(d.value).toLocaleString()} L`);
+    });
+  }
+
+  function updateMetrics(c){
+    document.getElementById('m-volume').textContent = Math.round(c.V7).toLocaleString();
+    document.getElementById('m-cases').textContent = c.cases.toLocaleString();
+    document.getElementById('m-eff').textContent = c.eff.toFixed(1)+'%';
+    document.getElementById('m-loss').textContent = Math.round(c.V0-c.V7).toLocaleString();
+  }
+
+  function update(){
+    const c = calc();
+    updateMetrics(c);
+    drawSankey();
+    drawBar();
+    drawPie();
+  }
+
+  let resizeTimer;
+  window.addEventListener('resize',()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(update,200);
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>
