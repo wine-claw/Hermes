@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Yeast Metabolic Network — Ethanol Fermentation Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/MotionPathPlugin.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e14; --surface:#111824; --panel:#15202e; --border:#253345;
+  --text:#d8dee9; --muted:#6c8299; --accent:#e06c75; --accent2:#98c379; --accent3:#61afef;
+  --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e0c090;
+  --glow:rgba(224,108,117,.30); --glow2:rgba(152,195,121,.30);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;min-height:100vh;overflow-x:hidden}
+
+/* Disclaimer */
+.disclaimer{background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);padding:.7rem 1rem;text-align:center;font-size:.82rem;position:sticky;top:0;z-index:200}
+.disclaimer strong{font-weight:600}
+
+/* Layout */
+header{text-align:center;padding:1.4rem 1rem .8rem}
+header h1{font-size:clamp(1.3rem,4vw,2rem);background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
+header p{color:var(--muted);margin-top:.25rem;font-size:.9rem}
+
+main{max-width:1200px;margin:0 auto;padding:1rem}
+
+/* Two-column layout on desktop */
+.grid{display:flex;gap:1rem;align-items:flex-start}
+.diagram-cell{flex:1 1 700px;min-width:0;position:relative}
+.controls-cell{width:360px;flex-shrink:0}
+
+/* Diagram container */
+#metabolic-map{background:linear-gradient(180deg,#0f1620,#0b0e14);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative}
+#metabolic-map svg{display:block;width:100%;height:auto}
+
+/* Particle canvas overlay */
+#particle-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+
+/* Floating value labels on diagram */
+.stage-label{position:absolute;background:rgba(10,16,24,.9);border:1px solid var(--border);border-radius:8px;padding:.35rem .6rem;color:var(--text);font-size:.78rem;pointer-events:none;opacity:0;transform:translateY(6px);white-space:nowrap}
+.stage-label .small{color:var(--muted);font-size:.7rem;display:block;margin-top:-1px}
+
+/* Sidebar controls */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:1rem}
+.panel h2{font-size:.95rem;color:var(--accent3);border-bottom:1px solid var(--border);padding-bottom:.4rem;margin-bottom:.8rem}
+.control{margin-bottom:1.1rem}
+.control label{display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:.35rem}
+.control .val{font-weight:700;color:var(--text)}
+.control input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+.control input[type=range]:hover{accent-color:var(--accent2)}
+
+/* Toggle chips */
+.chips{display:flex;gap:.35rem;flex-wrap:wrap}
+.chip{cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:20px;padding:.28rem .65rem;font-size:.78rem;transition:.15s;user-select:none}
+.chip.active{border-color:var(--accent);color:#fff;background:rgba(224,108,117,.15)}
+.chip:hover{border-color:var(--accent3)}
+
+/* Metric cards */
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.55rem .5rem;text-align:center}
+.metric .num{font-size:1.05rem;font-weight:700;color:var(--accent3)}
+.metric .lbl{font-size:.68rem;color:var(--muted);margin-top:.15rem;line-height:1.3}
+
+/* Bottom sparkline band */
+.spark-row{display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap}
+.spark-box{flex:1;min-width:260px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.7rem 1rem}
+.spark-box h3{font-size:.85rem;color:var(--accent3);margin-bottom:.35rem}
+.spark-box canvas{display:block;width:100%;height:70px}
+.spark-vals{display:flex;gap:1rem;margin-top:.25rem;justify-content:space-around}
+.spark-vals div{font-size:.72rem;color:var(--muted);text-align:center}
+.spark-vals div span{display:block;font-weight:700;color:var(--text);font-size:.85rem}
+
+/* SVG hover highlight */
+.met-path{transition:stroke-opacity .2s, filter .2s;cursor:pointer}
+.met-path:hover{filter:drop-shadow(0 0 6px var(--glow))}
+.met-node{cursor:pointer;transition:filter .2s}
+.met-node:hover{filter:drop-shadow(0 0 8px var(--glow2))}
+
+/* Tooltip */
+#tip{position:absolute;background:rgba(10,16,24,.95);border:1px solid var(--border);border-radius:8px;padding:.55rem .7rem;font-size:.8rem;color:var(--text);pointer-events:none;opacity:0;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.45);max-width:220px}
+
+/* Mobile */
+@media(max-width:860px){
+  .grid{flex-direction:column}
+  .controls-cell{width:100%}
+  #metabolic-map{max-height:420px}
+  .spark-box{min-width:100%}
+}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<header>
+  <h1>Yeast Metabolic Network</h1>
+  <p>Interactive kinetic map of Saccharomyces cerevisiae fermentation pathways</p>
+</header>
+<main>
+<div class="grid">
+  <div class="diagram-cell">
+    <div id="metabolic-map">
+      <svg id="ferm-svg" viewBox="0 0 760 520" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="pathGradEth" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#98c379" stop-opacity=".6"/><stop offset="100%" stop-color="#56b6c2" stop-opacity=".6"/></linearGradient>
+          <linearGradient id="pathGradGly" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#e06c75" stop-opacity=".5"/><stop offset="100%" stop-color="#d19a66" stop-opacity=".5"/></linearGradient>
+          <linearGradient id="pathGradCO2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#c0c5ce" stop-opacity=".4"/><stop offset="100%" stop-color="#5c6370" stop-opacity=".4"/></linearGradient>
+          <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <!-- Background flow field lines -->
+        <g opacity=".12" stroke="#3a506b" stroke-width="1" fill="none">
+          <path d="M0 260 Q190 160 380 260 Q570 360 760 260" />
+          <path d="M0 160 Q190 60 380 160 Q570 260 760 160" />
+          <path d="M0 360 Q190 260 380 360 Q570 460 760 360" />
+        </g>
+        <!-- Central glucose node -->
+        <g class="met-node" data-id="glucose">
+          <circle cx="380" cy="260" r="48" fill="#1a2233" stroke="#e5c07b" stroke-width="2.5" />
+          <text x="380" y="255" text-anchor="middle" fill="#e5c07b" font-size="13" font-weight="700">Glucose</text>
+          <text x="380" y="272" text-anchor="middle" fill="#8094a8" font-size="10">C₆H₁₂O₆</text>
+        </g>
+        <!-- Pathway: Glycolysis -->
+        <g data-id="glycolysis">
+          <path class="met-path" d="M332 260 Q240 260 160 260" stroke="url(#pathGradGly)" stroke-width="4" fill="none" stroke-linecap="round" />
+          <polygon points="155,260 145,256 145,264" fill="#e06c75" />
+          <circle cx="120" cy="260" r="28" fill="#162333" stroke="#e06c75" stroke-width="2" class="met-node" data-id="pyruvate" />
+          <text x="120" y="264" text-anchor="middle" fill="#e06c75" font-size="11" font-weight="600">Pyruvate</text>
+        </g>
+        <!-- Pathway: Ethanol (from pyruvate) -->
+        <g data-id="ethanol">
+          <path class="met-path" d="M92 260 Q60 260 60 150" stroke="url(#pathGradEth)" stroke-width="4" fill="none" stroke-linecap="round" />
+          <polygon points="60,155 56,145 64,145" fill="#56b6c2" transform="rotate(0,60,150)" />
+          <circle cx="60" cy="110" r="28" fill="#162333" stroke="#56b6c2" stroke-width="2" class="met-node" data-id="ethanol-node" />
+          <text x="60" y="114" text-anchor="middle" fill="#56b6c2" font-size="11" font-weight="600">Ethanol</text>
+        </g>
+        <!-- Pathway: CO2 (from pyruvate decarboxylation) -->
+        <g data-id="co2">
+          <path class="met-path" d="M92 260 Q60 260 60 370" stroke="url(#pathGradCO2)" stroke-width="4" fill="none" stroke-linecap="round" />
+          <polygon points="60,365 56,375 64,375" fill="#5c6370" />
+          <circle cx="60" cy="410" r="22" fill="#162333" stroke="#5c6370" stroke-width="2" class="met-node" data-id="co2-node" />
+          <text x="60" y="414" text-anchor="middle" fill="#c0c5ce" font-size="11" font-weight="600">CO₂</text>
+        </g>
+        <!-- Pathway: Acetaldehyde intermediate -->
+        <g data-id="acetaldehyde">
+          <path class="met-path" d="M120 232 Q120 160 120 150" stroke="#d19a66" stroke-width="2.5" fill="none" stroke-dasharray="4 3" opacity=".5" class="met-path" />
+          <text x="130" y="195" fill="#d19a66" font-size="9" opacity=".7">acetaldehyde</text>
+        </g>
+        <!-- Pathway: Glycerol (from DHAP in glycolysis) -->
+        <g data-id="glycerol">
+          <path class="met-path" d="M380 308 Q380 420 540 420" stroke="#c678dd" stroke-width="3" fill="none" stroke-linecap="round" opacity=".55" />
+          <circle cx="580" cy="420" r="26" fill="#162333" stroke="#c678dd" stroke-width="2" class="met-node" data-id="glycerol-node" />
+          <text x="580" y="424" text-anchor="middle" fill="#c678dd" font-size="11" font-weight="600">Glycerol</text>
+        </g>
+        <!-- Pathway: ATP yield (from glycolysis) -->
+        <g data-id="atp">
+          <path class="met-path" d="M380 212 Q380 120 280 100" stroke="#e5c07b" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".45" />
+          <circle cx="240" cy="100" r="24" fill="#162333" stroke="#e5c07b" stroke-width="2" class="met-node" data-id="atp-node" />
+          <text x="240" y="104" text-anchor="middle" fill="#e5c07b" font-size="11" font-weight="600">2 ATP</text>
+        </g>
+        <!-- Pathway: NADH regeneration -->
+        <g data-id="nadh">
+          <path class="met-path" d="M380 212 Q380 120 480 100" stroke="#61afef" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".45" />
+          <circle cx="520" cy="100" r="24" fill="#162333" stroke="#61afef" stroke-width="2" class="met-node" data-id="nadh-node" />
+          <text x="520" y="104" text-anchor="middle" fill="#61afef" font-size="11" font-weight="600">2 NADH</text>
+        </g>
+        <!-- Pathway: TCA / Aerobic respiration hint -->
+        <g data-id="tca">
+          <path class="met-path" d="M148 260 Q180 260 200 190" stroke="#98c379" stroke-width="2" fill="none" stroke-dasharray="6 4" opacity=".3" class="met-path" />
+          <text x="200" y="180" fill="#708090" font-size="9" opacity=".6">TCA Cycle (aerobic)</text>
+        </g>
+        <!-- Side: Temperature & stress byproducts -->
+        <g data-id="stress">
+          <path class="met-path" d="M428 260 Q540 260 660 260" stroke="#e06c75" stroke-width="2" fill="none" stroke-dasharray="5 4" opacity=".35" />
+          <text x="670" y="264" fill="#708090" font-size="9" opacity=".6">Heat + stress byproducts</text>
+          <circle cx="700" cy="220" r="18" fill="#162333" stroke="#e06c75" stroke-width="1.5" opacity=".5" />
+          <text x="700" y="224" text-anchor="middle" fill="#e06c75" font-size="8" opacity=".7">H₂S</text>
+          <circle cx="700" cy="300" r="18" fill="#162333" stroke="#d19a66" stroke-width="1.5" opacity=".5" />
+          <text x="700" y="304" text-anchor="middle" fill="#d19a66" font-size="8" opacity=".7">Acetate</text>
+        </g>
+        <!-- Labels on paths -->
+        <text x="270" y="252" fill="#8094a8" font-size="9">glycolysis</text>
+        <text x="100" y="355" fill="#5c6370" font-size="9">decarboxylase</text>
+        <text x="30" y="220" fill="#56b6c2" font-size="9">alcohol dehydrogenase</text>
+        <text x="430" y="410" fill="#c678dd" font-size="9">glycerol-3-P</text>
+      </svg>
+      <canvas id="particle-layer"></canvas>
+      <div id="tip"></div>
+    </div>
+  </div>
+
+  <div class="controls-cell">
+    <div class="panel">
+      <h2>Fermentation Conditions</h2>
+      <div class="control">
+        <label>Temperature <span class="val" id="v-temp">28 °C</span></label>
+        <input type="range" id="temp" min="12" max="38" value="28" step="0.5">
+      </div>
+      <div class="control">
+        <label>Initial Sugar (Brix) <span class="val" id="v-brix">24 °Brix</span></label>
+        <input type="range" id="brix" min="16" max="32" value="24" step="0.5">
+      </div>
+      <div class="control">
+        <label>Must pH <span class="val" id="v-ph">3.4</span></label>
+        <input type="range" id="ph" min="2.9" max="4.0" value="3.4" step="0.05">
+      </div>
+      <div class="control">
+        <label>YAN (Yeast Assimilable N) <span class="val" id="v-yan">200 mg/L</span></label>
+        <input type="range" id="yan" min="80" max="350" value="200" step="5">
+      </div>
+      <div class="control">
+        <label>Pathway Focus</label>
+        <div class="chips" id="path-chips">
+          <div class="chip active" data-path="ethanol">Ethanol</div>
+          <div class="chip active" data-path="glycerol">Glycerol</div>
+          <div class="chip active" data-path="co2">CO₂</div>
+          <div class="chip" data-path="atp">ATP Yield</div>
+          <div class="chip" data-path="nadh">NADH</div>
+          <div class="chip" data-path="stress">Stress</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Live Outputs</h2>
+      <div class="metrics">
+        <div class="metric"><div class="num" id="out-eth">0.0</div><div class="lbl">Ethanol % v/v (est.)</div></div>
+        <div class="metric"><div class="num" id="out-gly">0.0</div><div class="lbl">Glycerol g/L</div></div>
+        <div class="metric"><div class="num" id="out-co2">0.0</div><div class="lbl">CO₂ g/L</div></div>
+        <div class="metric"><div class="num" id="out-rate">0.0</div><div class="lbl">Rate g/L/day</div></div>
+        <div class="metric"><div class="num" id="out-total">0.0</div><div class="lbl">Brix consumed</div></div>
+        <div class="metric"><div class="num" id="out-days">0</div><div class="lbl">Days elapsed</div></div>
+      </div>
+      <div class="control" style="margin-top:1rem">
+        <label>Timeline Progress <span class="val" id="v-progress">0%</span></label>
+        <input type="range" id="progress" min="0" max="100" value="0" step="0.1">
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:.6rem">
+        <button id="btn-play" style="flex:1;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:.55rem;font-size:.85rem;font-weight:600;cursor:pointer">▶ Play</button>
+        <button id="btn-pause" style="flex:1;background:var(--border);color:var(--text);border:0;border-radius:8px;padding:.55rem;font-size:.85rem;font-weight:600;cursor:pointer">⏸ Pause</button>
+        <button id="btn-reset" style="flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:.55rem;font-size:.85rem;font-weight:600;cursor:pointer">↻ Reset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spark-row">
+  <div class="spark-box">
+    <h3>Ethanol Accumulation</h3>
+    <canvas id="chart-eth" height="70"></canvas>
+    <div class="spark-vals">
+      <div>Peak <span id="peak-eth">0.0%</span></div>
+      <div>Rate Max <span id="rate-eth">0.0</span></div>
+      <div>Stress Index <span id="stress-idx">Low</span></div>
+    </div>
+  </div>
+  <div class="spark-box">
+    <h3>Byproduct Profile</h3>
+    <canvas id="chart-by" height="70"></canvas>
+    <div class="spark-vals">
+      <div>Glycerol <span id="val-gly">0.0</span></div>
+      <div>Acetate <span id="val-ace">0.0</span></div>
+      <div>SO₂/H₂S Risk <span id="val-h2s">Low</span></div>
+    </div>
+  </div>
+</div>
+</main>
+
+<script>
+// Register GSAP plugins
+gsap.registerPlugin(MotionPathPlugin);
+
+// ===== State =====
+const s = {
+  temp:28, brix:24, ph:3.4, yan:200,
+  progress:0, playing:false,
+  activePaths: new Set(['ethanol','glycerol','co2']),
+  historyEth:[], historyGly:[], historyAce:[], historyCo2:[], historyRate:[],
+  lastTime:0,
+  particles:[],
+  nextParticleId:0
+};
+const CONFIG = {
+  maxDays:14,
+  particleSpawnRate:6, // per second roughly
+};
+
+// ===== UI refs =====
+const ui = {
+  temp: document.getElementById('temp'),
+  brix: document.getElementById('brix'),
+  ph: document.getElementById('ph'),
+  yan: document.getElementById('yan'),
+  progress: document.getElementById('progress'),
+  vTemp: document.getElementById('v-temp'),
+  vBrix: document.getElementById('v-brix'),
+  vPh: document.getElementById('v-ph'),
+  vYan: document.getElementById('v-yan'),
+  vProg: document.getElementById('v-progress'),
+  outEth: document.getElementById('out-eth'),
+  outGly: document.getElementById('out-gly'),
+  outCo2: document.getElementById('out-co2'),
+  outRate: document.getElementById('out-rate'),
+  outTotal: document.getElementById('out-total'),
+  outDays: document.getElementById('out-days'),
+  peakEth: document.getElementById('peak-eth'),
+  rateEth: document.getElementById('rate-eth'),
+  stressIdx: document.getElementById('stress-idx'),
+  valGly: document.getElementById('val-gly'),
+  valAce: document.getElementById('val-ace'),
+  valH2s: document.getElementById('val-h2s'),
+  tip: document.getElementById('tip'),
+  svg: document.getElementById('ferm-svg'),
+  pLayer: document.getElementById('particle-layer'),
+  chips: document.querySelectorAll('.chip')
+};
+const ctxEth = document.getElementById('chart-eth').getContext('2d');
+const ctxBy = document.getElementById('chart-by').getContext('2d');
+
+// ===== Physics / model =====
+// Simplified fermentation model.
+// Ethanol production follows yeast kinetics influenced by T, pH, YAN.
+// Max ethanol ~ 0.55 * Brix initially (Balling approx: %EtOH ≈ 0.55 * (Brix_start - Brix_current))
+// Rate peaked mid-ferment, temp dependent.
+function modelOutputs(day){
+  const T = s.temp; const B0 = s.brix; const pH = s.ph; const Y = s.yan;
+  const stressFactor = Math.max(0.3, 1 - ((T-28)/12)*0.6 - (Math.abs(pH-3.4)/0.7)*0.3 - Math.max(0,(80-Y)/80)*0.4);
+  // Optimal range: T ~24-30, pH 3.3-3.6, YAN >140
+  const tScaled = day/CONFIG.maxDays;
+  // Logistic-ish shape but with temp influence
+  const sig = 1/(1+Math.exp(-8*(tScaled-0.45))); // S-curve completion
+  const rate = Math.max(0, (1 - Math.abs(tScaled-0.45)*2.2) * (0.8 + (T-20)/25) * stressFactor );
+  const totalConsumed = B0 * sig; // Brix consumed
+  const currentBrix = B0 - totalConsumed;
+  // Ethanol % v/v (approx)
+  const ethanol = (B0 - currentBrix) * 0.55 * stressFactor;
+  // Glycerol increases with osmotic stress (high sugar) and high temp
+  const glycerol = (0.4 + (B0-22)*0.08 + (T-22)*0.03) * sig * Math.max(0.6,1-(Y/350));
+  // CO2 produced stoichiometrically roughly; ~0.87 g per g sugar consumed
+  const co2 = totalConsumed * 10.5; // g/L rough
+  // Acetate at high temp / stress
+  const acetate = (T>30? (T-30)*0.15:0) * sig + (pH>3.7? (pH-3.7)*0.4:0);
+  // H2S risk threshold
+  const h2sRisk = (Y<140? 'Elevated' : (T>32? 'Moderate' : 'Low'));
+  return { ethanol, glycerol, co2, rate, totalConsumed, currentBrix, day, acetate, h2sRisk, stressFactor };
+}
+
+// ===== Canvas sizing for overlay and charts =====
+function sizeOverlay(){
+  const rect = ui.svg.getBoundingClientRect();
+  const p = ui.pLayer;
+  const parent = document.getElementById('metabolic-map');
+  p.style.width = parent.clientWidth+'px';
+  p.style.height = parent.clientHeight+'px';
+  p.width = parent.clientWidth * window.devicePixelRatio;
+  p.height = parent.clientHeight * window.devicePixelRatio;
+}
+sizeOverlay();
+window.addEventListener('resize', sizeOverlay);
+
+// ===== Particle system =====
+class Particle {
+  constructor(pathId, color){
+    this.id = s.nextParticleId++;
+    this.pathId = pathId;
+    this.progress = 0;
+    this.speed = 0.3 + Math.random()*0.5;
+    this.color = color;
+    this.r = 1.5 + Math.random()*1.5;
+    this.alpha = 1;
+    this.decay = 0.005 + Math.random()*0.01;
+    this.dead = false;
+    // Choose a random SVG path element matching pathId
+    const group = ui.svg.querySelector(`g[data-id="${pathId}"]`);
+    if(!group){ this.dead=true; return; }
+    const pathEl = group.querySelector('path');
+    if(!pathEl){ this.dead=true; return; }
+    this.pathEl = pathEl;
+    this.totalLen = pathEl.getTotalLength();
+    this.pt = pathEl.getPointAtLength(0);
+  }
+  update(dt){
+    if(this.dead) return;
+    this.progress += (this.speed * dt * 60) / this.totalLen;
+    if(this.progress > 1){
+      // Some particles spawn a child on end
+      if(Math.random()<0.25) spawnParticles(1, this.pathId);
+      this.dead = true; return;
+    }
+    this.pt = this.pathEl.getPointAtLength(this.progress * this.totalLen);
+  }
+  draw(ctx, sx, sy){
+    if(this.dead) return;
+    ctx.globalAlpha = Math.max(0, 1-this.progress)*(0.6+Math.random()*0.4);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.pt.x * sx, this.pt.y * sy, this.r * window.devicePixelRatio, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function spawnParticles(count, pathId){
+  const colorMap = {
+    ethanol:'#56b6c2', glycerol:'#c678dd', co2:'#c0c5ce',
+    atp:'#e5c07b', nadh:'#61afef', stress:'#e06c75', acetaldehyde:'#d19a66'
+  };
+  for(let i=0;i<count;i++){
+    const p = new Particle(pathId, colorMap[pathId] || '#fff');
+    if(!p.dead) s.particles.push(p);
+  }
+}
+
+function updateParticles(dt){
+  // Spawning based on active paths
+  s.activePaths.forEach(pid=>{
+    if(Math.random() < dt * CONFIG.particleSpawnRate) spawnParticles(1, pid);
+  });
+  s.particles.forEach(p=>p.update(dt));
+  s.particles = s.particles.filter(p=>!p.dead);
+}
+
+function drawParticles(){
+  const cvs = ui.pLayer;
+  const ctx = cvs.getContext('2d');
+  const scaleX = (cvs.width/window.devicePixelRatio) / 760;
+  const scaleY = (cvs.height/window.devicePixelRatio) / 520;
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  s.particles.forEach(p=>p.draw(ctx, scaleX * window.devicePixelRatio, scaleY * window.devicePixelRatio));
+}
+
+// ===== Chart drawing =====
+function drawSparkline(ctx, data, color, max, height, width){
+  ctx.save();
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const w = width || ctx.canvas.clientWidth;
+  const h = height || ctx.canvas.clientHeight;
+  ctx.clearRect(0,0,w,h);
+  if(!data.length){ ctx.restore(); return; }
+  const mx = Math.max(max*1.1, Math.max(...data)*1.1 || 1);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x = (i/(Math.max(data.length,2)-1))*w;
+    const y = h - (v/mx)*h;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // Area fill
+  ctx.lineTo(w, h); ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fillStyle = color.replace(')', ', .12)').replace('rgb','rgba');
+  // Simple fallback fill using globalAlpha
+  ctx.globalAlpha = .12;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // Current point dot
+  const last = data[data.length-1];
+  const ly = h - (last/mx)*h;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(w, ly, 3, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// Build history from current params on slider scrub
+function rebuildHistory(){
+  const steps = 120;
+  s.historyEth=[]; s.historyGly=[]; s.historyAce=[]; s.historyCo2=[]; s.historyRate=[];
+  for(let i=0;i<=steps;i++){
+    const d = (i/steps)*CONFIG.maxDays;
+    const m = modelOutputs(d);
+    s.historyEth.push(m.ethanol);
+    s.historyGly.push(m.glycerol);
+    s.historyAce.push(m.acetate);
+    s.historyCo2.push(m.co2);
+    s.historyRate.push(m.rate);
+  }
+}
+
+function refreshCharts(){
+  const idx = Math.min(s.historyEth.length-1, Math.floor((s.progress/100)*(s.historyEth.length-1)));
+  const sliceEth = s.historyEth.slice(0, idx+1);
+  const sliceGly = s.historyGly.slice(0, idx+1);
+  const sliceAce = s.historyAce.slice(0, idx+1);
+  drawSparkline(ctxEth, sliceEth, '#56b6c2', Math.max(...s.historyEth)||1);
+  drawSparkline(ctxBy, sliceGly, '#c678dd', Math.max(...s.historyGly, ...s.historyAce)||1);
+  // Overdraw acetate trace faintly
+  drawSparkline(ctxBy, sliceAce, '#d19a66', Math.max(...s.historyGly, ...s.historyAce)||1);
+}
+
+// ===== Update loop =====
+function updateOutputs(){
+  const day = (s.progress/100)*CONFIG.maxDays;
+  const m = modelOutputs(day);
+  ui.outEth.textContent = m.ethanol.toFixed(1);
+  ui.outGly.textContent = m.glycerol.toFixed(1);
+  ui.outCo2.textContent = m.co2.toFixed(1);
+  ui.outRate.textContent = m.rate.toFixed(2);
+  ui.outTotal.textContent = m.totalConsumed.toFixed(1);
+  ui.outDays.textContent = Math.floor(m.day);
+  ui.peakEth.textContent = (Math.max(...s.historyEth)||0).toFixed(1)+'%';
+  const maxRate = Math.max(...s.historyRate)||0;
+  ui.rateEth.textContent = maxRate.toFixed(1)+' g/L/d';
+  ui.stressIdx.textContent = m.stressFactor<0.55?'High':(m.stressFactor<0.8?'Moderate':'Low');
+  ui.stressIdx.style.color = m.stressFactor<0.55?'#e06c75':(m.stressFactor<0.8?'#d19a66':'#98c379');
+  ui.valGly.textContent = m.glycerol.toFixed(1);
+  ui.valAce.textContent = m.acetate.toFixed(2);
+  ui.valH2s.textContent = m.h2sRisk;
+  ui.valH2s.style.color = m.h2sRisk==='Elevated'?'#e06c75':(m.h2sRisk==='Moderate'?'#d19a66':'#98c379');
+}
+
+let lastT = performance.now();
+function loop(now){
+  const dt = Math.min((now-lastT)/1000, 0.05);
+  lastT = now;
+  if(s.playing){
+    s.progress = Math.min(100, s.progress + dt * 6.5); // ~15s full ferment
+    ui.progress.value = s.progress;
+    ui.vProg.textContent = s.progress.toFixed(1)+'%';
+    if(s.progress>=100) s.playing = false;
+  }
+  rebuildHistory(); // in case params changed
+  updateParticles(dt);
+  drawParticles();
+  updateOutputs();
+  refreshCharts();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ===== Interactions =====
+['temp','brix','ph','yan'].forEach(id=>{
+  const el = document.getElementById(id);
+  const v = {'temp':'v-temp','brix':'v-brix','ph':'v-ph','yan':'v-yan'}[id];
+  const u = document.getElementById(v);
+  const fmt = id==='temp'?'°C':id==='brix'?'°Brix':id==='ph'?'':id==='yan'?' mg/L':'';
+  el.addEventListener('input', e=>{
+    s[id]=parseFloat(e.target.value);
+    u.textContent = s[id]+fmt;
+    updateOutputs();
+  });
+});
+
+ui.progress.addEventListener('input', e=>{
+  s.progress = parseFloat(e.target.value);
+  ui.vProg.textContent = s.progress.toFixed(1)+'%';
+  updateOutputs();
+});
+
+// Chips
+ui.chips.forEach(chip=>{
+  chip.addEventListener('click', ()=>{
+    const pid = chip.dataset.path;
+    if(s.activePaths.has(pid)){ s.activePaths.delete(pid); chip.classList.remove('active'); }
+    else { s.activePaths.add(pid); chip.classList.add('active'); }
+    // Animate SVG paths opacity
+    const group = ui.svg.querySelector(`g[data-id="${pid}"]`);
+    if(group){
+      const target = s.activePaths.has(pid)?.75:.18;
+      gsap.to(group, {opacity:target, duration:.35});
+    }
+  });
+});
+
+// Play/Pause/Reset
+document.getElementById('btn-play').addEventListener('click', ()=>{ s.playing=true; });
+document.getElementById('btn-pause').addEventListener('click', ()=>{ s.playing=false; });
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  s.playing=false; s.progress=0; ui.progress.value=0; ui.vProg.textContent='0%';
+  s.particles=[]; updateOutputs();
+});
+
+// SVG hover tooltips
+ui.svg.querySelectorAll('.met-node').forEach(node=>{
+  node.addEventListener('mouseenter', e=>{
+    const id = node.dataset.id;
+    const texts = {
+      glucose:'Hexose sugar consumed by yeast via the glycolytic (Embden-Meyerhof) pathway.',
+      pyruvate:'3-carbon α-keto acid produced from glucose. Decarboxylated to acetaldehyde, then reduced to ethanol.',
+      'ethanol-node':'Primary fermentation product. Toxic >14% v/v to most S. cerevisiae strains.',
+      'co2-node':'Released during pyruvate decarboxylation. Dissolves into wine as carbonic acid.',
+      'glycerol-node':'Osmolyte produced from DHAP. Increases with high sugar & osmotic stress.',
+      'atp-node':'Net gain of 2 ATP per glucose under anaerobic conditions.',
+      'nadh-node':'Regenerated by alcohol dehydrogenase to sustain glycolysis.',
+    };
+    ui.tip.textContent = texts[id] || '';
+    ui.tip.style.opacity = '1';
+  });
+  node.addEventListener('mousemove', e=>{
+    const rect = document.getElementById('metabolic-map').getBoundingClientRect();
+    ui.tip.style.left = (e.clientX - rect.left + 12)+'px';
+    ui.tip.style.top = (e.clientY - rect.top + 12)+'px';
+  });
+  node.addEventListener('mouseleave', ()=>{ ui.tip.style.opacity='0'; });
+});
+
+// Clicking a path toggles its chip
+ui.svg.querySelectorAll('g').forEach(g=>{
+  const pid = g.dataset.id;
+  if(!pid) return;
+  g.addEventListener('click', ()=>{
+    const chip = document.querySelector(`.chip[data-path="${pid}"]`);
+    if(chip) chip.click();
+  });
+});
+
+// Intro GSAP entrance
+function introAnim(){
+  gsap.from('.panel', {y:24, opacity:0, stagger:.12, duration:.8, ease:'power2.out'});
+  gsap.from('.spark-box', {y:20, opacity:0, stagger:.15, duration:.9, ease:'power2.out', delay:.3});
+  gsap.from('#metabolic-map', {scale:.96, opacity:0, duration:1, ease:'power2.out'});
+  // Animate paths drawing
+  ui.svg.querySelectorAll('.met-path').forEach(pathEl=>{
+    const len = pathEl.getTotalLength? pathEl.getTotalLength() : 200;
+    pathEl.style.strokeDasharray = len;
+    pathEl.style.strokeDashoffset = len;
+    gsap.to(pathEl, {strokeDashoffset:0, duration:1.8, ease:'power2.inOut', delay:.2});
+  });
+}
+introAnim();
+
+// Initial
+rebuildHistory(); updateOutputs(); refreshCharts();
+
+// Animate metric numbers on change
+function animateNum(el, val, decimals=1){
+  const obj = {v: parseFloat(el.textContent)||0};
+  gsap.to(obj, {v:val, duration:.6, ease:'power2.out', onUpdate:()=>{
+    el.textContent = obj.v.toFixed(decimals);
+  }});
+}
+</script>
+</body>
+</html>
