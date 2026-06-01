@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aging Alchemy — Wine Oxidation Chemistry Simulator</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#0e0a08; font-family:'SF Mono',Menlo,monospace; }
+  canvas { display:block; }
+  #ui-layer { position:absolute; inset:0; pointer-events:none; z-index:10; }
+  #ui-layer > * { pointer-events:auto; }
+  .panel { position:absolute; background:rgba(18,12,10,0.92); border:1px solid #3a2a20; border-radius:10px; padding:0.9rem 1.1rem; max-width:min(260px,calc(100vw - 20px)); color:#e8d5c0; }
+  .panel h3 { font-size:0.82rem; text-transform:uppercase; letter-spacing:0.08em; color:#c4a47c; margin:0 0 0.5rem; }
+  .panel .row { display:flex; align-items:center; justify-content:space-between; gap:0.6rem; margin:0.3rem 0; font-size:0.72rem; }
+  .panel .row label { color:#a08060; }
+  .panel .row .val { font-variant-numeric:tabular-nums; color:#e8c090; min-width:3rem; text-align:right; }
+  .panel .bar { height:4px; border-radius:2px; background:#2a2018; margin-top:0.25rem; overflow:hidden; }
+  .panel .bar > div { height:100%; border-radius:2px; transition:width 0.3s; }
+  .badge-wrap { display:flex; flex-wrap:wrap; gap:4px; margin-top:0.4rem; }
+  .badge { font-size:0.6rem; padding:0.15rem 0.4rem; border-radius:4px; background:#2a2018; color:#a08060; }
+  .badge.active { background:#8b6914; color:#fff; }
+  #metrics { top:10px; left:10px; }
+  #controls { top:10px; right:10px; }
+  #legend { bottom:10px; left:10px; }
+  #legend .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; }
+  #close-bar { position:absolute; top:0; right:0; padding:6px 10px; font-size:0.65rem; color:#a08060; cursor:pointer; pointer-events:auto; z-index:20; }
+  @media (max-width:768px) {
+    body { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    canvas { position:fixed; top:0; left:0; z-index:0; }
+    #ui-layer { position:relative; inset:auto; padding:44px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; pointer-events:none; }
+    #ui-layer > * { pointer-events:auto; }
+    .panel { position:relative !important; inset:auto !important; width:100% !important; max-width:none !important; padding:0.6rem 0.85rem; background:rgba(18,12,10,0.78); }
+    #close-bar { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer" style="position:sticky;top:0;z-index:100;background:#2a1a10;border-bottom:1px solid #5a3a20;color:#e8b080;padding:0.55rem 0.8rem;text-align:center;font-size:0.78rem;font-family:system-ui,sans-serif;">⚠ For educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="ui-layer">
+  <div id="close-bar" onclick="document.getElementById('ui-layer').classList.toggle('collapsed');">✕ Close controls</div>
+  <div class="panel" id="metrics">
+    <h3>Live Chemistry</h3>
+    <div class="row"><label>Browning Index</label><span class="val" id="v-brown">0.0</span></div>
+    <div class="bar"><div id="b-brown" style="width:0%;background:#a0522d;"></div></div>
+    <div class="row"><label>Aldehydes (ppm)</label><span class="val" id="v-ald">0.0</span></div>
+    <div class="bar"><div id="b-ald" style="width:0%;background:#d4a017;"></div></div>
+    <div class="row"><label>Temp</label><span class="val" id="v-temp">20°C</span></div>
+    <div class="row"><label>O₂ Sat</label><span class="val" id="v-o2">0.5</span></div>
+    <div class="row"><label>pH</label><span class="val" id="v-ph">3.5</span></div>
+    <div class="badge-wrap">
+      <span class="badge" id="ph-maillard">Maillard Active</span>
+      <span class="badge" id="ph-strecker">Strecker Active</span>
+      <span class="badge" id="ph-oxid">Oxidation Runaway</span>
+    </div>
+  </div>
+  <div class="panel" id="controls">
+    <h3>Parameters</h3>
+    <div class="row"><label>Temperature</label><span class="val" id="val-temp">20°C</span></div>
+    <div class="row"><input type="range" id="rng-temp" min="0" max="60" value="20" style="width:100%;height:4px;accent-color:#c4a47c;"></div>
+    <div class="row"><label>Oxygen Exposure</label><span class="val" id="val-o2">50%</span></div>
+    <div class="row"><input type="range" id="rng-o2" min="0" max="100" value="50" style="width:100%;height:4px;accent-color:#c4a47c;"></div>
+    <div class="row"><label>pH</label><span class="val" id="val-ph">3.5</span></div>
+    <div class="row"><input type="range" id="rng-ph" min="2.8" max="4.2" step="0.05" value="3.5" style="width:100%;height:4px;accent-color:#c4a47c;"></div>
+    <div class="row" style="margin-top:0.5rem;font-size:0.65rem;color:#705030;">Keys: [T] temp↑ [O] O₂↑ [S] save [R] reset</div>
+  </div>
+  <div class="panel" id="legend">
+    <h3>Molecules</h3>
+    <div style="font-size:0.72rem;color:#c4b090;line-height:1.5;">
+      <div><span class="dot" style="background:#58c4dd;"></span>Amino Acids</div>
+      <div><span class="dot" style="background:#e8c84a;"></span>Reducing Sugars</div>
+      <div><span class="dot" style="background:#ff4444;"></span>O₂ (Oxygen)</div>
+      <div><span class="dot" style="background:#d4a017;"></span>Amadori / Heyns</div>
+      <div><span class="dot" style="background:#8b4513;"></span>Melanoidins</div>
+      <div><span class="dot" style="background:#ff8800;"></span>Strecker Aldehydes</div>
+      <div><span class="dot" style="background:#ffffff;"></span>Acetaldehyde</div>
+    </div>
+  </div>
+</div>
+<script>
+
+// ================== CONFIGURATION ==================
+const CONFIG = {
+  seed: 42,
+  temp: 20,        // °C
+  o2: 0.5,         // 0-1 oxygen saturation
+  pH: 3.5,
+  paused: false,
+  showTrails: true,
+  bgGrain: true
+};
+
+// ================== PALETTE ==================
+const PAL = {
+  bg: '#0e0a08',
+  amino: [88, 196, 221],      // cyan glow
+  sugar: [232, 200, 74],       // gold
+  o2: [255, 68, 68],            // red pulse
+  amadori: [212, 160, 23],      // amber
+  mel: [139, 69, 19],           // deep brown
+  strecker: [255, 136, 0],      // orange
+  acet: [255, 255, 255],        // white
+  glow: [196, 164, 124]          // warm highlight
+};
+
+// ================== STATE ==================
+let particles = [];
+let grid = {};
+let reactions = { maillard: 0, strecker: 0, oxid: 0 };
+let trailLayer, grainLayer;
+let time = 0;
+let gridW, gridH, cellSize = 45;
+
+// ================== UTILITIES ==================
+function seededRandom(seed) {
+  let s = seed;
+  return () => { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return ((s < 0 ? ~s + 1 : s) % 100000) / 100000; };
+}
+let rng = seededRandom(CONFIG.seed);
+function rand() { return rng(); }
+function randRange(a,b) { return a + rand()*(b-a); }
+function distSq(a,b) { let dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
+function lerp(a,b,t) { return a + (b-a)*t; }
+function clamp(v,lo,hi) { return Math.min(hi,Math.max(lo,v)); }
+function reactionRate(temp, pH, baseRate, eact=75000, r=8.314) {
+  // Arrhenius scaled by pH proximity to Maillard optimum (pH 5-7) and Strecker (pH 3-5)
+  let tk = temp + 273.15;
+  let arr = Math.exp(-eact/(r*tk));
+  // Maillard favors higher pH, Strecker favors mid pH
+  let phFac = pH > 4.5 ? (pH-4.5)/2.5 : (pH-2.8)/1.7;
+  return baseRate * arr * clamp(phFac,0.05,1.5);
+}
+
+// ================== PARTICLE SPECIES ==================
+// 0=amino acid, 1=sugar, 2=O2, 3=amadori, 4=melanoidin, 5=strecker aldehyde, 6=acetaldehyde
+class Particle {
+  constructor(species, x, y) {
+    this.species = species;
+    this.x = x; this.y = y;
+    this.vx = randRange(-0.8,0.8);
+    this.vy = randRange(-0.8,0.8);
+    this.life = 1.0;
+    this.age = 0;
+    this.radius = species===4 ? randRange(4,8) : randRange(2,3.5);
+    // Thermal velocity boost
+    let speedMult = 1 + CONFIG.temp/40;
+    this.vx *= speedMult;
+    this.vy *= speedMult;
+    if (species===2) { // O2 is lighter, faster
+      this.vx *= 1.6; this.vy *= 1.6;
+      this.pulseOffset = rand() * Math.PI * 2;
+    }
+    if (species===3) { this.vx *= 0.7; this.vy *= 0.7; }
+    if (species===4) { this.vx *= 0.3; this.vy *= 0.3; }
+  }
+
+  update() {
+    // Temperature affects velocity jitter
+    let jitter = 0.02 + CONFIG.temp * 0.002;
+    this.vx += randRange(-jitter, jitter);
+    this.vy += randRange(-jitter, jitter);
+
+    // Damping and thermal speed limit
+    let limit = 1.2 + CONFIG.temp/30;
+    let spd = Math.sqrt(this.vx*this.vx+this.vy*this.vy);
+    if (spd > limit) { this.vx *= 0.96; this.vy *= 0.96; }
+
+    this.x += this.vx;
+    this.y += this.vy;
+    this.age++;
+
+    // Boundary: bounce
+    if (this.x < this.radius) { this.x = this.radius; this.vx *= -0.9; }
+    if (this.x > width-this.radius) { this.x = width-this.radius; this.vx *= -0.9; }
+    if (this.y < this.radius) { this.y = this.radius; this.vy *= -0.9; }
+    if (this.y > height-this.radius) { this.y = height-this.radius; this.vy *= -0.9; }
+
+    // Species-specific drift
+    if (this.species===2 && CONFIG.o2 > 0.3) {
+      // O2 drifts upward (evaporation tendency)
+      this.vy -= 0.015;
+    }
+    if (this.species===4) {
+      // Melanoidins settle slowly
+      this.vy += 0.008;
+    }
+    if (this.species===6) {
+      // Acetaldehyde diffuses fast, slight upward
+      this.vy -= 0.01;
+    }
+
+    // Grid insertion
+    let gx = Math.floor(this.x/cellSize);
+    let gy = Math.floor(this.y/cellSize);
+    let key = gx+','+gy;
+    if (!grid[key]) grid[key]=[];
+    grid[key].push(this);
+  }
+
+  draw(ctx) {
+    let c = PAL.amino;
+    if (this.species===1) c = PAL.sugar;
+    if (this.species===2) c = PAL.o2;
+    if (this.species===3) c = PAL.amadori;
+    if (this.species===4) c = PAL.mel;
+    if (this.species===5) c = PAL.strecker;
+    if (this.species===6) c = PAL.acet;
+    let alpha = this.life * (this.species===2 ? 0.6 + 0.4*Math.sin(time*3+this.pulseOffset||0) : 0.85);
+    let r = this.radius;
+    if (this.species===4) {
+      // Melanoidins: irregular brown blobs
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${alpha*0.7})`;
+      ctx.beginPath();
+      for (let a=0;a<6.3;a+=0.6) {
+        let nr = r * (0.7 + 0.3*Math.sin(a*3+this.age*0.02));
+        ctx.lineTo(this.x + Math.cos(a)*nr, this.y + Math.sin(a)*nr);
+      }
+      ctx.fill();
+    } else if (this.species===2) {
+      // O2: flickering spark
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,r*0.7,0,Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,r,0,Math.PI*2);
+      ctx.fill();
+    }
+    // Glow for reactive intermediates
+    if (this.species===3 || this.species===5) {
+      ctx.globalAlpha = alpha * 0.25;
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,r*2.5,0,Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// ================== SIMULATION LOGIC ==================
+function spawnInitial() {
+  particles = [];
+  for (let i=0;i<120;i++) particles.push(new Particle(0, randRange(0,width), randRange(0,height)));
+  for (let i=0;i<120;i++) particles.push(new Particle(1, randRange(0,width), randRange(0,height)));
+  for (let i=0;i<60;i++) particles.push(new Particle(2, randRange(0,width), randRange(0,height)));
+}
+
+function spawnO2() {
+  let target = Math.floor(CONFIG.o2 * 80);
+  let current = particles.filter(p=>p.species===2).length;
+  for (let i=current;i<target;i++) {
+    particles.push(new Particle(2, randRange(0,width), randRange(0,height)));
+  }
+  if (current > target) {
+    let o2s = particles.filter(p=>p.species===2);
+    for (let i=0;i<current-target && i<o2s.length;i++) {
+      let idx = particles.indexOf(o2s[i]);
+      if (idx>-1) particles.splice(idx,1);
+    }
+  }
+}
+
+function react() {
+  let melCount = 0;
+  let aldCount = 0;
+  let acetCount = 0;
+  for (let key in grid) {
+    let cell = grid[key];
+    for (let i=0;i<cell.length;i++) {
+      let a = cell[i];
+      if (a.species!==0 && a.species!==1 && a.species!==3) continue;
+      // Nearby cells
+      let gx = Math.floor(a.x/cellSize), gy = Math.floor(a.y/cellSize);
+      for (let dx=-1;dx<=1;dx++) for (let dy=-1;dy<=1;dy++) {
+        let nk = (gx+dx)+','+(gy+dy);
+        let ncell = grid[nk];
+        if (!ncell) continue;
+        for (let j=0;j<ncell.length;j++) {
+          let b = ncell[j];
+          if (a===b) continue;
+          let d2 = distSq(a,b);
+          if (d2 > (cellSize*0.6)**2) continue;
+
+          // Maillard: amino acid (0) + sugar (1) -> amadori (3)
+          if ((a.species===0 && b.species===1) || (a.species===1 && b.species===0)) {
+            if (rand() < reactionRate(CONFIG.temp, CONFIG.pH, 0.003, 95000)) {
+              a.species = 3; a.life = 1; a.age = 0; a.radius = randRange(3,5);
+              b.life = 0;
+              reactions.maillard++;
+              // Spark effect
+              for (let s=0;s<3;s++) {
+                let sp = new Particle(3, a.x, a.y);
+                sp.vx = randRange(-1.5,1.5); sp.vy = randRange(-1.5,1.5);
+                sp.life = 0.4; sp.radius = 1.2;
+                particles.push(sp);
+              }
+            }
+          }
+
+          // Amadori -> Melanoidin (brown polymer)
+          if (a.species===3 && b.species===3) {
+            if (rand() < reactionRate(CONFIG.temp, CONFIG.pH, 0.002, 88000)) {
+              a.species = 4; a.life = 1; a.age = 0; a.radius = randRange(5,9);
+              b.life = 0;
+              reactions.maillard++;
+            }
+          }
+
+          // Strecker: amino acid + O2 + amadori context -> aldehyde
+          if (a.species===0 && b.species===2 && CONFIG.o2 > 0.2) {
+            // Need nearby amadori (or melanoidin as catalyst presence)
+            let hasCatalyst = cell.some(p => p.species===3 || p.species===4);
+            if (hasCatalyst && rand() < reactionRate(CONFIG.temp, CONFIG.pH, 0.0015, 82000)*CONFIG.o2) {
+              a.species = 5; a.life = 1; a.age = 0; a.radius = 2.5;
+              b.life = 0;
+              reactions.strecker++;
+            }
+          }
+
+          // Acetaldehyde from ethanol oxidation (represented as sugar + O2 at high temp)
+          if (a.species===1 && b.species===2 && CONFIG.temp > 25) {
+            if (rand() < reactionRate(CONFIG.temp, CONFIG.pH, 0.001, 78000)*CONFIG.o2) {
+              a.species = 6; a.life = 1; a.age = 0; a.radius = 2;
+              b.life = 0;
+              reactions.oxid++;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// ================== DOM UPDATE ==================
+function updateDOM() {
+  let mel = particles.filter(p=>p.species===4).length;
+  let ald = particles.filter(p=>p.species===5).length;
+  let acet = particles.filter(p=>p.species===6).length;
+  let totalReact = Math.max(1, particles.length);
+  let bi = Math.min(100, (mel*100)/totalReact).toFixed(1);
+  let ap = (ald*0.15 + acet*0.08).toFixed(1);
+  document.getElementById('v-brown').textContent = bi;
+  document.getElementById('b-brown').style.width = bi+'%';
+  document.getElementById('v-ald').textContent = ap;
+  document.getElementById('b-ald').style.width = Math.min(100,ap*8)+'%';
+  document.getElementById('v-temp').textContent = CONFIG.temp+'°C';
+  document.getElementById('v-o2').textContent = CONFIG.o2.toFixed(2);
+  document.getElementById('v-ph').textContent = CONFIG.pH.toFixed(2);
+
+  let m = document.getElementById('ph-maillard');
+  m.className = 'badge' + (CONFIG.temp > 15 && CONFIG.pH > 4.0 ? ' active' : '');
+  let s = document.getElementById('ph-strecker');
+  s.className = 'badge' + (CONFIG.o2 > 0.3 && CONFIG.temp > 10 ? ' active' : '');
+  let o = document.getElementById('ph-oxid');
+  o.className = 'badge' + (CONFIG.temp > 35 && CONFIG.o2 > 0.6 ? ' active' : '');
+}
+
+function updateSliders() {
+  document.getElementById('val-temp').textContent = CONFIG.temp+'°C';
+  document.getElementById('val-o2').textContent = Math.round(CONFIG.o2*100)+'%';
+  document.getElementById('val-ph').textContent = CONFIG.pH.toFixed(2);
+  document.getElementById('rng-temp').value = CONFIG.temp;
+  document.getElementById('rng-o2').value = Math.round(CONFIG.o2*100);
+  document.getElementById('rng-ph').value = CONFIG.pH;
+}
+
+// ================== DRAW BACKGROUND ==================
+function drawBg(ctx) {
+  // Warm vignette base
+  let grad = ctx.createRadialGradient(width/2,height/2,0,width/2,height/2,Math.max(width,height)*0.8);
+  grad.addColorStop(0,'#1a120e');
+  grad.addColorStop(0.6,'#130d09');
+  grad.addColorStop(1,'#0a0604');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,width,height);
+
+  // Subtle heat shimmer near bottom at high temp
+  if (CONFIG.temp > 30) {
+    ctx.globalAlpha = (CONFIG.temp-30)/80;
+    for (let i=0;i<40;i++) {
+      let x = randRange(0,width);
+      let y = randRange(height*0.6,height);
+      ctx.fillStyle = `rgba(200,100,30,${rand()*0.04})`;
+      ctx.fillRect(x,y,randRange(20,80),randRange(1,3));
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawGrain(ctx) {
+  if (!CONFIG.bgGrain) return;
+  ctx.globalAlpha = 0.035;
+  for (let i=0;i<1200;i++) {
+    let x = Math.floor(rand()*width);
+    let y = Math.floor(rand()*height);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x,y,1,1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ================== p5.js LIFECYCLE ==================
+let canvasLayer;
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  canvasLayer = document.querySelector('canvas');
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+  gridW = Math.ceil(width/cellSize);
+  gridH = Math.ceil(height/cellSize);
+  spawnInitial();
+
+  // Slider events
+  document.getElementById('rng-temp').addEventListener('input', e=>{
+    CONFIG.temp = parseInt(e.target.value); updateSliders(); spawnO2();
+  });
+  document.getElementById('rng-o2').addEventListener('input', e=>{
+    CONFIG.o2 = parseInt(e.target.value)/100; updateSliders(); spawnO2();
+  });
+  document.getElementById('rng-ph').addEventListener('input', e=>{
+    CONFIG.pH = parseFloat(e.target.value); updateSliders();
+  });
+  updateSliders();
+}
+
+function draw() {
+  if (CONFIG.paused) return;
+  time += 0.016;
+  let ctx = canvasLayer.getContext('2d');
+
+  drawBg(ctx);
+
+  // Trails: fade previous slightly
+  if (CONFIG.showTrails) {
+    ctx.fillStyle = 'rgba(14,10,8,0.18)';
+    ctx.fillRect(0,0,width,height);
+  }
+
+  // Reaction grid
+  grid = {};
+  for (let p of particles) p.update();
+  react();
+  spawnO2();
+
+  // Draw particles
+  for (let p of particles) p.draw(ctx);
+
+  // Cleanup dead
+  for (let i=particles.length-1;i>=0;i--) {
+    if (particles[i].life <= 0 || particles[i].age > 3000) particles.splice(i,1);
+  }
+
+  // Respawn nutrients if depleted
+  let amino = particles.filter(p=>p.species===0).length;
+  let sugar = particles.filter(p=>p.species===1).length;
+  if (amino < 30) for (let i=0;i<3;i++) particles.push(new Particle(0, randRange(0,width), randRange(0,height)));
+  if (sugar < 30) for (let i=0;i<3;i++) particles.push(new Particle(1, randRange(0,width), randRange(0,height)));
+
+  drawGrain(ctx);
+  updateDOM();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
+function keyPressed() {
+  if (key === 's' || key === 'S') saveCanvas('aging-alchemy', 'png');
+  if (key === 'g' || key === 'G') saveGif('aging-alchemy', 4);
+  if (key === 'r' || key === 'R') { spawnInitial(); reactions={maillard:0,strecker:0,oxid:0}; }
+  if (key === ' ') CONFIG.paused = !CONFIG.paused;
+  if (key === 't' || key === 'T') { CONFIG.temp = Math.min(60, CONFIG.temp+3); updateSliders(); spawnO2(); }
+  if (key === 'o' || key === 'O') { CONFIG.o2 = Math.min(1, CONFIG.o2+0.1); updateSliders(); spawnO2(); }
+}
+
+</script>
+</body>
+</html>
