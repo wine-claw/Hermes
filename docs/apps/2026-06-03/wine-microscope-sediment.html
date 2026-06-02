@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Microscope — Live Sediment Viewer</title>
+<style>
+  :root{ --bg:#06080b; --panel:#0d1117; --border:#21262d; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#a371f7; --warn:#e6a817; --danger:#f85149; }
+  html,body{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+
+  .disclaimer{ position:fixed; top:0; left:0; right:0; z-index:200; background:rgba(26,16,8,0.95); border-bottom:1px solid #5a3a20; color:#e8b080; font-size:0.78rem; padding:0.55rem 1rem; text-align:center; pointer-events:auto; }
+  .disclaimer strong{ font-weight:600; }
+
+  #canvas-container{ position:fixed; inset:0; z-index:0; }
+  canvas{ display:block; width:100%; height:100%; }
+
+  /* UI overlay */
+  #ui-layer{ position:absolute; top:38px; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+  #ui-layer > *{ pointer-events:auto; }
+
+  .panel{ position:absolute; background:rgba(13,17,23,0.92); border:1px solid var(--border); border-radius:10px; padding:0.9rem 1.1rem; max-width:min(280px, calc(100vw - 20px)); backdrop-filter:blur(6px); }
+  .panel h3{ margin:0 0 0.45rem; font-size:0.95rem; letter-spacing:0.02em; }
+  .panel .muted{ color:var(--muted); font-size:0.78rem; margin-bottom:0.6rem; }
+
+  .control{ margin-bottom:0.7rem; }
+  .control label{ display:flex; justify-content:space-between; font-size:0.78rem; color:var(--muted); margin-bottom:0.25rem; }
+  .control label span.value{ font-family:monospace; color:var(--accent); }
+  input[type="range"]{ -webkit-appearance:none; appearance:none; width:100%; height:6px; background:#21262d; border-radius:3px; outline:none; }
+  input[type="range"]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:14px; height:14px; background:var(--accent); border-radius:50%; cursor:pointer; border:2px solid var(--bg); }
+  input[type="range"]::-moz-range-thumb{ width:14px; height:14px; background:var(--accent); border-radius:50%; cursor:pointer; border:2px solid var(--bg); }
+
+  .btn-row{ display:flex; gap:0.4rem; margin-top:0.5rem; flex-wrap:wrap; }
+  .btn{ background:#21262d; border:1px solid var(--border); color:var(--text); padding:0.35rem 0.55rem; border-radius:6px; font-size:0.75rem; cursor:pointer; }
+  .btn:hover{ background:#30363d; }
+  .btn.active{ border-color:var(--accent); color:var(--accent); }
+
+  /* Telemetry panel */
+  #telemetry{ position:absolute; bottom:10px; right:10px; display:flex; gap:0.6rem; }
+  .metric{ background:rgba(13,17,23,0.88); border:1px solid var(--border); border-radius:6px; padding:0.35rem 0.55rem; font-size:0.72rem; color:var(--muted); }
+  .metric .val{ font-family:monospace; color:var(--text); font-size:0.82rem; }
+
+  /* Position panels desktop */
+  #controls{ top:46px; left:10px; }
+  #legend{ top:46px; right:10px; }
+  #legend .item{ display:flex; align-items:center; gap:0.4rem; font-size:0.78rem; margin-bottom:0.35rem; color:var(--muted); }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+  #panel-close{ position:absolute; top:46px; left:300px; background:rgba(13,17,23,0.92); border:1px solid var(--border); border-radius:6px; padding:0.3rem 0.5rem; font-size:0.7rem; color:var(--muted); cursor:pointer; display:none; }
+
+  @media (max-width: 768px){
+    body{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    canvas{ position:fixed; top:0; left:0; z-index:0; }
+    #ui-layer{ position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:44px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; }
+    .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:0.65rem 0.85rem; background:rgba(13,17,23,0.78); }
+    #panel-close{ display:none !important; }
+    #telemetry{ position:relative; right:auto; bottom:auto; flex-wrap:wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="canvas-container"><canvas id="glcanvas"></canvas></div>
+
+<div id="ui-layer">
+  <div id="controls" class="panel">
+    <h3>🔬 Microscope Controls</h3>
+    <div class="muted">Drag to pan · Wheel to zoom</div>
+    <div class="control">
+      <label>Focal plane <span id="v-focus" class="value">0.00</span></label>
+      <input id="focus" type="range" min="0" max="1" step="0.01" value="0.5">
+    </div>
+    <div class="control">
+      <label>Depth of field <span id="v-dof" class="value">0.25</span></label>
+      <input id="dof" type="range" min="0.02" max="0.6" step="0.01" value="0.25">
+    </div>
+    <div class="control">
+      <label>Chromatic aberration <span id="v-chroma" class="value">0.15</span></label>
+      <input id="chroma" type="range" min="0" max="0.5" step="0.01" value="0.15">
+    </div>
+    <div class="control">
+      <label>Wine tint (°Hue) <span id="v-hue" class="value">340</span></label>
+      <input id="tintHue" type="range" min="0" max="360" step="1" value="340">
+    </div>
+    <div class="control">
+      <label>Particle density <span id="v-density" class="value">1.0</span></label>
+      <input id="density" type="range" min="0.3" max="2.0" step="0.05" value="1.0">
+    </div>
+    <div class="control">
+      <label>Illumination intensity <span id="v-light" class="value">1.0</span></label>
+      <input id="light" type="range" min="0.3" max="1.5" step="0.05" value="1.0">
+    </div>
+    <div class="btn-row">
+      <button class="btn active" data-mode="brightfield">Brightfield</button>
+      <button class="btn" data-mode="darkfield">Dark-field</button>
+      <button class="btn" data-mode="phase">Phase-contrast</button>
+    </div>
+    <div class="btn-row" style="margin-top:0.4rem;">
+      <button class="btn" id="btn-snap">📷 Save PNG</button>
+    </div>
+  </div>
+
+  <div id="legend" class="panel">
+    <h3>Sediment Key</h3>
+    <div class="muted">Interactive legend · click to isolate</div>
+    <div class="item" data-filter="all">
+      <span class="dot" style="background:#fff;"></span> All particles
+    </div>
+    <div class="item" data-filter="tartrate">
+      <span class="dot" style="background:#d0e8ff;"></span> Potassium bitartrate
+    </div>
+    <div class="item" data-filter="yeast">
+      <span class="dot" style="background:#fdf0a8;"></span> Yeast cells
+    </div>
+    <div class="item" data-filter="polysac">
+      <span class="dot" style="background:#b0f0c0;"></span> Polysaccharide flocs
+    </div>
+    <div class="item" data-filter="bacteria">
+      <span class="dot" style="background:#ff9aa2;"></span> Lactic acid bacteria
+    </div>
+  </div>
+
+  <div id="panel-close">✕ Close controls</div>
+
+  <div id="telemetry">
+    <div class="metric">Zoom <span id="m-zoom" class="val">40×</span></div>
+    <div class="metric">Temp <span class="val">18 °C</span></div>
+    <div class="metric">pH <span class="val">3.45</span></div>
+    <div class="metric">Turbidity <span id="m-turb" class="val">120 NTU</span></div>
+    <div class="metric">Objects <span id="m-count" class="val">0</span></div>
+  </div>
+</div>
+
+<script>
+// ====== WebGL Shader Microscope ======
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
+if (!gl) { document.body.innerHTML = '<div style="padding:2rem;color:#fff">WebGL not supported</div>'; }
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.floor(canvas.clientWidth * dpr);
+  const h = Math.floor(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0,0,w,h); }
+}
+window.addEventListener('resize', resize); resize();
+
+// ---- Vertex shader ----
+const VERT = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main(){ v_uv = a_pos * 0.5 + 0.5; gl_Position = vec4(a_pos, 0.0, 1.0); }
+`;
+
+// ---- Fragment shader ----
+const FRAG = `
+precision highp float;
+uniform float u_time;
+uniform vec2 u_res;
+uniform vec2 u_offset;
+uniform float u_zoom;
+uniform float u_focus;
+uniform float u_dof;
+uniform float u_chroma;
+uniform float u_tintHue;
+uniform float u_density;
+uniform float u_light;
+uniform int u_mode; // 0 brightfield, 1 darkfield, 2 phase
+uniform int u_filter; // 0 all, 1 tartrate, 2 yeast, 3 polysac, 4 bacteria
+
+varying vec2 v_uv;
+
+#define PI 3.14159265359
+#define TAU 6.28318530718
+
+vec3 hsv2rgb(vec3 c){
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+// Hash functions
+float hash12(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+float hash13(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7))) * 43758.5453123); }
+vec2 hash22(vec2 p){ return fract(sin(vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)))) * 43758.5453); }
+
+// Noise
+float noise2(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  float a = hash12(i);
+  float b = hash12(i + vec2(1.0,0.0));
+  float c = hash12(i + vec2(0.0,1.0));
+  float d = hash12(i + vec2(1.0,1.0));
+  vec2 u = f*f*(3.0-2.0*f);
+  return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
+}
+float fbm2(vec2 p){
+  float v=0.0, a=0.5;
+  for(int i=0;i<5;i++){ v += a*noise2(p); p *= 2.03; a *= 0.5; }
+  return v;
+}
+
+// SDF
+float sdSegment(vec2 p, vec2 a, vec2 b){
+  vec2 pa = p-a, ba = b-a;
+  float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
+  return length(pa - ba*h);
+}
+float sdCircle(vec2 p, float r){ return length(p)-r; }
+float sdBox(vec2 p, vec2 b){ vec2 d = abs(p)-b; return length(max(d,0.0)) + min(max(d.x,d.y),0.0); }
+float sdEllipse(vec2 p, vec2 ab){ return length(p/ab)-1.0; }
+
+// Layered particle system
+struct Particle {
+  vec2 pos;
+  float depth;
+  float size;
+  float type; // 1=tartrate, 2=yeast, 3=polysac, 4=bacteria
+  float angle;
+  float anim;
+  vec4 color;
+  float opacity;
+};
+
+vec2 rot(vec2 p, float a){ float c=cos(a), s=sin(a); return vec2(c*p.x - s*p.y, s*p.x + c*p.y); }
+
+Particle makeParticle(vec2 id){
+  Particle P;
+  P.pos = hash22(id) * 2.2 - 1.1 + hash22(id+vec2(99.0)).x * 0.3 * sin(u_time*0.1 + id.x);
+  P.pos.x += sin(u_time*0.15 + id.y*3.0)*0.03;
+  P.depth = hash12(id + vec2(7.0,13.0));
+  float h = hash12(id + vec2(3.0,1.0));
+  P.type = 1.0;
+  if(h>0.20) P.type = 2.0;
+  if(h>0.55) P.type = 3.0;
+  if(h>0.82) P.type = 4.0;
+  P.angle = hash12(id+vec2(11.0)) * TAU + u_time * (0.05 + hash12(id)*0.05);
+  P.anim = fract(u_time*0.03 + hash12(id));
+  P.size = 0.008 + hash12(id+vec2(5.0))*0.012;
+  if(P.type==1.0) P.size = 0.015 + hash12(id)*0.025;
+  if(P.type==3.0) P.size = 0.02 + hash12(id)*0.03;
+  if(P.type==4.0) P.size = 0.006 + hash12(id)*0.008;
+
+  // Colors
+  vec3 c = vec3(1.0);
+  if(P.type==1.0) c = vec3(0.82,0.91,1.0); // pale blue tartrate
+  if(P.type==2.0) c = vec3(0.99,0.94,0.66); // yellow yeast
+  if(P.type==3.0) c = vec3(0.69,0.94,0.75); // pale green polysac
+  if(P.type==4.0) c = vec3(1.0,0.60,0.63); // pink bacteria
+  P.color = vec4(c, 1.0);
+  P.opacity = 0.85 + hash12(id+vec2(41.0))*0.15;
+  return P;
+}
+
+float particleShape(vec2 uv, Particle P){
+  uv = rot(uv - P.pos, P.angle);
+  float d = 9.0;
+  if(P.type==1.0){ // Tartrate: elongated crystal with facets
+    d = sdSegment(uv, vec2(-P.size,0.0), vec2(P.size,0.0));
+    float prism = abs(uv.y*1.8) + abs(uv.x*0.3) - P.size*0.35;
+    d = min(d, prism);
+    d -= 0.001;
+  }else if(P.type==2.0){ // Yeast: oval with budding
+    vec2 ab = vec2(P.size*1.3, P.size*0.8);
+    d = sdEllipse(uv, ab);
+    float bud = sdCircle(uv - vec2(P.size*0.9, P.size*0.2), P.size*0.35);
+    if(P.anim > 0.7) d = min(d, bud);
+  }else if(P.type==3.0){ // Polysac: amorphous blob + chains
+    d = sdCircle(uv, P.size);
+    float nn = fbm2(uv*35.0 + id.xx*10.0);
+    d += (nn - 0.5)*0.008;
+  }else{ // Bacteria: rods
+    d = sdSegment(uv, vec2(-P.size*1.5,0.0), vec2(P.size*1.5,0.0));
+  }
+  return d;
+}
+
+// We'll pass current cell id through globals for noise shaping
+vec2 id;
+
+float evalParticle(vec2 p, vec2 gid){
+  id = gid;
+  Particle P = makeParticle(gid);
+  if(u_filter != 0 && abs(P.type - float(u_filter)) > 0.5) return 9.0;
+  float d = particleShape(p, P);
+  return d;
+}
+
+vec4 particleColor(vec2 gid){
+  id = gid;
+  return makeParticle(gid).color;
+}
+float particleOpacity(vec2 gid){ return makeParticle(gid).opacity; }
+float particleDepth(vec2 gid){ return makeParticle(gid).depth; }
+
+// Accumulate nearest particles via 3x3 neighborhood sampling
+vec4 sampleParticles(vec2 p){
+  float cellW = 0.18 / u_density;
+  vec2 c = floor(p / cellW);
+  float bestD = 9.0;
+  vec4 bestC = vec4(0.0);
+  float bestDepth = 0.5;
+  float bestOp = 0.0;
+  for(int y=-1; y<=1; y++){
+    for(int x=-1; x<=1; x++){
+      vec2 n = c + vec2(float(x), float(y));
+      // 1..3 particles per cell
+      float h = hash12(n);
+      int count = 1;
+      if(h > 0.65) count = 2;
+      if(h > 0.92) count = 3;
+      for(int i=0; i<3; i++){
+        if(i >= count) break;
+        vec2 gid = n + vec2(float(i)*37.13, float(i)*91.37);
+        float d = evalParticle(p, gid);
+        if(d < bestD){
+          bestD = d;
+          bestC = particleColor(gid);
+          bestDepth = particleDepth(gid);
+          bestOp = particleOpacity(gid);
+        }
+      }
+    }
+  }
+  return vec4(bestD, bestDepth, bestOp, bestC.r); // compact output
+}
+
+void main(){
+  vec2 uv = v_uv;
+  uv.x *= u_res.x / u_res.y;
+  vec2 p = (uv - vec2(0.5 * u_res.x/u_res.y, 0.5) + u_offset) * (3.0 / u_zoom);
+
+  // Wine tint background
+  vec3 wineTint = hsv2rgb(vec3(u_tintHue/360.0, 0.55, 0.14));
+  float vignette = smoothstep(1.1, 0.3, length(v_uv - 0.5)*1.6);
+  vec3 bg = wineTint * (0.6 + vignette*0.4);
+
+  // Sample particle layer
+  vec4 samp = sampleParticles(p);
+  float sdf = samp.x;
+  float z = samp.y;
+  float op = samp.z;
+
+  // Depth-of-field / focus blur
+  float focusDiff = abs(z - u_focus);
+  float blurAmt = smoothstep(0.0, u_dof, focusDiff) * 0.018;
+
+  // Chromatic aberration from defocus
+  float chr = u_chroma * focusDiff / max(u_dof, 0.01);
+  vec2 offR = vec2( blurAmt + chr*0.003, 0.0);
+  vec2 offB = vec2(-blurAmt - chr*0.003, 0.0);
+
+  // Re-sample with offsets for RGB channels
+  vec4 sR = sampleParticles(p + offR); float sdfR = sR.x; float zR = sR.y;
+  vec4 sB = sampleParticles(p + offB); float sdfB = sB.x; float zB = sB.y;
+
+  float occ = 0.0;
+  // tiny ambient occlusion from nearby structure using fbm
+  occ = fbm2(p*22.0) * 0.15;
+
+  // Particle shading
+  float soft = 0.003 + blurAmt;
+  float alpha = smoothstep(soft, -soft, sdf) * op;
+  float alphaR = smoothstep(soft*1.2, -soft*1.2, sdfR) * op;
+  float alphaB = smoothstep(soft*1.2, -soft*1.2, sdfB) * op;
+
+  // Retrieve particle color
+  // For color, we use the base sample (fast path)
+  vec4 sampC = sampleParticles(p);
+  vec3 col = sampC.rgb;
+  // Since we packed awkwardly, re-do color from nearest id
+  // We'll derive id by finding nearest again in a helper — but to keep performance okay,
+  // approximate from central sample
+  col = mix(col, vec3(1.0), 0.35); // brighten
+
+  // Phase-contrast / dark-field halo effects
+  float halo = 0.0;
+  if(u_mode==1){ // darkfield
+    halo = smoothstep(0.012, 0.0, sdf + 0.008) * 0.55 * op;
+    col = vec3(1.0);
+    alpha = halo;
+    alphaR = smoothstep(soft*1.2, -soft*1.2, sdfR + 0.008) * 0.55 * op;
+    alphaB = smoothstep(soft*1.2, -soft*1.2, sdfB + 0.008) * 0.55 * op;
+  }else if(u_mode==2){ // phase-contrast
+    float pc = smoothstep(0.01, -0.01, sdf) * op;
+    float pcHalo = smoothstep(0.018, 0.003, sdf) * 0.25 * op;
+    col = vec3(0.92,0.95,0.88);
+    vec3 pcTint = hsv2rgb(vec3(0.35, 0.25, 0.85));
+    col = mix(col, pcTint, 0.35);
+    alpha = pc + pcHalo;
+    alphaR = smoothstep(soft*1.2, -soft*1.2, sdfR) * op + smoothstep(0.024, 0.004, sdfR+0.008)*0.25*op;
+    alphaB = smoothstep(soft*1.2, -soft*1.2, sdfB) * op + smoothstep(0.024, 0.004, sdfB+0.008)*0.25*op;
+  }
+
+  vec3 frag = bg * u_light;
+
+  // Add particles with aberration splits
+  float aR = clamp(alphaR, 0.0, 1.0);
+  float aG = clamp(alpha, 0.0, 1.0);
+  float aB = clamp(alphaB, 0.0, 1.0);
+
+  if(u_mode==1){
+    frag.r += col.r * aR * u_light;
+    frag.g += col.g * aG * u_light;
+    frag.b += col.b * aB * u_light;
+  }else{
+    frag.r += col.r * aR * 0.9 * u_light;
+    frag.g += col.g * aG * 0.9 * u_light;
+    frag.b += col.b * aB * 0.9 * u_light;
+  }
+
+  // Phase ring highlights
+  if(u_mode==2){
+    float ring = smoothstep(0.005, 0.001, abs(sdf + 0.006));
+    frag += vec3(0.25,0.3,0.18) * ring * op * u_light;
+  }
+
+  // Sub-surface scatter simulation for yeast
+  // (approximate glow)
+  float glow = smoothstep(0.02, 0.0, sdf + 0.006) * 0.25 * op;
+  frag += vec3(0.9,0.85,0.5) * glow * u_light;
+
+  // Dark-field vignette boost
+  if(u_mode==1){
+    frag *= (0.2 + 0.8*vignette);
+  }
+
+  // Final tone + grain
+  float grain = (hash12(v_uv*u_res) - 0.5) * 0.025;
+  frag += grain;
+  frag = pow(max(frag,0.0), vec3(0.92));
+
+  gl_FragColor = vec4(frag, 1.0);
+}
+`;
+
+// ---- Compile shader ----
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    console.error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ console.error(gl.getProgramInfoLog(prog)); }
+gl.useProgram(prog);
+
+// ---- Fullscreen quad ----
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+// ---- Uniforms ----
+const u = {
+  time: gl.getUniformLocation(prog, 'u_time'),
+  res: gl.getUniformLocation(prog, 'u_res'),
+  offset: gl.getUniformLocation(prog, 'u_offset'),
+  zoom: gl.getUniformLocation(prog, 'u_zoom'),
+  focus: gl.getUniformLocation(prog, 'u_focus'),
+  dof: gl.getUniformLocation(prog, 'u_dof'),
+  chroma: gl.getUniformLocation(prog, 'u_chroma'),
+  tintHue: gl.getUniformLocation(prog, 'u_tintHue'),
+  density: gl.getUniformLocation(prog, 'u_density'),
+  light: gl.getUniformLocation(prog, 'u_light'),
+  mode: gl.getUniformLocation(prog, 'u_mode'),
+  filter: gl.getUniformLocation(prog, 'u_filter'),
+};
+
+// ---- State ----
+let state = {
+  offset: [0,0],
+  zoom: 1.0,
+  focus: 0.5,
+  dof: 0.25,
+  chroma: 0.15,
+  tintHue: 340,
+  density: 1.0,
+  light: 1.0,
+  mode: 0,
+  filter: 0,
+};
+
+function sync(){
+  gl.uniform1f(u.time, performance.now()*0.001);
+  gl.uniform2f(u.res, canvas.width, canvas.height);
+  gl.uniform2f(u.offset, state.offset[0], state.offset[1]);
+  gl.uniform1f(u.zoom, state.zoom);
+  gl.uniform1f(u.focus, state.focus);
+  gl.uniform1f(u.dof, state.dof);
+  gl.uniform1f(u.chroma, state.chroma);
+  gl.uniform1f(u.tintHue, state.tintHue);
+  gl.uniform1f(u.density, state.density);
+  gl.uniform1f(u.light, state.light);
+  gl.uniform1i(u.mode, state.mode);
+  gl.uniform1i(u.filter, state.filter);
+}
+
+function draw(){ sync(); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+
+// ---- Interaction ----
+let dragging=false, dragStart=[0,0], offStart=[0,0];
+canvas.addEventListener('mousedown', e=>{
+  dragging=true; dragStart=[e.clientX,e.clientY]; offStart=[...state.offset];
+});
+window.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const dx=(e.clientX-dragStart[0])/canvas.width * (3.0/state.zoom) * (canvas.width/canvas.height);
+  const dy=(e.clientY-dragStart[1])/canvas.height * (3.0/state.zoom);
+  state.offset = [offStart[0]-dx, offStart[1]+dy];
+});
+window.addEventListener('mouseup', ()=>dragging=false);
+
+// Touch
+let touchId=null;
+canvas.addEventListener('touchstart', e=>{
+  if(e.touches.length===1){ touchId=e.touches[0].identifier; dragging=true; dragStart=[e.touches[0].clientX, e.touches[0].clientY]; offStart=[...state.offset]; }
+},{passive:false});
+canvas.addEventListener('touchmove', e=>{
+  if(!dragging || touchId===null) return;
+  const t=[...e.touches].find(t=>t.identifier===touchId);
+  if(!t) return; e.preventDefault();
+  const dx=(t.clientX-dragStart[0])/canvas.width * (3.0/state.zoom) * (canvas.width/canvas.height);
+  const dy=(t.clientY-dragStart[1])/canvas.height * (3.0/state.zoom);
+  state.offset=[offStart[0]-dx, offStart[1]+dy];
+},{passive:false});
+canvas.addEventListener('touchend', e=>{
+  dragging=false; touchId=null;
+});
+
+// Zoom wheel
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const z = state.zoom * (e.deltaY < 0 ? 1.05 : 0.95);
+  state.zoom = Math.max(0.5, Math.min(5.0, z));
+  updateMetrics();
+},{passive:false});
+
+// ---- UI wiring ----
+function bind(id, key, scale=1, dp=2){
+  const el = document.getElementById(id);
+  const disp = document.getElementById('v-'+id);
+  const update = ()=>{
+    const v = parseFloat(el.value) * scale;
+    state[key] = parseFloat(el.value);
+    if(disp) disp.textContent = v.toFixed(dp);
+  };
+  el.addEventListener('input', update); update();
+}
+
+bind('focus','focus',1,2);
+bind('dof','dof',1,2);
+bind('chroma','chroma',1,2);
+bind('tintHue','tintHue',1,0);
+bind('density','density',1,2);
+bind('light','light',1,2);
+
+// Mode buttons
+document.querySelectorAll('[data-mode]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-mode]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.mode = ['brightfield','darkfield','phase'].indexOf(btn.dataset.mode);
+  });
+});
+
+// Filter legend
+document.querySelectorAll('[data-filter]').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    const f = item.dataset.filter;
+    state.filter = {all:0, tartrate:1, yeast:2, polysac:3, bacteria:4}[f];
+    document.querySelectorAll('[data-filter]').forEach(i=>i.style.opacity='0.55');
+    item.style.opacity='1';
+  });
+});
+
+// Close controls desktop only
+const panelClose = document.getElementById('panel-close');
+if(panelClose && window.innerWidth > 768){
+  panelClose.style.display='block';
+  panelClose.addEventListener('click', ()=>{
+    document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
+    panelClose.style.display='none';
+  });
+}
+
+// Metrics
+defaultInterval = null;
+function updateMetrics(){
+  const zm = Math.round(state.zoom * 40);
+  document.getElementById('m-zoom').textContent = zm + '×';
+  const n = Math.round(240 * state.density);
+  document.getElementById('m-count').textContent = n;
+  const turb = Math.round(60 + n * 0.35 + (state.filter===0 ? 40 : 0));
+  document.getElementById('m-turb').textContent = turb + ' NTU';
+}
+updateMetrics();
+
+// Save PNG
+function snapshot(){
+  draw();
+  const url = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url; a.download = 'wine-microscope-snapshot.png'; a.click();
+}
+document.getElementById('btn-snap').addEventListener('click', snapshot);
+
+// Animation loop
+function loop(){
+  resize();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// Seed hash randomness
+function setSeed(s){ /* shader is procedural with built-in hash; no seed needed */ }
+</script>
+</body>
+</html>
