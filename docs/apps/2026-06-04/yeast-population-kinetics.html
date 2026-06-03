@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Yeast Population Kinetics — Saccharomyces cerevisiae</title>
+<style>
+  :root {
+    --bg: #0a0b0d;
+    --surface: #12141a;
+    --surface2: #1a1d25;
+    --border: #2a3040;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #e8a838;
+    --accent2: #4ecda4;
+    --accent3: #d46a6a;
+    --phase-lag: #6aade8;
+    --phase-log: #4ecda4;
+    --phase-stat: #e8a838;
+    --phase-death: #d46a6a;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    overflow: hidden;
+    height: 100%;
+  }
+  
+  .disclaimer {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: #2a1a10;
+    border-bottom: 1px solid #5a3a20;
+    color: #e8b080;
+    padding: 0.5rem 1rem;
+    text-align: center;
+    font-size: 0.78rem;
+    z-index: 1000;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  #app {
+    display: flex;
+    height: 100vh;
+    padding-top: 34px;
+    gap: 0;
+  }
+
+  /* Canvas container */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+  }
+  canvas#sim { display: block; width: 100%; height: 100%; }
+
+  /* Sidebar */
+  #sidebar {
+    width: 340px;
+    min-width: 260px;
+    max-width: 420px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .panel {
+    padding: 1.1rem 1.1rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 0.7rem;
+  }
+
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0.25rem 0;
+    font-size: 0.88rem;
+  }
+  .metric-row .val {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .metric-row .unit { font-size: 0.72rem; color: var(--muted); margin-left: 0.2rem; }
+
+  .phase-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.4rem;
+    transition: background 0.3s, color 0.3s;
+  }
+  .phase-lag { background: rgba(106,173,232,0.15); color: var(--phase-lag); }
+  .phase-log { background: rgba(78,205,164,0.15); color: var(--phase-log); }
+  .phase-stat { background: rgba(232,168,56,0.15); color: var(--phase-stat); }
+  .phase-death { background: rgba(212,106,106,0.15); color: var(--phase-death); }
+
+  /* Controls */
+  .control {
+    margin: 0.75rem 0;
+  }
+  .control label {
+    display: flex; justify-content: space-between;
+    font-size: 0.82rem; margin-bottom: 0.3rem; color: var(--text);
+  }
+  .control .range-wrap {
+    position: relative;
+    height: 22px;
+    display: flex; align-items: center;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--surface2);
+    outline: none;
+    margin: 0;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
+  .btn-group {
+    display: flex; gap: 0.5rem; margin-top: 0.5rem;
+  }
+  button {
+    flex: 1;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 0.82rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  button:hover { background: var(--border); }
+  button:active { transform: translateY(1px); }
+
+  /* Mini chart */
+  .chart-wrap {
+    position: relative;
+    height: 100px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+  }
+  .chart-wrap canvas { display: block; width: 100%; height: 100%; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    #app { flex-direction: column; height: auto; overflow-y: auto; }
+    .canvas-wrap { height: 55vh; min-height: 300px; }
+    #sidebar {
+      width: 100% !important; max-width: none; min-width: auto;
+      border-left: none; border-top: 1px solid var(--border);
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+
+<div id="app">
+  <div class="canvas-wrap">
+    <canvas id="sim"></canvas>
+  </div>
+  <div id="sidebar">
+    <div class="panel">
+      <h3>Live Metrics</h3>
+      <div class="metric-row">
+        <span>Population</span>
+        <span><span class="val" id="pop-val">0</span><span class="unit">cells/mL</span></span>
+      </div>
+      <div class="metric-row">
+        <span>Generation</span>
+        <span><span class="val" id="gen-val">0</span><span class="unit"></span></span>
+      </div>
+      <div class="metric-row">
+        <span>Specific Growth Rate</span>
+        <span><span class="val" id="mu-val">0</span><span class="unit">μmax</span></span>
+      </div>
+      <div class="metric-row">
+        <span>Ethanol Conc.</span>
+        <span><span class="val" id="etoh-val">0</span><span class="unit">% v/v</span></span>
+      </div>
+      <div class="metric-row">
+        <span>Residual Sugar</span>
+        <span><span class="val" id="sugar-val">0</span><span class="unit">g/L</span></span>
+      </div>
+      <div class="metric-row">
+        <span>Dissolved O₂</span>
+        <span><span class="val" id="do-val">0</span><span class="unit">mg/L</span></span>
+      </div>
+      <div id="phase-badge" class="phase-badge phase-lag">Phase: Lag — adaptation</div>
+    </div>
+
+    <div class="panel">
+      <h3>Population Curve</h3>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h3>Environment Controls</h3>
+      <div class="control">
+        <label>Temperature <span id="temp-disp">28°C</span></label>
+        <div class="range-wrap"><input type="range" id="temp" min="10" max="40" value="28" step="0.5"></div>
+      </div>
+      <div class="control">
+        <label>Initial Sugar <span id="sugar-disp">220 g/L</span></label>
+        <div class="range-wrap"><input type="range" id="sugar" min="50" max="350" value="220" step="10"></div>
+      </div>
+      <div class="control">
+        <label>Aeration (O₂) <span id="o2-disp">8 mg/L</span></label>
+        <div class="range-wrap"><input type="range" id="o2" min="0" max="12" value="8" step="0.5"></div>
+      </div>
+      <div class="control">
+        <label>Nitrogen (YAN) <span id="yan-disp">200 mg/L</span></label>
+        <div class="range-wrap"><input type="range" id="yan" min="50" max="400" value="200" step="10"></div>
+      </div>
+      <div class="btn-group">
+        <button id="reset">Reset Simulation</button>
+        <button id="pause">Pause</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Yeast Population Kinetics — Saccharomyces cerevisiae
+// Canvas 2D particle simulation with Monod kinetics
+// ============================================================
+
+const simCanvas = document.getElementById('sim');
+const simCtx = simCanvas.getContext('2d');
+const chartCanvas = document.getElementById('chart');
+const chartCtx = chartCanvas.getContext('2d');
+
+let W, H;
+function resize() {
+  const cw = simCanvas.parentElement;
+  W = cw.clientWidth; H = cw.clientHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  simCanvas.width = W * dpr; simCanvas.height = H * dpr;
+  simCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  
+  const chartWrap = chartCanvas.parentElement;
+  const cw2 = chartWrap.clientWidth, ch2 = chartWrap.clientHeight;
+  chartCanvas.width = cw2 * dpr; chartCanvas.height = ch2 * dpr;
+  chartCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// --- Simulation Parameters ---
+const PARAMS = {
+  temp: 28,        // °C
+  sugar: 220,      // g/L initial
+  o2: 8,           // mg/L dissolved
+  yan: 200,        // mg/L YAN
+  paused: false,
+  t: 0,            // simulation hours
+  dt: 0.1,         // hours per frame
+};
+
+// --- State ---
+let cells = [];
+let sugars = [];
+let bubbles = [];
+let history = [];      // population history for chart
+let phase = 'lag';
+let etoh = 0;          // % v/v
+let sugarNow = PARAMS.sugar;
+let doNow = PARAMS.o2;
+let genCount = 0;
+let muNow = 0;
+let totalCells = 1e6; // visual scaling
+
+// --- Color Palette ---
+const COL = {
+  bg: '#0a0b0d',
+  yeast: '#e8c85a',
+  yeastDark: '#c9a83a',
+  yeastBud: '#f0e0a0',
+  sugar: '#6ecde0',
+  bubble: 'rgba(200,220,255,0.35)',
+  etohTint: 'rgba(160,80,160,0.08)',
+  grid: '#1a1d25',
+  text: '#8b949e',
+};
+
+// --- Yeast Cell Class ---
+class Cell {
+  constructor(x, y, r = 6) {
+    this.x = x; this.y = y;
+    this.vx = (Math.random() - 0.5) * 0.4;
+    this.vy = (Math.random() - 0.5) * 0.4;
+    this.r = r;
+    this.age = 0;
+    this.bud = 0;      // bud size (0 = no bud)
+    this.budAngle = Math.random() * Math.PI * 2;
+    this.generation = 1;
+    this.alive = true;
+    this.divideTimer = randomBetween(8, 18); // hours to division
+    this.wobblePhase = Math.random() * Math.PI * 2;
+  }
+  update(temp, o2, sugar, yan) {
+    const Topt = 30;
+    const Tmin = 5, Tmax = 42;
+    let tempFactor = 0;
+    if (PARAMS.temp >= Tmin && PARAMS.temp <= Tmax) {
+      tempFactor = Math.max(0, 1 - Math.pow((PARAMS.temp - Topt) / (Topt - Tmin), 2));
+    }
+    
+    // Monod-like substrate limitation
+    const Ks = 5; // g/L half-saturation
+    const sugarFactor = sugarNow / (sugarNow + Ks);
+    const o2Factor = doNow / (doNow + 0.5); // aerobic boost
+    const yanFactor = Math.min(1, PARAMS.yan / 150);
+    
+    const muMax = 0.35 * tempFactor; // per hour
+    muNow = muMax * sugarFactor * yanFactor;
+    if (o2Factor > 0.3) muNow *= (1 + o2Factor * 0.5); // aerobic respiration boost
+    
+    this.age += PARAMS.dt;
+    this.divideTimer -= PARAMS.dt * (muNow / 0.25); // scale by growth rate
+    
+    // Bud grows as division approaches
+    if (this.divideTimer < 6 && this.divideTimer > 0) {
+      this.bud = Math.min(0.7, (6 - this.divideTimer) / 6 * 0.7);
+    } else if (this.divideTimer <= 0) {
+      this.bud = 0;
+    }
+    
+    // Brownian + directed drift
+    this.vx += (Math.random() - 0.5) * 0.02;
+    this.vy += (Math.random() - 0.5) * 0.02;
+    const damp = 0.96;
+    this.vx *= damp; this.vy *= damp;
+    this.x += this.vx; this.y += this.vy;
+    
+    // Boundary wrap
+    if (this.x < -10) this.x = W + 10;
+    if (this.x > W + 10) this.x = -10;
+    if (this.y < -10) this.y = H + 10;
+    if (this.y > H + 10) this.y = -10;
+    
+    this.wobblePhase += 0.05 + muNow * 0.2;
+  }
+  draw(ctx) {
+    if (!this.alive) return;
+    const wobble = Math.sin(this.wobblePhase) * 0.5;
+    
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    
+    // Glow
+    const grad = ctx.createRadialGradient(0, 0, this.r * 0.3, 0, 0, this.r * 2.5);
+    grad.addColorStop(0, 'rgba(232,200,90,0.08)');
+    grad.addColorStop(1, 'rgba(232,200,90,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.r * 2.5 + wobble, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Main cell body
+    ctx.fillStyle = COL.yeast;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.r + wobble * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Inner nucleus-like detail
+    ctx.fillStyle = COL.yeastDark;
+    ctx.beginPath();
+    ctx.arc(this.r * 0.15, -this.r * 0.1, this.r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Bud
+    if (this.bud > 0) {
+      const bx = Math.cos(this.budAngle) * (this.r + this.r * this.bud * 0.8);
+      const by = Math.sin(this.budAngle) * (this.r + this.r * this.bud * 0.8);
+      ctx.fillStyle = COL.yeastBud;
+      ctx.beginPath();
+      ctx.arc(bx, by, this.r * this.bud, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    ctx.restore();
+  }
+}
+
+// --- Sugar Particle Class ---
+class Sugar {
+  constructor() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.r = 1.2 + Math.random() * 1.5;
+    this.vx = (Math.random() - 0.5) * 0.2;
+    this.vy = (Math.random() - 0.5) * 0.2;
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    if (this.x < 0) this.x += W;
+    if (this.x > W) this.x -= W;
+    if (this.y < 0) this.y += H;
+    if (this.y > H) this.y -= H;
+  }
+  draw(ctx) {
+    ctx.fillStyle = COL.sugar;
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// --- CO2 Bubble Class ---
+class Bubble {
+  constructor(x, y) {
+    this.x = x + (Math.random() - 0.5) * 8;
+    this.y = y;
+    this.r = 1 + Math.random() * 2.5;
+    this.vy = -0.5 - Math.random() * 1.5;
+    this.life = 1;
+  }
+  update() {
+    this.y += this.vy;
+    this.x += Math.sin(this.y * 0.05) * 0.3;
+    this.life -= 0.008;
+  }
+  draw(ctx) {
+    ctx.fillStyle = COL.bubble;
+    ctx.globalAlpha = this.life * 0.5;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function randomBetween(a, b) { return a + Math.random() * (b - a); }
+
+// --- Init ---
+function initSim() {
+  cells = [];
+  sugars = [];
+  bubbles = [];
+  history = [];
+  PARAMS.t = 0;
+  genCount = 0;
+  etoh = 0;
+  sugarNow = PARAMS.sugar;
+  doNow = PARAMS.o2;
+  phase = 'lag';
+  totalCells = 1e6;
+  
+  // Seed initial population
+  const initialCount = 40;
+  for (let i = 0; i < initialCount; i++) {
+    cells.push(new Cell(Math.random() * W, Math.random() * H, 5 + Math.random() * 3));
+  }
+  // Seed sugar particles proportional to concentration
+  const sugarParticles = Math.floor(PARAMS.sugar / 2);
+  for (let i = 0; i < sugarParticles; i++) {
+    sugars.push(new Sugar());
+  }
+}
+
+// --- Phase detection ---
+function updatePhase() {
+  const t = PARAMS.t;
+  const prev = phase;
+  
+  if (t < 3) {
+    phase = 'lag';
+  } else if (t < 3 + 12) {
+    phase = 'log';
+  } else if (sugarNow > 5 && t > 15) {
+    phase = 'stationary';
+  } else {
+    phase = 'death';
+  }
+  
+  if (phase !== prev) updateBadge();
+}
+
+function updateBadge() {
+  const badge = document.getElementById('phase-badge');
+  badge.className = 'phase-badge';
+  const labels = {
+    lag: ['phase-lag', 'Phase: Lag — adaptation'],
+    log: ['phase-log', 'Phase: Log — exponential growth'],
+    stationary: ['phase-stat', 'Phase: Stationary — limited by substrate'],
+    death: ['phase-death', 'Phase: Death — ethanol toxicity / starvation']
+  };
+  badge.classList.add(labels[phase][0]);
+  badge.textContent = labels[phase][1];
+}
+
+// --- Update Loop ---
+function updateSim() {
+  if (PARAMS.paused) return;
+  PARAMS.t += PARAMS.dt;
+  
+  // Temperature effects on viability
+  const T = PARAMS.temp;
+  const tempStress = T > 35 ? (T - 35) / 7 : T < 12 ? (12 - T) / 12 : 0;
+  
+  // Update cells
+  const newCells = [];
+  cells.forEach(c => {
+    c.update(PARAMS.temp, PARAMS.o2, sugarNow, PARAMS.yan);
+    if (!c.alive) return;
+    
+    // Division
+    if (c.divideTimer <= 0 && sugarNow > 1) {
+      const bud = new Cell(c.x + Math.cos(c.budAngle) * 14, c.y + Math.sin(c.budAngle) * 14, c.r * 0.8);
+      bud.generation = c.generation + 1;
+      genCount = Math.max(genCount, bud.generation);
+      bud.divideTimer = randomBetween(8, 18);
+      newCells.push(bud);
+      c.divideTimer = randomBetween(8, 18);
+      c.bud = 0;
+      
+      // Spawn bubbles on division (CO2)
+      for (let i = 0; i < 3; i++) {
+        bubbles.push(new Bubble(c.x, c.y));
+      }
+      
+      // Consume sugar
+      sugarNow -= 0.3;
+      // Produce ethanol
+      etoh += 0.015;
+      // Consume O2 slightly
+      doNow -= 0.01;
+    }
+    
+    // Random death from stress
+    if (tempStress > 0 && Math.random() < tempStress * 0.003) {
+      c.alive = false;
+    }
+    if (etoh > 14 && Math.random() < (etoh - 14) * 0.0005) {
+      c.alive = false;
+    }
+    if (sugarNow < 1 && Math.random() < 0.001) {
+      c.alive = false;
+    }
+  });
+  
+  cells = cells.filter(c => c.alive);
+  cells.push(...newCells);
+  
+  totalCells = Math.floor(1e6 * Math.pow(2, PARAMS.t * muNow / 3.5));
+  
+  // Sugar visual representation
+  const targetSugarCount = Math.max(0, Math.floor(sugarNow / 2));
+  while (sugars.length < targetSugarCount) sugars.push(new Sugar());
+  while (sugars.length > targetSugarCount && sugars.length > 0) sugars.pop();
+  sugars.forEach(s => s.update());
+  
+  // Bubbles
+  bubbles.forEach(b => b.update());
+  bubbles = bubbles.filter(b => b.life > 0 && b.y > -20);
+  
+  // O2 diffusion in
+  doNow += (PARAMS.o2 - doNow) * 0.001;
+  
+  updatePhase();
+  
+  // Update history for chart (every ~0.5h)
+  if (Math.floor(PARAMS.t * 2) > history.length) {
+    history.push({
+      t: PARAMS.t,
+      pop: cells.length,
+      sugar: sugarNow,
+      etoh: etoh
+    });
+  }
+}
+
+// --- Rendering ---
+function drawSim() {
+  simCtx.clearRect(0, 0, W, H);
+  
+  // Background texture (subtle grid)
+  simCtx.strokeStyle = COL.grid;
+  simCtx.lineWidth = 0.5;
+  const gridSize = 60;
+  simCtx.beginPath();
+  for (let x = 0; x < W; x += gridSize) { simCtx.moveTo(x, 0); simCtx.lineTo(x, H); }
+  for (let y = 0; y < H; y += gridSize) { simCtx.moveTo(0, y); simCtx.lineTo(W, y); }
+  simCtx.stroke();
+  
+  // Ethanol tint overlay (increases with concentration)
+  if (etoh > 0) {
+    const alpha = Math.min(0.25, etoh / 50);
+    simCtx.fillStyle = `rgba(160, 80, 160, ${alpha})`;
+    simCtx.fillRect(0, 0, W, H);
+  }
+  
+  // Temperature heat shimmer (simplified)
+  if (PARAMS.temp > 30) {
+    const heatAlpha = (PARAMS.temp - 30) / 15 * 0.04;
+    simCtx.fillStyle = `rgba(255, 120, 60, ${heatAlpha})`;
+    simCtx.fillRect(0, 0, W, H);
+  }
+  
+  // Draw sugars
+  sugars.forEach(s => s.draw(simCtx));
+  
+  // Draw bubbles behind cells
+  bubbles.forEach(b => b.draw(simCtx));
+  
+  // Draw cells
+  cells.forEach(c => c.draw(simCtx));
+  
+  // HUD overlay on canvas
+  simCtx.fillStyle = COL.text;
+  simCtx.font = '600 11px system-ui, sans-serif';
+  simCtx.fillText(`t = ${PARAMS.t.toFixed(1)} h`, 14, H - 14);
+  
+  // Phase indicator mini
+  const phaseColors = { lag: '#6aade8', log: '#4ecda4', stationary: '#e8a838', death: '#d46a6a' };
+  simCtx.fillStyle = phaseColors[phase] || '#888';
+  simCtx.fillRect(14, H - 36, 6, 6);
+}
+
+function drawChart() {
+  const cw = chartCanvas.parentElement.clientWidth;
+  const ch = chartCanvas.parentElement.clientHeight;
+  chartCtx.clearRect(0, 0, cw, ch);
+  
+  if (history.length < 2) return;
+  
+  const pad = { top: 6, right: 6, bottom: 16, left: 30 };
+  const plotW = cw - pad.left - pad.right;
+  const plotH = ch - pad.top - pad.bottom;
+  
+  const maxT = Math.max(40, history[history.length - 1].t);
+  const maxPop = Math.max(50, ...history.map(h => h.pop));
+  
+  // Grid
+  chartCtx.strokeStyle = '#2a3040';
+  chartCtx.lineWidth = 0.5;
+  chartCtx.beginPath();
+  chartCtx.moveTo(pad.left, pad.top); chartCtx.lineTo(pad.left, ch - pad.bottom);
+  chartCtx.lineTo(cw - pad.right, ch - pad.bottom);
+  chartCtx.stroke();
+  
+  // Population curve
+  chartCtx.strokeStyle = '#e8a838';
+  chartCtx.lineWidth = 2;
+  chartCtx.beginPath();
+  history.forEach((h, i) => {
+    const x = pad.left + (h.t / maxT) * plotW;
+    const y = (ch - pad.bottom) - (h.pop / maxPop) * plotH;
+    if (i === 0) chartCtx.moveTo(x, y);
+    else chartCtx.lineTo(x, y);
+  });
+  chartCtx.stroke();
+  
+  // Sugar curve (secondary, scaled)
+  chartCtx.strokeStyle = '#6ecde0';
+  chartCtx.lineWidth = 1.5;
+  chartCtx.beginPath();
+  const maxSugar = Math.max(10, ...history.map(h => h.sugar));
+  history.forEach((h, i) => {
+    const x = pad.left + (h.t / maxT) * plotW;
+    const y = (ch - pad.bottom) - (h.sugar / maxSugar) * plotH;
+    if (i === 0) chartCtx.moveTo(x, y);
+    else chartCtx.lineTo(x, y);
+  });
+  chartCtx.stroke();
+  
+  // Labels
+  chartCtx.fillStyle = '#8b949e';
+  chartCtx.font = '10px system-ui';
+  chartCtx.fillText('Pop', cw - pad.right - 28, pad.top + 10);
+  chartCtx.fillStyle = '#e8a838';
+  chartCtx.fillRect(cw - pad.right - 42, pad.top + 4, 10, 3);
+  chartCtx.fillStyle = '#8b949e';
+  chartCtx.fillText('Sugar', cw - pad.right - 38, pad.top + 22);
+  chartCtx.fillStyle = '#6ecde0';
+  chartCtx.fillRect(cw - pad.right - 42, pad.top + 16, 10, 3);
+  
+  // Axis labels
+  chartCtx.fillStyle = '#555';
+  chartCtx.font = '9px system-ui';
+  chartCtx.fillText('0', pad.left - 8, ch - pad.bottom + 10);
+  chartCtx.fillText(Math.round(maxT) + 'h', cw - pad.right - 14, ch - pad.bottom + 10);
+}
+
+function updateMetrics() {
+  document.getElementById('pop-val').textContent = (cells.length * 25000).toLocaleString();
+  document.getElementById('gen-val').textContent = genCount;
+  document.getElementById('mu-val').textContent = muNow.toFixed(3);
+  document.getElementById('etoh-val').textContent = etoh.toFixed(2);
+  document.getElementById('sugar-val').textContent = sugarNow.toFixed(1);
+  document.getElementById('do-val').textContent = doNow.toFixed(1);
+}
+
+// --- Controls ---
+document.getElementById('temp').addEventListener('input', e => {
+  PARAMS.temp = parseFloat(e.target.value);
+  document.getElementById('temp-disp').textContent = PARAMS.temp + '°C';
+});
+document.getElementById('sugar').addEventListener('input', e => {
+  PARAMS.sugar = parseFloat(e.target.value);
+  document.getElementById('sugar-disp').textContent = PARAMS.sugar + ' g/L';
+  sugarNow = PARAMS.sugar;
+});
+document.getElementById('o2').addEventListener('input', e => {
+  PARAMS.o2 = parseFloat(e.target.value);
+  document.getElementById('o2-disp').textContent = PARAMS.o2 + ' mg/L';
+  doNow = PARAMS.o2;
+});
+document.getElementById('yan').addEventListener('input', e => {
+  PARAMS.yan = parseFloat(e.target.value);
+  document.getElementById('yan-disp').textContent = PARAMS.yan + ' mg/L';
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  initSim();
+  updateBadge();
+});
+
+document.getElementById('pause').addEventListener('click', (e) => {
+  PARAMS.paused = !PARAMS.paused;
+  e.target.textContent = PARAMS.paused ? 'Resume' : 'Pause';
+});
+
+// --- Main Loop ---
+function loop() {
+  updateSim();
+  drawSim();
+  drawChart();
+  updateMetrics();
+  requestAnimationFrame(loop);
+}
+
+initSim();
+updateBadge();
+loop();
+</script>
+</body>
+</html>
