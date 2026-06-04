@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>3D Fermentation Tank Dynamics</title>
+<style>
+:root{ --panel:rgba(8,12,16,0.92); --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#a371f7; --danger:#f85149; --warn:#e3b341; --ok:#3fb950; }
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; overflow:hidden; background:#06090e; color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+#canvas-container{ position:fixed; inset:0; z-index:0; }
+canvas{ display:block; }
+.banner{ position:sticky; top:0; z-index:50; background:linear-gradient(90deg,#2a1a10,#1f1510); border-bottom:1px solid #5a3a20; color:#e8b080; padding:.55rem .9rem; text-align:center; font-size:.82rem; }
+#ui-layer{ position:absolute; top:38px; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+#ui-layer > *{ pointer-events:auto; }
+.panel{ position:absolute; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:.85rem 1rem; max-width:min(320px, calc(100vw - 22px)); backdrop-filter: blur(6px); }
+#panel-close{ position:absolute; top:6px; right:10px; color:var(--muted); font-size:1.1rem; cursor:pointer; pointer-events:auto; z-index:20; }
+#panel-close:hover{ color:var(--text); }
+.controls{ top:12px; left:12px; width:min(290px, 92vw); }
+.telemetry{ top:12px; right:12px; width:min(280px, 92vw); }
+.telemetry h2{ font-size:.98rem; margin-bottom:.35rem; color:var(--accent); }
+.telemetry .row{ display:flex; justify-content:space-between; font-size:.88rem; margin:.15rem 0; }
+.telemetry .row span:first-child{ color:var(--muted); }
+.telemetry .row span:last-child{ font-variant-numeric: tabular-nums; }
+.sparkline{ width:100%; height:56px; border-radius:6px; background:rgba(0,0,0,0.25); margin:.3rem 0 .5rem; display:block; }
+.phase-badge{ display:inline-block; padding:.15rem .5rem; border-radius:6px; font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; margin-top:.2rem; }
+.phase-lag{ background:#1a2a3a; color:#6eb6ff; }
+.phase-log{ background:#1a2a1a; color:var(--ok); }
+.phase-stat{ background:#2a2a1a; color:var(--warn); }
+.phase-death{ background:#2a1818; color:var(--danger); }
+#phase-text{ font-size:.8rem; color:var(--muted); margin-top:.25rem; }
+
+/* Sliders */
+label{ display:block; font-size:.82rem; color:var(--muted); margin:.45rem 0 .15rem; }
+input[type=range]{ width:100%; accent-color:var(--accent); }
+.slider-row{ display:flex; align-items:center; gap:.5rem; }
+.slider-val{ min-width:3.2em; text-align:right; font-variant-numeric: tabular-nums; font-size:.82rem; color:var(--text); }
+
+/* Legend */
+.legend{ font-size:.78rem; color:var(--muted); margin-top:.5rem; }
+.legend span{ display:inline-block; width:.72rem; height:.72rem; border-radius:50%; margin-right:.2rem; vertical-align:middle; }
+
+.must-gauge{ margin-top:.5rem; }
+.must-gauge h3{ font-size:.88rem; margin-bottom:.25rem; color:var(--text); }
+.gauge{ height:10px; border-radius:5px; background:rgba(255,255,255,.06); overflow:hidden; }
+.gauge > div{ height:100%; width:0%; border-radius:5px; transition:width .2s, background .4s; }
+
+/* Mobile */
+@media (max-width:768px){
+  body{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  #canvas-container{ position:fixed; top:0; left:0; z-index:0; }
+  #ui-layer{ position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:52px 8px 20px; display:flex; flex-direction:column; gap:8px; align-items:stretch; z-index:10; }
+  .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:.75rem .85rem; background:rgba(8,12,16,.78); }
+}
+</style>
+</head>
+<body>
+<div class="banner"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="canvas-container"></div>
+<div id="ui-layer">
+  <div id="panel-close">✕</div>
+  <div class="panel controls">
+    <h2 style="font-size:1rem; color:var(--accent); margin-bottom:.3rem;">Fermentation Controls</h2>
+
+    <label>Temperature <span class="slider-val" id="tempVal">22 °C</span></label>
+    <input type="range" id="temp" min="8" max="35" step="0.5" value="22">
+
+    <label>Initial Sugar (°Brix) <span class="slider-val" id="sugarVal">22.0</span></label>
+    <input type="range" id="sugar" min="15" max="32" step="0.5" value="22">
+
+    <label>Yeast Inoculum <span class="slider-val" id="yeastVal">200</span></label>
+    <input type="range" id="yeast" min="50" max="500" step="10" value="200">
+
+    <label>O₂ Dissolved (mg/L) <span class="slider-val" id="o2Val">6.0</span></label>
+    <input type="range" id="o2" min="0" max="10" step="0.2" value="6">
+
+    <label>Punch-Down Intensity <span class="slider-val" id="punchVal">30 %</span></label>
+    <input type="range" id="punch" min="0" max="100" step="5" value="30">
+
+    <label>Speed <span class="slider-val" id="speedVal">1×</span></label>
+    <input type="range" id="speed" min="0" max="5" step="1" value="1">
+
+    <div class="legend">
+      <div><span style="background:#c9a84c;"></span>Yeast cell</div>
+      <div><span style="background:#7dd3fc;"></span>CO₂ bubble</div>
+      <div><span style="background:#6b4c2a;"></span>Must cap</div>
+    </div>
+  </div>
+
+  <div class="panel telemetry">
+    <h2 style="font-size:1rem; color:var(--accent);">Live Telemetry</h2>
+    <div style="display:flex; gap:.5rem; align-items:center; margin-bottom:.3rem;">
+      <div id="phaseBadge" class="phase-badge phase-log">Log Phase</div>
+      <span id="phaseText">Robust growth</span>
+    </div>
+
+    <div class="row"><span>Elapsed</span><span id="elapsed">00:00:00</span></div>
+    <div class="row"><span>Remaining Sugar</span><span id="sugarNow">22.0 °Brix</span></div>
+    <div class="row"><span>Ethanol</span><span id="ethanol">0.0 % v/v</span></div>
+    <div class="row"><span>CO₂ Produced</span><span id="co2">0.0 g/L</span></div>
+    <div class="row"><span>Live Yeast</span><span id="liveYeast">200</span></div>
+    <div class="row"><span>Tank Temp</span><span id="tankTemp">22.0 °C</span></div>
+    <div class="row"><span>Cell Death</span><span id="deadRate">0 %</span></div>
+
+    <h3 style="font-size:.85rem; color:var(--muted); margin:.5rem 0 .15rem;">Must °Brix / Ethanol</h3>
+    <canvas class="sparkline" id="chart1" width="520" height="110"></canvas>
+
+    <h3 style="font-size:.85rem; color:var(--muted); margin:.3rem 0 .15rem;">CO₂ Rate / Temperature</h3>
+    <canvas class="sparkline" id="chart2" width="520" height="110"></canvas>
+
+    <div class="must-gauge">
+      <h3>Cap Thickness</h3>
+      <div class="gauge"><div id="capBar" style="width:0%; background:#6b4c2a;"></div></div>
+    </div>
+    <div class="must-gauge" style="margin-top:.35rem;">
+      <h3>Tank Temperature</h3>
+      <div class="gauge"><div id="tempBar" style="width:55%; background:var(--accent);"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ===== DOM refs ===== */
+const $=(s)=>document.querySelector(s);
+const tempSlider=$('#temp'), sugarSlider=$('#sugar'), yeastSlider=$('#yeast'), o2Slider=$('#o2'), punchSlider=$('#punch'), speedSlider=$('#speed');
+const tempVal=$('#tempVal'), sugarVal=$('#sugarVal'), yeastVal=$('#yeastVal'), o2Val=$('#o2Val'), punchVal=$('#punchVal'), speedVal=$('#speedVal');
+const elElapsed=$('#elapsed'), elSugar=$('#sugarNow'), elEth=$('#ethanol'), elCO2=$('#co2'), elLive=$('#liveYeast'), elTankT=$('#tankTemp'), elDead=$('#deadRate');
+const elPhaseBadge=$('#phaseBadge'), elPhaseText=$('#phaseText'), elCapBar=$('#capBar'), elTempBar=$('#tempBar');
+const chart1=$('#chart1').getContext('2d'), chart2=$('#chart2').getContext('2d');
+const panelClose=$('#panel-close');
+
+/* ===== Simulation State ===== */
+const sim={
+  T:22,          // °C ambient control
+  sugarInit:22,   // °Brix
+  sugarNow:22,
+  ethanol:0,      // % v/v
+  co2:0,          // g/L cumulative
+  liveYeast:200,  // count
+  deadYeast:0,
+  o2:6,           // mg/L
+  punch:30,       // %
+  time:0,         // min
+  speed:1,
+  capHeight:0,    // visual thickness 0..1
+  tankT:22,       // actual tank temp (lag from ambient)
+  bubbleRate:0,
+  yeastParticles:[],
+  bubbles:[],
+  history:{ sugar:[], ethanol:[], co2:[], temp:[], live:[], dead:[] },
+  maxHist:200,
+  phase:'lag'
+};
+
+function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function tempToColor(t){ // t in 8..35 -> cool blue -> warm red
+  const n=clamp((t-8)/27,0,1);
+  const r=Math.round(lerp(0.1,1.0,n)**2*255);
+  const g=Math.round(lerp(0.3,0.2,Math.abs(n-0.5)*2)*255);
+  const b=Math.round(lerp(1.0,0.15,(1-n)**2)*255);
+  return new THREE.Color(`rgb(${r},${g},${b})`);
+}
+
+/* ===== Inputs ===== */
+function readInputs(){
+  sim.T=+tempSlider.value;
+  sim.sugarInit=+sugarSlider.value;
+  sim.liveYeast=Math.round(+yeastSlider.value);
+  sim.o2=+o2Slider.value;
+  sim.punch=+punchSlider.value;
+  sim.speed=+speedSlider.value;
+  tempVal.textContent=sim.T.toFixed(1)+' °C';
+  sugarVal.textContent=sim.sugarInit.toFixed(1);
+  yeastVal.textContent=sim.liveYeast;
+  o2Val.textContent=sim.o2.toFixed(1);
+  punchVal.textContent=sim.punch+' %';
+  speedVal.textContent=sim.speed+'×';
+}
+[tempSlider,sugarSlider,yeastSlider,o2Slider,punchSlider,speedSlider].forEach(el=> el.addEventListener('input', readInputs));
+readInputs();
+
+/* ===== Three.js Setup ===== */
+const container=$('#canvas-container');
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x06090e);
+scene.fog=new THREE.FogExp2(0x06090e, 0.035);
+
+const camera=new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(5, 6, 8);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+const controls=new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping=true;
+controls.target.set(0,2,0);
+
+/* Lights */
+const ambient=new THREE.AmbientLight(0xffffff, 0.35);
+scene.add(ambient);
+const dirLight=new THREE.DirectionalLight(0xffffff, 0.9);
+dirLight.position.set(6, 10, 6);
+dirLight.castShadow=true;
+scene.add(dirLight);
+const pointLight=new THREE.PointLight(0xffaa55, 0.5, 18);
+pointLight.position.set(-3, 5, -3);
+scene.add(pointLight);
+
+/* Tank geometry */
+const tankGroup=new THREE.Group();
+scene.add(tankGroup);
+const tankMat=new THREE.MeshPhysicalMaterial({ color:0xc8a050, metalness:0.55, roughness:0.25, transparent:true, opacity:0.18, side:THREE.DoubleSide });
+const tankGeo=new THREE.CylinderGeometry(2.2, 2.2, 5, 48, 1, true);
+const tankMesh=new THREE.Mesh(tankGeo, tankMat);
+tankMesh.position.y=2.5;
+tankMesh.castShadow=false; tankMesh.receiveShadow=true;
+tankGroup.add(tankMesh);
+
+const floorMat=new THREE.MeshPhysicalMaterial({ color:0xb08a45, metalness:0.5, roughness:0.35, transparent:true, opacity:0.25 });
+const floorCircle=new THREE.Mesh(new THREE.CircleGeometry(2.2, 48), floorMat);
+floorCircle.rotation.x=-Math.PI/2;
+floorCircle.position.y=0.02;
+tankGroup.add(floorCircle);
+
+// Tank rim (tori)
+for(const y of [0, 5]){
+  const torus=new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.06, 12, 64), new THREE.MeshStandardMaterial({color:0x8a7040, metalness:0.8, roughness:0.2}));
+  torus.rotation.x=Math.PI/2; torus.position.y=y; tankGroup.add(torus);
+}
+
+// Tank legs
+for(let i=0;i<4;i++){
+  const a=(i/4)*Math.PI*2;
+  const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.7,12), new THREE.MeshStandardMaterial({color:0x7a6545, metalness:0.6}));
+  leg.position.set(Math.cos(a)*2.0, 0.35, Math.sin(a)*2.0);
+  tankGroup.add(leg);
+}
+
+// Ground disc
+const ground=new THREE.Mesh(new THREE.CircleGeometry(5, 64), new THREE.MeshStandardMaterial({color:0x0a0f18, roughness:1.0}));
+ground.rotation.x=-Math.PI/2; ground.position.y=-0.01; scene.add(ground);
+
+/* Must liquid volume */
+const mustGeo=new THREE.CylinderGeometry(2.08, 2.08, 4.0, 48);
+const mustMat=new THREE.MeshPhysicalMaterial({
+  color:0x5a1e1e, metalness:0.0, roughness:0.15, transparent:true, opacity:0.82,
+  transmission:0.1, thickness:1.0
+});
+const mustMesh=new THREE.Mesh(mustGeo, mustMat);
+mustMesh.position.y=2.0;
+tankGroup.add(mustMesh);
+
+/* Cap (floating solids) */
+const capGeo=new THREE.CylinderGeometry(2.04, 2.04, 0.35, 48);
+const capMat=new THREE.MeshStandardMaterial({ color:0x6b4c2a, roughness:0.9, transparent:true, opacity:0.9 });
+const capMesh=new THREE.Mesh(capGeo, capMat);
+capMesh.position.y=3.85;
+tankGroup.add(capMesh);
+
+/* Instanced yeast particles */
+const YEAST_MAX=2500;
+const yeastGeo=new THREE.SphereGeometry(0.055, 10, 10);
+const yeastMat=new THREE.MeshStandardMaterial({ color:0xc9a84c, roughness:0.55, metalness:0.1 });
+const yeastInstanced=new THREE.InstancedMesh(yeastGeo, yeastMat, YEAST_MAX);
+yeastInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+yeastInstanced.count=sim.liveYeast;
+tankGroup.add(yeastInstanced);
+
+const dummy=new THREE.Object3D();
+const yeastVelocities=[];
+for(let i=0;i<YEAST_MAX;i++){
+  const r=Math.sqrt(Math.random())*1.8;
+  const a=Math.random()*Math.PI*2;
+  dummy.position.set(Math.cos(a)*r, 0.3+Math.random()*3.5, Math.sin(a)*r);
+  dummy.updateMatrix();
+  yeastInstanced.setMatrixAt(i, dummy.matrix);
+  yeastVelocities.push({ x:(Math.random()-.5)*0.01, y:(Math.random()-.5)*0.005, z:(Math.random()-.5)*0.01 });
+}
+
+/* CO2 bubbles */
+const BUB_MAX=600;
+const bubGeo=new THREE.SphereGeometry(0.035, 8, 8);
+const bubMat=new THREE.MeshPhysicalMaterial({ color:0x7dd3fc, transparent:true, opacity:0.55, roughness:0.1, metalness:0.0 });
+const bubInstanced=new THREE.InstancedMesh(bubGeo, bubMat, BUB_MAX);
+bubInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+bubInstanced.count=0;
+tankGroup.add(bubInstanced);
+const bubState=[]; // {x,y,z,vy,phase}
+
+/* Paddle / plunger for punch-down */
+const paddleGroup=new THREE.Group();
+const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,6,12), new THREE.MeshStandardMaterial({color:0x777777}));
+shaft.position.y=3;
+paddleGroup.add(shaft);
+const blade=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.04,0.3), new THREE.MeshStandardMaterial({color:0x999999}));
+blade.position.y=-0.02;
+paddleGroup.add(blade);
+paddleGroup.position.set(0, 5.8, 0);
+tankGroup.add(paddleGroup);
+
+function setPaddleActive(active, t){
+  if(active){
+    paddleGroup.visible=true;
+    // oscillate vertically
+    const depth=sim.punch/100*3.2;
+    paddleGroup.position.y=5.8 - depth + Math.sin(t*3)*0.25;
+    paddleGroup.rotation.z=Math.sin(t*2)*0.08;
+  } else {
+    paddleGroup.visible=false;
+  }
+}
+
+/* Particle dust for ambient feel */
+const DUST=300;
+const dustGeo=new THREE.BufferGeometry();
+const dustPos=new Float32Array(DUST*3);
+for(let i=0;i<DUST;i++){ dustPos[i*3]=(Math.random()-0.5)*12; dustPos[i*3+1]=Math.random()*8; dustPos[i*3+2]=(Math.random()-0.5)*12; }
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos,3));
+const dustMat=new THREE.PointsMaterial({color:0x8aa2b5, size:0.04, transparent:true, opacity:0.25});
+scene.add(new THREE.Points(dustGeo, dustMat));
+
+/* ===== Simulation Model ===== */
+const muMaxArr=[0.20,0.22,0.26,0.30,0.33,0.35,0.34,0.31,0.26,0.20,0.12,0.06,0.02,0.005]; // per T°C from 8..21
+function muAt(T){ const idx=Math.round(clamp(T,8,21)-8); return muMaxArr[idx]||0.005; }
+function updatePhysics(dt){
+  const s=sim.speed||1;
+  const dtReal=dt*60*s; // minutes at speed
+  sim.time+=dtReal;
+
+  // Tank temperature lags ambient with time constant
+  const tau=12; // min
+  sim.tankT += (sim.T - sim.tankT)*(1-Math.exp(-dtReal/tau));
+
+  // Sugar consumption Monod-like
+  const mu=muAt(sim.tankT);
+  // Growth limited by sugar, ethanol toxicity, O₂
+  const ethanolInhib=Math.max(0, 1 - sim.ethanol/16);
+  const o2Factor=Math.min(1, sim.o2/2);
+  const sugarFactor=sim.sugarNow/(sim.sugarNow+1.5);
+
+  // dN/dt = mu * N * factors
+  let growth=mu*sim.liveYeast*ethanolInhib*o2Factor*sugarFactor*dtReal*0.05;
+  // Death increases with ethanol, low sugar, high T
+  let death=sim.liveYeast*(sim.ethanol*0.002 + Math.max(0, sim.tankT-33)*0.008 + Math.max(0, 28-sim.sugarNow)*0.003)*dtReal;
+  if(sim.o2<0.3) death+=sim.liveYeast*0.002*dtReal; // anaerobic stress
+
+  sim.liveYeast = clamp(sim.liveYeast+growth-death, 0, YEAST_MAX);
+  sim.deadYeast += death;
+
+  // Sugar consumed proportional to growth
+  const brixDrop=(growth*0.00022)*sim.sugarInit;
+  sim.sugarNow = clamp(sim.sugarNow - brixDrop, 0, 40);
+
+  // Ethanol from sugar consumed: ~0.55 %v/v per °Brix consumed
+  const consumed=sim.sugarInit-sim.sugarNow;
+  sim.ethanol = consumed*0.55;
+
+  // CO₂: ~0.49 g per g sugar. Assume must density 1.08 g/mL, approx 1 °Brix ≈ 10.8 g/L sugar
+  const sugarConsumed_gL=(sim.sugarInit-sim.sugarNow)*10.8;
+  sim.co2 = sugarConsumed_gL*0.49;
+
+  // Bubble spawn
+  const co2Rate=sugarConsumed_gL*0.015; // arbitrary scaler for visuals
+  sim.bubbleRate=co2Rate;
+
+  // Cap behaviour: grows with CO₂ then decreases with punch
+  sim.capHeight += (co2Rate*0.015 - sim.punch*0.00025)*dtReal*s;
+  sim.capHeight=clamp(sim.capHeight, 0, 1);
+
+  // Phase logic
+  if(sim.time<30) sim.phase='lag';
+  else if(sim.sugarNow>5 && sim.liveYeast>sim.sugarInit*6) sim.phase='log';
+  else if(sim.sugarNow<=2 || sim.liveYeast<50) sim.phase='death';
+  else sim.phase='stat';
+
+  // Update yeast colors by temperature
+  const tc=tempToColor(sim.tankT);
+  const c1=new THREE.Color(0xc9a84c);
+  const c2=tc;
+  for(let i=0;i<sim.liveYeast;i++){
+    const t=clamp(i/2000,0,1);
+    const col=c1.clone().lerp(c2, t*0.55);
+    yeastInstanced.setColorAt(i, col);
+  }
+  yeastInstanced.instanceColor.needsUpdate=true;
+  yeastInstanced.count=Math.floor(sim.liveYeast);
+}
+
+/* ===== Bubbles update ===== */
+function updateBubbles(dt){
+  const s=sim.speed||1;
+  const spawn=Math.floor(sim.bubbleRate*2*s*dt*60);
+  for(let k=0;k<spawn;k++){
+    if(bubState.length>=BUB_MAX) break;
+    const i=bubState.length;
+    const r=Math.sqrt(Math.random())*1.9;
+    const a=Math.random()*Math.PI*2;
+    bubState.push({ x:Math.cos(a)*r, y:0.15+Math.random()*1.2, z:Math.sin(a)*r, vy:0.02+Math.random()*0.04, phase:Math.random()*Math.PI*2 });
+  }
+  for(let i=0;i<bubState.length;i++){
+    const b=bubState[i];
+    b.y += b.vy*s;
+    b.x += Math.sin(b.phase + performance.now()*0.002)*0.003;
+    b.z += Math.cos(b.phase + performance.now()*0.002)*0.003;
+    if(b.y>3.95 || Math.random()<0.006){
+      // remove
+      bubState.splice(i,1); i--;
+    }
+  }
+  bubInstanced.count=bubState.length;
+  for(let i=0;i<bubState.length;i++){
+    dummy.position.set(bubState[i].x, bubState[i].y, bubState[i].z);
+    const sc=0.5+Math.sin(bubState[i].phase)*0.25;
+    dummy.scale.set(sc,sc,sc);
+    dummy.updateMatrix();
+    bubInstanced.setMatrixAt(i, dummy.matrix);
+  }
+  bubInstanced.instanceMatrix.needsUpdate=true;
+}
+
+/* ===== Yeast particle motion ===== */
+function updateYeastParticles(dt){
+  const s=sim.speed||1;
+  const turb=sim.punch>0 ? sim.punch/400 : 0.003;
+  for(let i=0;i<sim.liveYeast;i++){
+    const v=yeastVelocities[i];
+    // Brownian + convection + punch turbulence
+    v.x += ((Math.random()-.5)*turb - v.x*0.08)*s;
+    v.y += ((Math.random()-.5)*turb*0.7 + 0.0015*(sim.tankT-20)/15 - v.y*0.08)*s; // slight rise at higher temp
+    v.z += ((Math.random()-.5)*turb - v.z*0.08)*s;
+
+    dummy.position.set(
+      clamp(dummy.position.x + v.x, -2.0, 2.0),
+      clamp(dummy.position.y + v.y, 0.2, 3.6),
+      clamp(dummy.position.z + v.z, -2.0, 2.0)
+    );
+    dummy.updateMatrix();
+    yeastInstanced.setMatrixAt(i, dummy.matrix);
+  }
+  yeastInstanced.instanceMatrix.needsUpdate=true;
+}
+
+/* ===== Telemetry DOM ===== */
+function updateDOM(){
+  const mins=Math.floor(sim.time);
+  const h=Math.floor(mins/60), m=mins%60, ss=Math.floor((sim.time%1)*60);
+  elElapsed.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  elSugar.textContent=sim.sugarNow.toFixed(1)+' °Brix';
+  elEth.textContent=sim.ethanol.toFixed(1)+' % v/v';
+  elCO2.textContent=sim.co2.toFixed(1)+' g/L';
+  elLive.textContent=Math.round(sim.liveYeast);
+  elTankT.textContent=sim.tankT.toFixed(1)+' °C';
+  const total=sim.liveYeast+sim.deadYeast;
+  elDead.textContent=total>0 ? ((sim.deadYeast/total)*100).toFixed(1)+' %' : '0 %';
+
+  elPhaseBadge.className='phase-badge phase-'+sim.phase;
+  const phases={lag:'Lag Phase', log:'Log Phase', stat:'Stationary Phase', death:'Death Phase'};
+  elPhaseBadge.textContent=phases[sim.phase]||'Unknown';
+  const tips={lag:'Cells acclimatising, low activity.', log:'Robust exponential growth.', stat:'Sugar depletion limits growth.', death:'Ethanol toxicity/starvation.'};
+  elPhaseText.textContent=tips[sim.phase]||'';
+
+  elCapBar.style.width=(sim.capHeight*100).toFixed(1)+'%';
+  elTempBar.style.width=clamp(((sim.tankT-8)/27)*100,0,100).toFixed(1)+'%';
+  elTempBar.style.background=tempToColor(sim.tankT).getStyle();
+}
+
+/* ===== Sparkline charts ===== */
+function pushHist(){
+  const h=sim.history;
+  h.sugar.push(sim.sugarNow); h.ethanol.push(sim.ethanol);
+  h.co2.push(sim.co2); h.temp.push(sim.tankT);
+  h.live.push(sim.liveYeast); h.dead.push(sim.deadYeast);
+  if(h.sugar.length>sim.maxHist){ Object.keys(h).forEach(k=>h[k].shift()); }
+}
+function drawSparkline(ctx, datasets, colors, labels){
+  const w=ctx.canvas.width, h2=ctx.canvas.height;
+  ctx.clearRect(0,0,w,h2);
+  const pad=6;
+  if(!datasets[0]||datasets[0].length<2) return;
+  datasets.forEach((data, idx)=>{
+    if(!data.length) return;
+    const min=Math.min(...data), max=Math.max(...data)+0.0001, rng=max-min;
+    ctx.beginPath();
+    ctx.strokeStyle=colors[idx];
+    ctx.lineWidth=2;
+    for(let i=0;i<data.length;i++){
+      const x=pad+(i/(data.length-1))*(w-pad*2);
+      const y=h2-pad-((data[i]-min)/rng)*(h2-pad*2);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  });
+  // Legend
+  ctx.font='11px system-ui';
+  let lx=pad;
+  labels.forEach((lab,i)=>{
+    ctx.fillStyle=colors[i]; ctx.fillRect(lx, 4, 8, 8); lx+=12;
+    ctx.fillStyle='#8b949e'; ctx.fillText(lab, lx, 12);
+    lx+=ctx.measureText(lab).width+18;
+  });
+}
+function drawCharts(){
+  drawSparkline(chart1, [sim.history.sugar, sim.history.ethanol], ['#e3b341','#58a6ff'], ['Sugar °Bx','Ethanol %']);
+  drawSparkline(chart2, [sim.history.co2, sim.history.temp], ['#a371f7','#3fb950'], ['CO₂ g/L','Temp °C']);
+}
+
+/* ===== Animation Loop ===== */
+let lastT=performance.now();
+function animate(){
+  requestAnimationFrame(animate);
+  const now=performance.now();
+  let dt=(now-lastT)/1000; lastT=now;
+  dt=Math.min(dt, 0.05);
+
+  updatePhysics(dt);
+  updateBubbles(dt);
+  updateYeastParticles(dt);
+  updateDOM();
+
+  if(Math.floor(sim.time)%2===0 && Math.random()<0.06) pushHist();
+  drawCharts();
+
+  // Paddle visual
+  const punchActive=sim.punch>0;
+  setPaddleActive(punchActive, sim.time/60);
+
+  // Must color shift with sugar
+  const mustHue=lerp(0.02, 0.08, clamp(sim.sugarNow/25,0,1)); // reddish -> browner
+  mustMat.color.setHSL(mustHue, 0.6, 0.22);
+
+  // Cap position and size
+  const baseY=3.85;
+  capMesh.scale.y=0.5+sim.capHeight*1.2;
+  capMesh.position.y=baseY + capMesh.scale.y*0.175 - 0.175;
+  capMat.opacity=0.6+sim.capHeight*0.35;
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ===== Resize ===== */
+function onResize(){
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', onResize);
+
+/* ===== Panel close (mobile-friendly) ===== */
+let uiCollapsed=false;
+panelClose.addEventListener('click', ()=>{
+  uiCollapsed=!uiCollapsed;
+  document.querySelectorAll('.panel').forEach(p=> p.style.display=uiCollapsed?'none':'block');
+  panelClose.textContent=uiCollapsed?'⚙ Controls':'✕';
+});
+
+/* ===== Kickoff ===== */
+pushHist();
+animate();
+
+})();
+</script>
+</body>
+</html>

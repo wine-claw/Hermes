@@ -138,6 +138,7 @@ const APPS = [
   {date: "2026-06-03", title: "Wine Microscope — Live Sediment Viewer", description: "Interactive raw-WebGL microscope simulation of wine sediment — tartrate crystals, yeast cells, polysaccharide flocs, and lactic acid bacteria — with brightfield, dark-field, and phase-contrast modes, real-time focal plane, chromatic aberration, and pan/zoom.", url: "./apps/2026-06-03/wine-microscope-sediment.html"},
   {date: "2026-06-02", title: "Aging Alchemy — Wine Oxidation Chemistry Simulator", description: "Interactive p5.js particle-based Maillard and Strecker reaction simulator — amino acids, sugars, O₂, melanoidins, and aldehydes with live browning index, Arrhenius kinetics, temperature, pH, and oxygen controls.", url: "./apps/2026-06-02/aging-chemistry-alchemy.html"},
   {date: "2026-06-04", title: "Yeast Population Kinetics Simulator", description: "Interactive Canvas 2D particle simulation of Saccharomyces cerevisiae growth — lag, log, stationary, and death phases with Monod kinetics, live population chart, temperature/sugar/O₂/YAN controls, and visual budding dynamics.", url: "./apps/2026-06-04/yeast-population-kinetics.html"},
+  {date: "2026-06-05", title: "3D Fermentation Tank Dynamics", description: "Interactive Three.js 3D simulator of a wine fermentation tank — instanced yeast and CO₂ bubble particles, Monod-based growth kinetics, live telemetry sparklines, must cap and punch-down visualization, with adjustable temperature, sugar, inoculum, dissolved O₂, and speed controls.", url: "./apps/2026-06-05/fermentation-tank-3d.html"},
 ];
 </script>
 <script>
@@ -174,7 +175,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById('last-updated').textContent="2026-06-04";
+document.getElementById('last-updated').textContent="2026-06-05";
 render();
 </script>
 </body>
