@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Grape Pedigree Explorer — D3.js Genealogy Graph</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  :root{ --bg:#0b0e14; --surface:#111827; --panel:#141b28; --border:#283549; --text:#d1d5db; --muted:#8b9aae; --accent:#38bdf8; --accent2:#a78bfa; --accent3:#34d399; --accent4:#f87171; --accent5:#fbbf24; }
+  html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  .disclaimer{ position:fixed; top:0; left:0; right:0; z-index:200; background:linear-gradient(90deg,#2d2218,#1f1810); color:#e8c5a0; border-bottom:1px solid #5a3a20; padding:0.55rem 1rem; font-size:0.8rem; text-align:center; }
+  .disclaimer strong{ color:#fbe8c0; }
+  #wrapper{ display:flex; height:100vh; padding-top:2.2rem; }
+  #canvas-container{ flex:1; position:relative; overflow:hidden; }
+  svg{ width:100%; height:100%; cursor:grab; }
+  svg:active{ cursor:grabbing; }
+  #sidebar{ width:310px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:auto; }
+  .panel{ padding:0.85rem 1rem; border-bottom:1px solid var(--border); }
+  .panel h2{ font-size:0.92rem; color:var(--accent); margin:0 0 0.5rem; letter-spacing:0.03em; text-transform:uppercase; }
+  .panel h3{ font-size:0.78rem; color:var(--muted); margin:0.6rem 0 0.35rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; }
+  .panel p, .panel li{ font-size:0.82rem; color:var(--text); line-height:1.5; margin:0.3rem 0; }
+  .panel ul{ margin:0.2rem 0; padding-left:1.1rem; }
+  .panel .chip{ display:inline-block; padding:0.25rem 0.55rem; border-radius:6px; margin:0.15rem 0.25rem 0.15rem 0; font-size:0.72rem; font-weight:600; background:#1e293b; border:1px solid #334155; }
+  .chip.red{ color:#f87171; border-color:#7f1d1d; }
+  .chip.white{ color:#38bdf8; border-color:#1e3a5f; }
+  .chip.parent{ color:#a78bfa; border-color:#4c1d95; }
+  .chip.origin{ color:#34d399; border-color:#064e3b; }
+  .chip.found{ color:#fbbf24; border-color:#78350f; }
+
+  .search-row{ display:flex; align-items:center; gap:0.4rem; margin-bottom:0.4rem; }
+  #search{ flex:1; background:#0f172a; border:1px solid var(--border); color:var(--text); padding:0.35rem 0.6rem; border-radius:6px; font-size:0.82rem; outline:none; }
+  #search:focus{ border-color:var(--accent); }
+  .legend-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; }
+
+  .toggle-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .toggle-btn{ background:#0f172a; border:1px solid var(--border); color:var(--muted); padding:0.35rem 0.2rem; border-radius:6px; cursor:pointer; font-size:0.72rem; text-align:center; transition:all .15s; }
+  .toggle-btn.on{ border-color:var(--accent); color:var(--accent); background:#1e293b; }
+  .reset-btn{ width:100%; margin-top:0.45rem; background:#1e293b; color:var(--text); border:1px solid var(--border); padding:0.4rem 0.6rem; border-radius:6px; cursor:pointer; font-size:0.78rem; }
+  .reset-btn:hover{ border-color:var(--accent); }
+
+  .stats{ display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.4rem; }
+  .stat-pill{ background:#0f172a; border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.55rem; font-size:0.72rem; color:var(--muted); }
+
+  .tip{ position:absolute; pointer-events:none; opacity:0; transition:opacity .15s; background:rgba(11,14,20,0.96); border:1px solid var(--border); border-radius:8px; padding:0.6rem 0.8rem; font-size:0.78rem; color:var(--text); box-shadow:0 8px 24px rgba(0,0,0,.45); max-width:260px; z-index:100; }
+  .tip h4{ margin:0 0 0.2rem; font-size:0.84rem; color:var(--accent); }
+  .tip p{ margin:0.1rem 0; font-size:0.76rem; color:var(--muted); }
+  .tip .tiny{ font-size:0.7rem; opacity:.8; }
+
+  /* Node link styles */
+  line.link{ stroke:#334155; stroke-opacity:0.5; }
+  line.link.highlight{ stroke:#38bdf8; stroke-opacity:0.9; stroke-width:2px; }
+  circle.node{ stroke:#0b0e14; stroke-width:2px; cursor:pointer; transition:all .2s; }
+  circle.node:hover{ stroke:#fff; stroke-width:2.5px; }
+  text.label{ font-size:10px; fill:#c9d5e6; pointer-events:none; text-shadow:0 1px 3px rgba(0,0,0,.85); font-weight:500; }
+  text.label.bold{ font-weight:700; fill:#fff; }
+
+  .badge-row{ display:flex; gap:0.35rem; flex-wrap:wrap; margin-top:0.3rem; }
+  .mini-badge{ font-size:0.65rem; padding:0.15rem 0.35rem; border-radius:4px; font-weight:600; }
+  .badge-red{ background:rgba(248,113,113,0.12); color:#f87171; border:1px solid rgba(248,113,113,0.25); }
+  .badge-white{ background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid rgba(56,189,248,0.25); }
+  .badge-table{ background:rgba(167,139,250,0.12); color:#a78bfa; border:1px solid rgba(167,139,250,0.25); }
+  .badge-found{ background:rgba(251,191,36,0.12); color:#fbbf24; border:1px solid rgba(251,191,36,0.25); }
+  .badge-origin{ background:rgba(52,211,153,0.12); color:#34d399; border:1px solid rgba(52,211,153,0.25); }
+
+  @media(max-width:768px){
+    #wrapper{ flex-direction:column; }
+    #sidebar{ width:auto; height:44vh; border-left:none; border-top:1px solid var(--border); order:2; }
+    #canvas-container{ order:1; height:54vh; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+
+<div id="wrapper">
+  <div id="canvas-container">
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="tip" id="tip"></div>
+  </div>
+
+  <div id="sidebar">
+    <div class="panel">
+      <h2>Wine Grape Pedigree Explorer</h2>
+      <p>A force-directed network of historic grape crossings, parentage, and origins spanning from antiquity to modern breeding programs (Geilweilerhof, INRA, Cornell).</p>
+      <div class="stats">
+        <span class="stat-pill" id="stat-nodes">0 varieties</span>
+        <span class="stat-pill" id="stat-links">0 links</span>
+        <span class="stat-pill" id="stat-gen">0 generations</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Search & Filter</h2>
+      <div class="search-row">
+        <input id="search" type="text" placeholder="Search grape variety..." autocomplete="off">
+      </div>
+      <div class="toggle-grid">
+        <button class="toggle-btn on" data-filter="red">🔴 Red grapes</button>
+        <button class="toggle-btn on" data-filter="white">⚪ White grapes</button>
+        <button class="toggle-btn on" data-filter="table">🍇 Table grapes</button>
+        <button class="toggle-btn on" data-filter="found">✨ Founders</button>
+      </div>
+      <button class="reset-btn" id="reset-zoom">Reset view</button>
+    </div>
+
+    <div class="panel" id="detail-panel" style="display:none">
+      <h2 id="d-name">Variety</h2>
+      <div class="badge-row" id="d-badges"></div>
+      <h3>Origin / Year</h3>
+      <p id="d-origin">—</p>
+      <h3>Parents</h3>
+      <ul id="d-parents"></ul>
+      <h3>Offspring</h3>
+      <ul id="d-children"></ul>
+      <h3>Notable</h3>
+      <p id="d-note">—</p>
+    </div>
+
+    <div class="panel">
+      <h2>Legend</h2>
+      <p><span class="legend-dot" style="background:#e11d48"></span> Red wine grape</p>
+      <p><span class="legend-dot" style="background:#0ea5e9"></span> White wine grape</p>
+      <p><span class="legend-dot" style="background:#a78bfa"></span> Table / dual-purpose</p>
+      <p><span class="legend-dot" style="background:#fbbf24"></span> Foundational (Vitis vinifera)</p>
+      <p><span class="legend-dot" style="background:#34d399"></span> Geographic / group node</p>
+      <p style="margin-top:0.45rem; font-size:0.72rem; color:var(--muted)">Drag nodes to rearrange. Scroll / pinch to zoom.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   Wine Grape Pedigree Graph Data
+   Nodes = grape varieties, breeding landmarks, or origin groups
+   Links = parent → child relationships
+   ================================================================ */
+const NODES = [
+  // Foundational / ancient parents
+  {id:"Heunisch", label:"Gouais Blanc\n(Heunisch)", type:"found", origin:"France (Loire)", year:"~medieval", note:"Historic white grape; parent of Chardonnay, Gamay, and dozens of other crossings. Low quality, high fertility."},
+  {id:"Pinot", label:"Pinot Noir", type:"found", origin:"Burgundy, France", year:"~1st cent. AD", note:"One of the oldest cultivated grape varieties. Parent of Pinot Gris, Pinot Blanc, Chardonnay, Meunier, and many others."},
+  {id:"Syrah_f", label:"Syrah Parents", type:"origin", origin:"Rhône, France", year:"legendary", note:"Mondeuse Blanche × Dureza (both nearly extinct now)."},
+  {id:"Mondeuse", label:"Mondeuse Blanche", type:"found", origin:"Savoie, France", year:"ancient", note:"White Savoie variety, mother of Syrah."},
+  {id:"Dureza", label:"Dureza", type:"found", origin:"Ardèche, France", year:"ancient", note:"Dark-skinned Ardèche grape, father of Syrah."},
+  {id:"CabS_f", label:"Cab. Sauvignon Parents", type:"origin", origin:"Bordeaux, France", year:"17th cent.", note:" Cabernet Franc × Sauvignon Blanc"},
+  {id:"CabFranc", label:"Cabernet Franc", type:"red", origin:"Bordeaux / Loire", year:"~17th cent.", note:"Parent of Cabernet Sauvignon and Merlot. Herbaceous, lighter-bodied red."},
+  {id:"SauvBlanc", label:"Sauvignon Blanc", type:"white", origin:"Loire, France", year:"~16th cent.", note:"Parent of Cabernet Sauvignon. Grassy, aromatic white."},
+  {id:"Merlot_f", label:"Merlot Parents", type:"origin", origin:"Bordeaux, France", year:"~18th cent.", note:" Cabernet Franc × Magdeleine Noire des Charentes (now extinct)."},
+  {id:"Magdeleine", label:"Magdeleine Noire", type:"found", origin:"Charentes, France", year:"extinct", note:"Extinct Bordeaux-area variety; parent of Merlot."},
+  {id:"Gew_f", label:"Gewürztraminer Parents", type:"origin", origin:"Alsace / Tirol", year:"18th cent.", note:"Traminer × Red Muscat (Roter Muskateller)."},
+  {id:"Traminer", label:"Traminer (Savagnin)", type:"white", origin:"Tirol / Alsace", year:"ancient", note:"Aromatic white mutant lineage; parent of Gewürztraminer."},
+  {id:"RedMuscat", label:"Red Muscat", type:"white", origin:"Mediterranean", year:"ancient", note:"Highly aromatic muscat; parent of Gewürztraminer."},
+  {id:"Riesling_f", label:"Riesling Parents", type:"origin", origin:"Germany (Rheingau)", year:"15th cent.", note:"Heunisch × wild Vitis vinifera (uncertain)."},
+  {id:"MuscatBlanc", label:"Muscat Blanc à Petits Grains", type:"white", origin:"Mediterranean", year:"ancient", note:"One of the oldest named grapes; parent of many Muscat derivatives."},
+
+  // Major classic varieties
+  {id:"Chardonnay", label:"Chardonnay", type:"white", origin:"Burgundy, France", year:"~medieval", note:"World's most planted white wine grape. Cross of Pinot × Heunisch."},
+  {id:"Gamay", label:"Gamay Noir", type:"red", origin:"Burgundy, France", year:"~14th cent.", note:"Cross of Pinot × Heunisch. Light, fruity reds (Beaujolais)."},
+  {id:"PinotGris", label:"Pinot Gris", type:"white", origin:"Burgundy, France", year:"~mutant", note:"Pinot Noir color mutant; pink-grey skin."},
+  {id:"Meunier", label:"Meunier\n(Pinot Meunier)", type:"red", origin:"Champagne, France", year:"~mutant", note:"Pinot Noir mutant with hairy leaves. Key Champagne blending grape."},
+  {id:"Syrah", label:"Syrah / Shiraz", type:"red", origin:"Rhône, France", year:"~medieval", note:"Mondeuse Blanche × Dureza. Full-bodied, peppery."},
+  {id:"CabSauv", label:"Cabernet Sauvignon", type:"red", origin:"Bordeaux, France", year:"17th cent.", note:"Cabernet Franc × Sauvignon Blanc. Blackcurrant, tannic backbone."},
+  {id:"Merlot", label:"Merlot", type:"red", origin:"Bordeaux, France", year:"18th cent.", note:"Cabernet Franc × Magdeleine Noire. Plummy, softer than Cabernet Sauvignon."},
+  {id:"Gewurz", label:"Gewürztraminer", type:"white", origin:"Alsace, France", year:"19th cent.", note:"Traminer × Red Muscat. Lychee, rose petal, spicy aroma."},
+  {id:"Riesling", label:"Riesling", type:"white", origin:"Germany (Rheingau)", year:"15th cent.", note:"Probably Heunisch × wild vine. Floral, high acidity, age-worthy."},
+  {id:"Tempranillo", label:"Tempranillo", type:"red", origin:"Spain (Rioja)", year:"~medieval", note:"Spain's noblest red. Alleged parent: Albillo Mayor."},
+  {id:"Albillo", label:"Albillo Mayor", type:"white", origin:"Ribera del Duero", year:"ancient", note:"White Spanish variety; probable parent of Tempranillo."},
+  {id:"Zinfandel", label:"Zinfandel\n(Primitivo / Tribidrag)", type:"red", origin:"Croatia (Dalmatia)", year:"ancient", note:"Same as Croatian Tribidrag and Italian Primitivo. Parent: Kratosija × unknown."},
+  {id:"Kratosija", label:"Kratosija", type:"red", origin:"Dalmatia, Croatia", year:"ancient", note:"Dalmatian parent of Zinfandel / Tribidrag."},
+
+  // Modern breeding crosses
+  {id:"Mueller_f", label:"Müller-Thurgau Parents", type:"origin", origin:"Geisenheim, Germany", year:"1882", note:"Riesling × Madeleine Royale (table grape)."},
+  {id:"MadeleineR", label:"Madeleine Royale", type:"table", origin:"France", year:"table grape", note:"Early-ripening table grape; parent of Müller-Thurgau."},
+  {id:"Mueller", label:"Müller-Thurgau", type:"white", origin:"Germany (Rheingau)", year:"1882", note:"Riesling × Madeleine Royale. High-yielding aromatic white."},
+
+  // INRA / German modern crosses
+  {id:"Chaunac", label:"Chancellor\n(Chaunac)", type:"red", origin:"France (INRA)", year:"c.1860", note:"Seibel 7053; French-American hybrid. Cold-hardy."},
+  {id:"Vidal", label:"Vidal Blanc", type:"white", origin:"France (INRA)", year:"1930s", note:"Ugni Blanc (Trebbiano) × Rayon d'Or. Cold-hardy hybrid for ice wine."},
+  {id:"Ugni", label:"Ugni Blanc\n(Trebbiano)", type:"white", origin:"Italy / France", year:"ancient", note:"Cognac / Armagnac base wine. Parent of Vidal Blanc."},
+  {id:"Rayon", label:"Rayon d'Or", type:"white", origin:"France (INRA)", year:"19th cent.", note:"Seibel hybrid; parent of Vidal Blanc."},
+  {id:"Seyval", label:"Seyval Blanc", type:"white", origin:"France (Bertille Seyve)", year:"1920s", note:"Seibel 5656 × Seibel 4986. Widely planted hybrid."},
+
+  // Cornell / Finger Lakes
+  {id:"Cayuga", label:"Cayuga White", type:"white", origin:"USA (Cornell)", year:"1972", note:"Schuyler × Seyval Blanc. Finger Lakes workhorse white."},
+  {id:"Schuyler", label:"Schuyler", type:"white", origin:"USA (Cornell)", year:"~1940s", note:"Zinfandel × Ontario. Parent of Cayuga White."},
+  {id:"Ontario", label:"Ontario", type:"white", origin:"USA", year:"historic", note:"American labrusca-based variety; parent of Schuyler."},
+  {id:"Marquette", label:"Marquette", type:"red", origin:"USA (Minnesota)", year:"2006", note:"MN 1094 (Riparia × Landot) × Seyval Blanc. Cold-hardy red."},
+  {id:"Frontenac", label:"Frontenac", type:"red", origin:"USA (Minnesota)", year:"1996", note:"Landot 4511 × V. riparia 89. Cold-hardy, high-acid red."},
+  {id:"LaCrescent", label:"La Crescent", type:"white", origin:"USA (Minnesota)", year:"2002", note:"MN 1161 (Muscat Hamburg × V. riparia) × St. Pepin. Aromatic cold-climate white."},
+  {id:"StPepin", label:"St. Pepin", type:"white", origin:"USA (Wisconsin)", year:"early hybrid", note:"German hybrid; parent of La Crescent."},
+
+  // Additional classic crosses
+  {id:"Chenin", label:"Chenin Blanc", type:"white", origin:"Loire, France", year:"~9th cent.", note:"Parentage uncertain; possibly Heunisch × Savagnin."},
+  {id:"Sangiovese", label:"Sangiovese", type:"red", origin:"Tuscany, Italy", year:"~16th cent.", note:"Parentage uncertain; proposed Ciliegiolo × Calabrese Montenuovo."},
+  {id:"Nebbiolo", label:"Nebbiolo", type:"red", origin:"Piedmont, Italy", year:"~13th cent.", note:"Parentage uncertain. One of Italy's oldest fine-wine grapes."},
+  {id:"Viognier", label:"Viognier", type:"white", origin:"Rhône, France", year:"ancient", note:"Parentage uncertain; genetically close to Syrah."},
+  {id:"Marsanne", label:"Marsanne", type:"white", origin:"Rhône, France", year:"ancient", note:"Parent of Marsanne-Roussanne blends."},
+  {id:"Roussanne", label:"Roussanne", type:"white", origin:"Rhône, France", year:"ancient", note:"Often blended with Marsanne; parentage uncertain."},
+  {id:"Grüner", label:"Grüner Veltliner", type:"white", origin:"Austria (Niederösterreich)", year:"~10th cent.", note:"Parentage: Traminer × St. Georgener. Austria's signature white."},
+  {id:"StGeorgener", label:"St. Georgener", type:"white", origin:"Austria", year:"ancient", note:"Extinct Austrian variety; parent of Grüner Veltliner."},
+  {id:"SavBlancNZ", label:"Sauvignon Blanc\n(Marlborough)", type:"white", origin:"New Zealand", year:"1970s plantation", note:"Cuttings from Davis, CA. Same cultivar as Loire Sauvignon Blanc."},
+  {id:"Malbec", label:"Malbec", type:"red", origin:"Cahors / Bordeaux", year:"~medieval", note:"Now Argentina's signature; parentage uncertain (possibly Magdeleine × Prunelard)."},
+];
+
+const LINKS = [
+  {source:"Heunisch", target:"Chardonnay"},
+  {source:"Pinot", target:"Chardonnay"},
+  {source:"Heunisch", target:"Gamay"},
+  {source:"Pinot", target:"Gamay"},
+  {source:"Pinot", target:"PinotGris"},
+  {source:"Pinot", target:"Meunier"},
+  {source:"Mondeuse", target:"Syrah_f"},
+  {source:"Dureza", target:"Syrah_f"},
+  {source:"Syrah_f", target:"Syrah"},
+  {source:"CabFranc", target:"CabSauv"},
+  {source:"SauvBlanc", target:"CabSauv"},
+  {source:"CabSauv", target:"CabS_f"},
+  {source:"SauvBlanc", target:"CabS_f"},
+  {source:"CabFranc", target:"CabS_f"},
+  {source:"CabFranc", target:"Merlot_f"},
+  {source:"Magdeleine", target:"Merlot_f"},
+  {source:"Merlot_f", target:"Merlot"},
+  {source:"Traminer", target:"Gewurz"},
+  {source:"RedMuscat", target:"Gewurz"},
+  {source:"Traminer", target:"Gew_f"},
+  {source:"RedMuscat", target:"Gew_f"},
+  {source:"Heunisch", target:"Riesling"},
+  {source:"Heunisch", target:"Riesling_f"},
+  {source:"Riesling_f", target:"Riesling"},
+  {source:"MadeleineR", target:"Mueller"},
+  {source:"Riesling", target:"Mueller"},
+  {source:"MadeleineR", target:"Mueller_f"},
+  {source:"Riesling", target:"Mueller_f"},
+  {source:"Ugni", target:"Vidal"},
+  {source:"Rayon", target:"Vidal"},
+  {source:"Ugni", target:"Vidal"},
+  {source:"Seyval", target:"Cayuga"},
+  {source:"Schuyler", target:"Cayuga"},
+  {source:"Zinfandel", target:"Schuyler"},
+  {source:"Ontario", target:"Schuyler"},
+  {source:"Seyval", target:"Marquette"},
+  {source:"StPepin", target:"LaCrescent"},
+  {source:"Kratosija", target:"Zinfandel"},
+  {source:"Albillo", target:"Tempranillo"},
+  {source:"Traminer", target:"Grüner"},
+  {source:"StGeorgener", target:"Grüner"},
+  {source:"Pinot", target:"Chenin"},
+  {source:"Heunisch", target:"Chenin"},
+  {source:"SauvBlanc", target:"SavBlancNZ"},
+];
+
+/* ================================================================
+   Color mapping
+   ================================================================ */
+const COLORS = {
+  red:   "#e11d48",
+  white: "#0ea5e9",
+  table: "#a78bfa",
+  found: "#fbbf24",
+  origin:"#34d399"
+};
+
+/* ================================================================
+   State
+   ================================================================ */
+let activeFilters = new Set(["red","white","table","found"]);
+let selectedId = null;
+let width, height;
+let svg, g, simulation;
+let linkSel, nodeSel, labelSel;
+
+function init(){
+  const container = document.getElementById("canvas-container");
+  width = container.clientWidth;
+  height = container.clientHeight;
+  svg = d3.select("#svg").attr("viewBox", [0,0,width,height]);
+  svg.selectAll("*").remove();
+
+  svg.append("defs").append("filter").attr("id","glow").attr("x","-50%").attr("y","-50%").attr("width","200%").attr("height","200%")
+    .html(`<feGaussianBlur stdDeviation="2.5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>`);
+
+  g = svg.append("g");
+
+  // Zoom
+  const zoom = d3.zoom().scaleExtent([0.3, 4]).on("zoom", e => g.attr("transform", e.transform));
+  svg.call(zoom).on("dblclick.zoom", null);
+
+  // Build graph
+  const { nodes, links } = getVisibleGraph();
+
+  linkSel = g.append("g").attr("class","links").selectAll("line").data(links).join("line").attr("class","link");
+
+  nodeSel = g.append("g").attr("class","nodes").selectAll("circle").data(nodes).join("circle")
+    .attr("class","node")
+    .attr("r", d => d.type==="found"?10:d.type==="origin"?7:8)
+    .attr("fill", d => COLORS[d.type] || COLORS.white)
+    .attr("stroke","#0b0e14")
+    .attr("stroke-width",2)
+    .call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended))
+    .on("mouseover", (event,d)=> showTip(event,d))
+    .on("mouseout", hideTip)
+    .on("click", (event,d)=> { event.stopPropagation(); selectNode(d); });
+
+  labelSel = g.append("g").attr("class","labels").selectAll("text").data(nodes).join("text")
+    .attr("class", d=> d.type==="found" || d.type==="origin"?"label bold":"label")
+    .text(d=>d.label.replace("\n"," "))
+    .attr("dx", 12).attr("dy", 4)
+    .style("opacity", d=> d.type==="origin"?0.6:0.9);
+
+  // Simulation
+  simulation = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d=>d.id).distance(d=> d.target && d.target.type==="origin"?60:100))
+    .force("charge", d3.forceManyBody().strength(d=> d.type==="origin"?-80:-200))
+    .force("center", d3.forceCenter(width/2, height/2))
+    .force("collide", d3.forceCollide().radius(d=> (d.type==="found"?12:d.type==="origin"?9:10)+4).iterations(2))
+    .force("x", d3.forceX(width/2).strength(0.04))
+    .force("y", d3.forceY(height/2).strength(0.04))
+    .on("tick", ticked);
+
+  svg.on("click", ()=> deselect());
+
+  document.getElementById("stat-nodes").textContent = `${NODES.filter(n=>n.type!=="origin").length} varieties`;
+  document.getElementById("stat-links").textContent = `${LINKS.length} parent links`;
+  document.getElementById("stat-gen").textContent = `~8 centuries`;
+}
+
+function getVisibleGraph(){
+  const visible = new Set();
+  NODES.forEach(n=> { if(activeFilters.has(n.type) || n.type==="origin") visible.add(n.id); });
+  const nodes = NODES.filter(n=> visible.has(n.id)).map(n=> ({...n}));
+  const nodeMap = new Map(nodes.map((n,i)=>[n.id,i]));
+  const links = LINKS.filter(l=> visible.has(l.source) && visible.has(l.target))
+    .map(l=> ({source: nodeMap.get(l.source), target: nodeMap.get(l.target)}))
+    .filter(l=> l.source!==undefined && l.target!==undefined);
+  return { nodes, links };
+}
+
+function ticked(){
+  linkSel.attr("x1", d=>d.source.x).attr("y1", d=>d.source.y).attr("x2", d=>d.target.x).attr("y2", d=>d.target.y);
+  nodeSel.attr("cx", d=>d.x).attr("cy", d=>d.y);
+  labelSel.attr("x", d=>d.x).attr("y", d=>d.y);
+}
+
+function dragstarted(event,d){
+  if(!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(event,d){ d.fx = event.x; d.fy = event.y; }
+function dragended(event,d){ if(!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+
+/* ================================================================
+   Tooltip
+   ================================================================ */
+const tip = document.getElementById("tip");
+function showTip(event,d){
+  const rect = document.getElementById("canvas-container").getBoundingClientRect();
+  let x = event.clientX - rect.left + 12;
+  let y = event.clientY - rect.top + 12;
+  if(x+260 > rect.width) x -= 280;
+  if(y+100 > rect.height) y -= 110;
+  tip.style.left = x+"px";
+  tip.style.top  = y+"px";
+  tip.style.opacity = 1;
+  tip.innerHTML = `<h4>${d.label.replace("\n"," ")}</h4>
+    <p>Type: <span style="color:${COLORS[d.type]||'#ccc'}">${d.type}</span></p>
+    <p>Origin: ${d.origin}</p>
+    <p class="tiny">${d.year}</p>`;
+}
+function hideTip(){ tip.style.opacity = 0; }
+
+/* ================================================================
+   Selection / Sidebar detail
+   ================================================================ */
+function selectNode(d){
+  selectedId = d.id;
+  nodeSel.attr("stroke", n=> n.id===d.id?"#fff":(n.id===selectedId?"#fff":"#0b0e14"))
+         .attr("stroke-width", n=> n.id===d.id?3:2)
+         .filter(n=> n.id===d.id).raise();
+  labelSel.filter(n=> n.id===d.id).raise();
+
+  // highlight edges
+  linkSel.classed("highlight", l=> l.source.id===d.id || l.target.id===d.id);
+
+  populateDetail(d);
+}
+function deselect(){
+  selectedId = null;
+  nodeSel.attr("stroke","#0b0e14").attr("stroke-width",2);
+  linkSel.classed("highlight", false);
+  document.getElementById("detail-panel").style.display = "none";
+}
+
+function populateDetail(d){
+  document.getElementById("detail-panel").style.display = "block";
+  document.getElementById("d-name").textContent = d.label.replace("\n"," ");
+  const badges = document.getElementById("d-badges");
+  badges.innerHTML = "";
+  const map = {red:"badge-red", white:"badge-white", table:"badge-table", found:"badge-found", origin:"badge-origin"};
+  const colorLabel = {red:"Red grape", white:"White grape", table:"Table / dual", found:"Founder", origin:"Origin / group"};
+  const b = document.createElement("span"); b.className = `mini-badge ${map[d.type]||"badge-found"}`; b.textContent = colorLabel[d.type]||d.type; badges.appendChild(b);
+
+  document.getElementById("d-origin").textContent = `${d.origin} · ${d.year}`;
+
+  const parents = LINKS.filter(l=> l.target===d.id).map(l=> NODES.find(n=>n.id===l.source)).filter(Boolean);
+  const ulP = document.getElementById("d-parents"); ulP.innerHTML = "";
+  if(parents.length) parents.forEach(p=>{ const li=document.createElement("li"); li.textContent = p.label.replace("\n"," "); ulP.appendChild(li); });
+  else { const li=document.createElement("li"); li.textContent = "Unknown / wild ancestor"; ulP.appendChild(li); }
+
+  const children = LINKS.filter(l=> l.source===d.id).map(l=> NODES.find(n=>n.id===l.target)).filter(Boolean);
+  const ulC = document.getElementById("d-children"); ulC.innerHTML = "";
+  if(children.length) children.forEach(c=>{ const li=document.createElement("li"); li.textContent = c.label.replace("\n"," "); ulC.appendChild(li); });
+  else { const li=document.createElement("li"); li.textContent = "None documented"; ulC.appendChild(li); }
+
+  document.getElementById("d-note").textContent = d.note;
+}
+
+/* ================================================================
+   Filter controls
+   ================================================================ */
+document.querySelectorAll(".toggle-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const f = btn.dataset.filter;
+    if(activeFilters.has(f)) activeFilters.delete(f); else activeFilters.add(f);
+    btn.classList.toggle("on", activeFilters.has(f));
+    restart();
+  });
+});
+
+function restart(){
+  const { nodes, links } = getVisibleGraph();
+  simulation.stop();
+  simulation.nodes(nodes);
+  simulation.force("link").links(links);
+
+  linkSel = g.select(".links").selectAll("line").data(links).join(
+    enter=>enter.append("line").attr("class","link"),
+    update=>update,
+    exit=>exit.remove()
+  );
+
+  nodeSel = g.select(".nodes").selectAll("circle").data(nodes).join(
+    enter=>enter.append("circle")
+      .attr("class","node")
+      .attr("r", d=> d.type==="found"?10:d.type==="origin"?7:8)
+      .attr("fill", d=> COLORS[d.type]||COLORS.white)
+      .attr("stroke","#0b0e14")
+      .attr("stroke-width",2)
+      .call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended))
+      .on("mouseover", (event,d)=> showTip(event,d))
+      .on("mouseout", hideTip)
+      .on("click", (event,d)=> { event.stopPropagation(); selectNode(d); }),
+    update=>update.attr("r", d=> d.type==="found"?10:d.type==="origin"?7:8).attr("fill", d=> COLORS[d.type]||COLORS.white),
+    exit=>exit.remove()
+  );
+
+  labelSel = g.select(".labels").selectAll("text").data(nodes).join(
+    enter=>enter.append("text")
+      .attr("class", d=> d.type==="found"||d.type==="origin"?"label bold":"label")
+      .text(d=>d.label.replace("\n"," "))
+      .attr("dx",12).attr("dy",4)
+      .style("opacity", d=> d.type==="origin"?0.6:0.9),
+    update=>update.text(d=>d.label.replace("\n"," ")),
+    exit=>exit.remove()
+  );
+
+  simulation.alpha(1).restart();
+}
+
+/* ================================================================
+   Search
+   ================================================================ */
+document.getElementById("search").addEventListener("input", e=>{
+  const q = e.target.value.toLowerCase().trim();
+  if(!q){ nodeSel.attr("opacity",1); labelSel.style("opacity", d=> d.type==="origin"?0.6:0.9); return; }
+  nodeSel.attr("opacity", d=> (d.label.toLowerCase().includes(q)||d.origin.toLowerCase().includes(q))?1:0.15);
+  labelSel.style("opacity", d=> (d.label.toLowerCase().includes(q)||d.origin.toLowerCase().includes(q))?0.9:0.05);
+});
+
+/* ================================================================
+   Reset zoom
+   ================================================================ */
+document.getElementById("reset-zoom").addEventListener("click", ()=>{
+  svg.transition().duration(600).call(d3.zoom().transform, d3.zoomIdentity);
+  deselect();
+});
+
+/* ================================================================
+   Resize handler
+   ================================================================ */
+window.addEventListener("resize", ()=>{
+  const container = document.getElementById("canvas-container");
+  width = container.clientWidth; height = container.clientHeight;
+  svg.attr("viewBox", [0,0,width,height]);
+  simulation.force("center", d3.forceCenter(width/2, height/2));
+  simulation.alpha(0.3).restart();
+});
+
+/* ================================================================
+   Initialize
+   ================================================================ */
+init();
+</script>
+</body>
+</html>
