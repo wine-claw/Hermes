@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vineyard Phenology Wheel — Interactive Annual Cycle</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --surface:#141a22;
+    --border:#2a3441;
+    --text:#c9d1d9;
+    --muted:#8b949e;
+    --accent:#58a6ff;
+    --accent2:#a371f7;
+    --warn-bg:#2a1a10;
+    --warn-border:#5a3a20;
+    --warn-text:#e8b080;
+    --dormancy:#3a4a5a;
+    --pruning:#5a6a7a;
+    --budbreak:#6BCB77;
+    --shootgrowth:#4D96FF;
+    --flowering:#FFD93D;
+    --fruitset:#FF6B6B;
+    --veraison:#A371F7;
+    --ripening:#FF8C42;
+    --harvest:#E8453C;
+    --leaffall:#8B949E;
+    --cell-width:56px;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html, body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow-x:hidden; }
+
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.75rem 1rem; text-align:center; font-size:0.85rem; position:sticky; top:0; z-index:200; }
+  .disclaimer strong{ font-weight:600; }
+
+  #app{ min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:2rem 1rem 4rem; position:relative; }
+
+  h1{ font-size:clamp(1.4rem,5vw,2.2rem); background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-align:center; margin-bottom:0.5rem; }
+  .subtitle{ color:var(--muted); text-align:center; font-size:0.95rem; margin-bottom:1.5rem; max-width:600px; }
+
+  /* Wheel container */
+  .wheel-stage{ position:relative; width:min(520px,90vw); height:min(520px,90vw); margin:0 auto 2rem; }
+  .wheel-svg{ width:100%; height:100%; display:block; }
+
+  /* Center hub */
+  .hub{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:120px; height:120px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#2a3441,#141a22); border:2px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; cursor:pointer; z-index:10; transition:border-color .3s; }
+  .hub:hover{ border-color:var(--accent); }
+  .hub .month-label{ font-size:1.6rem; font-weight:700; color:#fff; line-height:1; }
+  .hub .stage-label{ font-size:0.65rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-top:2px; }
+  .hub .indicator{ width:6px; height:6px; border-radius:50%; background:var(--accent); margin-top:6px; box-shadow:0 0 8px var(--accent); }
+
+  /* Side panels */
+  .panels{ display:grid; grid-template-columns:1fr 1fr; gap:1rem; width:100%; max-width:900px; margin-bottom:1.5rem; }
+  @media(max-width:640px){ .panels{ grid-template-columns:1fr; } }
+
+  .panel{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.1rem; }
+  .panel h3{ font-size:0.85rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--accent); margin-bottom:0.6rem; }
+  .panel p{ color:var(--muted); font-size:0.9rem; line-height:1.55; }
+  .panel .metric-row{ display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.85rem; }
+  .panel .metric-row:last-child{ border-bottom:none; }
+  .panel .metric-val{ font-weight:700; color:#fff; font-variant-numeric:tabular-nums; }
+
+  /* Telemetry bar */
+  .telemetry{ display:flex; flex-wrap:wrap; justify-content:center; gap:0.6rem; margin-bottom:1.5rem; max-width:900px; width:100%; }
+  .chip{ background:rgba(88,166,255,0.08); border:1px solid rgba(88,166,255,0.25); border-radius:20px; padding:0.35rem 0.9rem; font-size:0.8rem; color:var(--text); display:flex; align-items:center; gap:0.4rem; font-variant-numeric:tabular-nums; }
+  .chip .dot{ width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 6px var(--accent); animation:pulse 2s ease-in-out infinite; }
+  .chip .dot.low{ background:var(--accent2); box-shadow:0 0 6px var(--accent2); }
+  .chip .dot.high{ background:var(--fruitset); box-shadow:0 0 6px var(--fruitset); }
+  @keyframes pulse{ 0%,100%{ opacity:0.6; transform:scale(1); } 50%{ opacity:1; transform:scale(1.15); } }
+
+  /* SVG label styling */
+  .segment-label{ font-family:system-ui,sans-serif; font-size:11px; font-weight:600; fill:#fff; pointer-events:none; text-anchor:middle; dominant-baseline:middle; }
+  .segment-bg{ cursor:pointer; transition:opacity .2s; }
+  .segment-bg:hover{ opacity:0.9; }
+
+  /* Detail SVG illustration box */
+  .detail-viz{ width:100%; height:180px; background:linear-gradient(135deg,#0f1620,#141a22); border-radius:10px; border:1px solid var(--border); margin-top:0.8rem; position:relative; overflow:hidden; }
+  .detail-viz svg{ width:100%; height:100%; }
+
+  /* Floating particles */
+  .particle{ position:fixed; pointer-events:none; border-radius:50%; opacity:0.5; }
+
+  /* Time scrubber */
+  .scrubber-wrap{ width:100%; max-width:900px; margin-top:1rem; }
+  .scrubber-labels{ display:flex; justify-content:space-between; font-size:0.7rem; color:var(--muted); margin-bottom:0.3rem; text-transform:uppercase; letter-spacing:0.05em; }
+  input[type="range"]{ -webkit-appearance:none; width:100%; height:6px; border-radius:3px; background:var(--border); outline:none; }
+  input[type="range"]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--accent); border:2px solid #fff; cursor:pointer; box-shadow:0 0 8px rgba(88,166,255,0.5); }
+  input[type="range"]::-moz-range-thumb{ width:18px; height:18px; border-radius:50%; background:var(--accent); border:2px solid #fff; cursor:pointer; }
+
+  .nav-hint{ color:var(--muted); font-size:0.8rem; text-align:center; margin-top:0.8rem; }
+
+  /* Responsive hub shrink */
+  @media(max-width:480px){ .hub{ width:90px; height:90px; } .hub .month-label{ font-size:1.1rem; } .detail-viz{ height:140px; } }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+
+<div id="app">
+  <h1>Vineyard Phenology Wheel</h1>
+  <p class="subtitle">Explore the grapevine annual cycle through an interactive seasonal wheel. Click segments or drag the timeline to traverse dormancy, bud break, flowering, veraison, harvest, and beyond.</p>
+
+  <div class="telemetry" id="telemetry"></div>
+
+  <div class="wheel-stage">
+    <svg class="wheel-svg" viewBox="0 0 520 520" id="wheelSvg" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter>
+        <radialGradient id="hubGrad" cx="35%" cy="35%"><stop offset="0%" stop-color="#2a3441"/><stop offset="100%" stop-color="#0b0f14"/></radialGradient>
+      </defs>
+      <g id="segmentsGroup" transform="translate(260,260)"></g>
+      <g id="labelsGroup" transform="translate(260,260)"></g>
+      <circle cx="260" cy="260" r="85" fill="url(#hubGrad)" stroke="var(--border)" stroke-width="2" id="hubRing"/>
+    </svg>
+    <div class="hub" id="hub">
+      <div class="month-label" id="hubMonth">JAN</div>
+      <div class="stage-label" id="hubStage">Dormancy</div>
+      <div class="indicator" id="hubDot"></div>
+    </div>
+  </div>
+
+  <div class="scrubber-wrap">
+    <div class="scrubber-labels"><span>Dormancy</span><span>Bud Break</span><span>Flowering</span><span>Veraison</span><span>Harvest</span><span>Dormancy</span></div>
+    <input type="range" id="monthSlider" min="0" max="11" step="0.05" value="0">
+  </div>
+  <div class="nav-hint">Drag the slider or click wheel segments to explore</div>
+
+  <div class="panels">
+    <div class="panel">
+      <h3 id="panelTitle">Dormancy — Winter Rest</h3>
+      <p id="panelDesc">The vine is dormant. Carbohydrate reserves are stored in roots and trunks. Pruning shapes next season's growth. Chill hours accumulate, influencing bud break timing.</p>
+      <div class="detail-viz" id="detailViz"></div>
+    </div>
+    <div class="panel">
+      <h3>Live Metrics</h3>
+      <div id="metricsPanel">
+        <div class="metric-row"><span>Growing Degree Days</span><span class="metric-val" id="gddVal">0</span></div>
+        <div class="metric-row"><span>Estimated Brix</span><span class="metric-val" id="brixVal">—</span></div>
+        <div class="metric-row"><span>Juice pH</span><span class="metric-val" id="phVal">—</span></div>
+        <div class="metric-row"><span>Titratable Acidity</span><span class="metric-val" id="taVal">—</span></div>
+        <div class="metric-row"><span>Soil Temp (°C)</span><span class="metric-val" id="soilTempVal">8</span></div>
+        <div class="metric-row"><span>Accumulated Rain (mm)</span><span class="metric-val" id="rainVal">120</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// === Data ===
+const STAGES=[
+  {month:0, name:"Dormancy", label:"JAN", color:"#3a4a5a", desc:"The vine is dormant. Carbohydrate reserves are stored in roots and trunks. Pruning shapes next season's growth. Chill hours accumulate, influencing bud break timing.", gdd:0, brix:"—", ph:"—", ta:"—", soil:8, rain:120, leaf:"#4a5a6a"},
+  {month:1, name:"Pruning", label:"FEB", color:"#5a6a7a", desc:"Winter pruning continues. Cane and spur selections determine yield potential. Sap may begin to rise during warm spells. Frost risk remains high on clear nights.", gdd:15, brix:"—", ph:"—", ta:"—", soil:9, rain:140, leaf:"#5a6a7a"},
+  {month:2, name:"Bud Break", label:"MAR", color:"#6BCB77", desc:"Buds swell and burst as soil warms. First green tissues emerge — vulnerable to spring frost. Shoots begin elongation from count buds selected during pruning.", gdd:120, brix:"—", ph:"—", ta:"—", soil:12, rain:180, leaf:"#6BCB77"},
+  {month:3, name:"Shoot Growth", label:"APR", color:"#4D96FF", desc:"Rapid shoot elongation and leaf unfolding. Tendrils grip trellising wires. Flower clusters become visible. First fungicide applications for mildew protection.", gdd:320, brix:"—", ph:"—", ta:"—", soil:15, rain:220, leaf:"#4D96FF"},
+  {month:4, name:"Flowering", label:"MAY", color:"#FFD93D", desc:"Caps loosen and pollen sheds. Self-pollination within each flower. Weather during bloom determines berry count. Rain or extreme heat can reduce fruit set.", gdd:580, brix:"—", ph:"—", ta:"—", soil:18, rain:280, leaf:"#FFD93D"},
+  {month:5, name:"Fruit Set", label:"JUN", color:"#FF6B6B", desc:"Fertilised ovules become tiny green berries. Cell division phase — berry size potential is set now. Nutritional demand surges. Canopy management (leaf plucking) begins.", gdd:880, brix:3.2, ph:3.15, ta:9.5, soil:22, rain:320, leaf:"#FF6B6B"},
+  {month:6, name:"Veraison", label:"JUL", color:"#A371F7", desc:"The pivotal transition: berries soften, sugars rise, acids fall. Red varieties develop anthocyanin pigment. White varieties turn translucent golden. Net CO₂ assimilation peaks.", gdd:1250, brix:8.5, ph:3.25, ta:8.2, soil:24, rain:350, leaf:"#A371F7"},
+  {month:7, name:"Ripening", label:"AUG", color:"#FF8C42", desc:"Sugar accumulation accelerates. Malic acid respires, tartaric stabilises. Flavour precursors develop. Berry pH drifts upward. Water stress management is critical for concentration.", gdd:1680, brix:16.2, ph:3.35, ta:6.8, soil:25, rain:380, leaf:"#FF8C42"},
+  {month:8, name:"Ripening Late", label:"SEP", color:"#E8453C", desc:"Approaching harvest decision. Brix, pH, TA, and flavour maturity evaluated together. Diurnal temperature variation preserves acidity. Birds and rot pressure increase late in the month.", gdd:1950, brix:22.0, ph:3.45, ta:5.5, soil:23, rain:400, leaf:"#E8453C"},
+  {month:9, name:"Harvest", label:"OCT", color:"#E8453C", desc:"Grapes are picked at optimal maturity. Night harvesting preserves fruit integrity. Fermentation begins within hours. Vintage variation is sealed at this moment.", gdd:2100, brix:24.5, ph:3.50, ta:4.8, soil:18, rain:420, leaf:"#E8453C"},
+  {month:10, name:"Leaf Fall", label:"NOV", color:"#8B949E", desc:"Canopy senescence — chlorophyll breaks down revealing carotenoids. Leaves yellow and drop. Nutrients translocate to perennial wood. First post-harvest irrigation and cover-crop sowing.", gdd:2150, brix:"—", ph:"—", ta:"—", soil:14, rain:440, leaf:"#8B949E"},
+  {month:11, name:"Post-Harvest", label:"DEC", color:"#5a6a8a", desc:"Vine prepares for dormancy. Periderm hardens on canes. Root growth may briefly resume in warm soils. Historical vintage data logged. Pruning plans developed for next season.", gdd:2180, brix:"—", ph:"—", ta:"—", soil:10, rain:460, leaf:"#5a6a8a"},
+];
+
+let activeIndex=0;
+const svgNS="http://www.w3.org/2000/svg";
+const wheelSvg=document.getElementById('wheelSvg');
+const segmentsGroup=document.getElementById('segmentsGroup');
+const labelsGroup=document.getElementById('labelsGroup');
+const hubMonth=document.getElementById('hubMonth');
+const hubStage=document.getElementById('hubStage');
+const hubDot=document.getElementById('hubDot');
+const panelTitle=document.getElementById('panelTitle');
+const panelDesc=document.getElementById('panelDesc');
+const detailViz=document.getElementById('detailViz');
+const slider=document.getElementById('monthSlider');
+const R_OUTER=240, R_INNER=95, CX=260, CY=260;
+
+// === Build wheel segments ===
+function polar(cx,cy,r,deg){ const rad=(deg-90)*Math.PI/180; return {x:cx+r*Math.cos(rad), y:cy+r*Math.sin(rad)}; }
+function segPath(i){ const start=i*30-15; const end=start+30; const p1=polar(0,0,R_OUTER,start); const p2=polar(0,0,R_OUTER,end); const p3=polar(0,0,R_INNER,end); const p4=polar(0,0,R_INNER,start); return `M ${p1.x} ${p1.y} A ${R_OUTER} ${R_OUTER} 0 0 1 ${p2.x} ${p2.y} L ${p3.x} ${p3.y} A ${R_INNER} ${R_INNER} 0 0 0 ${p4.x} ${p4.y} Z`; }
+
+const segEls=[];
+STAGES.forEach((s,i)=>{
+  const path=document.createElementNS(svgNS,'path');
+  path.setAttribute('d',segPath(i));
+  path.setAttribute('fill',s.color);
+  path.setAttribute('stroke','#0b0f14');
+  path.setAttribute('stroke-width','3');
+  path.setAttribute('class','segment-bg');
+  path.style.opacity='0.85';
+  path.addEventListener('click',()=>selectStage(i));
+  path.addEventListener('mouseenter',()=>gsap.to(path,{opacity:1,duration:0.2}));
+  path.addEventListener('mouseleave',()=>gsap.to(path,{opacity:0.85,duration:0.2}));
+  segmentsGroup.appendChild(path);
+  segEls.push(path);
+
+  // Label
+  const midAngle=i*30;
+  const lp=polar(0,0,(R_OUTER+R_INNER)/2,midAngle);
+  const txt=document.createElementNS(svgNS,'text');
+  txt.setAttribute('x',lp.x); txt.setAttribute('y',lp.y);
+  txt.setAttribute('class','segment-label');
+  txt.textContent=s.label;
+  txt.style.opacity='0.9';
+  labelsGroup.appendChild(txt);
+});
+
+// === Detail SVG illustrations (inline mini scenes) ===
+const ILLUSTRATIONS=[
+  // Dormancy: bare cane
+  `<g transform="translate(150,160)"><path d="M100,120 Q90,60 100,20" stroke="#6a5a4a" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M100,80 Q130,70 140,50" stroke="#6a5a4a" stroke-width="3" fill="none"/><circle cx="100" cy="120" r="18" fill="#3a3028" opacity="0.6"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Dormant cane</text></g>`,
+  // Pruning: shears + cut cane
+  `<g transform="translate(150,160)"><path d="M70,130 L130,130" stroke="#6a5a4a" stroke-width="5" stroke-linecap="round"/><line x1="95" y1="130" x2="85" y2="100" stroke="#888" stroke-width="4" stroke-linecap="round"/><line x1="105" y1="130" x2="115" y2="100" stroke="#888" stroke-width="4" stroke-linecap="round"/><circle cx="100" cy="130" r="4" fill="#aaa"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Winter pruning</text></g>`,
+  // Bud break: swelling buds
+  `<g transform="translate(150,160)"><path d="M100,120 Q95,60 100,30" stroke="#5a7a5a" stroke-width="4" fill="none"/><ellipse cx="95" cy="65" rx="6" ry="10" fill="#6BCB77"/><ellipse cx="105" cy="70" rx="5" ry="8" fill="#4DAF6A"/><ellipse cx="100" cy="55" rx="4" ry="7" fill="#8BE9A0"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">First green tissue</text></g>`,
+  // Shoot growth: long shoots + leaves
+  `<g transform="translate(150,160)"><path d="M100,140 Q90,80 100,10" stroke="#4D96FF" stroke-width="3" fill="none"/><ellipse cx="85" cy="50" rx="14" ry="22" fill="#6BCB77" transform="rotate(-20,85,50)" opacity="0.9"/><ellipse cx="115" cy="70" rx="14" ry="22" fill="#6BCB77" transform="rotate(20,115,70)" opacity="0.9"/><ellipse cx="90" cy="30" rx="10" ry="18" fill="#8BE9A0" transform="rotate(-35,90,30)" opacity="0.9"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Rapid elongation</text></g>`,
+  // Flowering: tiny flowers
+  `<g transform="translate(150,160)"><path d="M100,140 Q95,90 100,60" stroke="#5a8a4a" stroke-width="2" fill="none"/><g transform="translate(100,55)"><circle cx="0" cy="0" r="4" fill="#FFD93D"/><circle cx="0" cy="-6" r="3" fill="#fff" opacity="0.9"/><circle cx="5" cy="-2" r="3" fill="#fff" opacity="0.9"/><circle cx="-5" cy="-2" r="3" fill="#fff" opacity="0.9"/><circle cx="3" cy="5" r="3" fill="#fff" opacity="0.9"/><circle cx="-3" cy="5" r="3" fill="#fff" opacity="0.9"/></g><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Self-pollination</text></g>`,
+  // Fruit set: tiny green berries
+  `<g transform="translate(150,160)"><path d="M100,140 Q95,90 100,70" stroke="#5a8a4a" stroke-width="2" fill="none"/><circle cx="100" cy="72" r="6" fill="#6BCB77"/><circle cx="90" cy="78" r="5" fill="#6BCB77"/><circle cx="110" cy="76" r="5.5" fill="#6BCB77"/><circle cx="95" cy="85" r="5" fill="#6BCB77"/><circle cx="105" cy="84" r="5.5" fill="#6BCB77"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Cell division phase</text></g>`,
+  // Veraison: color change midway
+  `<g transform="translate(150,160)"><path d="M100,140 Q95,90 100,70" stroke="#7a6a8a" stroke-width="2" fill="none"/><circle cx="100" cy="72" r="8" fill="url(#veraGrad)"/><defs><radialGradient id="veraGrad"><stop offset="0%" stop-color="#A371F7"/><stop offset="70%" stop-color="#6BCB77"/><stop offset="100%" stop-color="#FFD93D"/></radialGradient></defs><circle cx="90" cy="80" r="7" fill="#6BCB77"/><circle cx="110" cy="78" r="7.5" fill="#A371F7"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Sugar ↑ Acid ↓</text></g>`,
+  // Ripening: coloured berries
+  `<g transform="translate(150,160)"><path d="M100,140 Q95,90 100,70" stroke="#7a6a5a" stroke-width="2" fill="none"/><circle cx="100" cy="72" r="9" fill="#E8453C"/><circle cx="90" cy="80" r="8" fill="#FF8C42"/><circle cx="110" cy="78" r="8.5" fill="#E8453C"/><circle cx="95" cy="88" r="7.5" fill="#FF6B6B"/><circle cx="105" cy="86" r="8" fill="#E8453C"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Flavour development</text></g>`,
+  // Late ripening
+cx:100,cy:72`,
+  // Ripening Late: deep colour
+  `<g transform="translate(150,160)"><path d="M100,140 Q95,90 100,70" stroke="#7a6a5a" stroke-width="2" fill="none"/><circle cx="100" cy="72" r="10" fill="#9a1a1a"/><circle cx="88" cy="82" r="9" fill="#b52a2a"/><circle cx="112" cy="80" r="9.5" fill="#9a1a1a"/><circle cx="95" cy="92" r="8.5" fill="#b52a2a"/><circle cx="105" cy="90" r="9" fill="#9a1a1a"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Harvest window opens</text></g>`,
+  // Harvest: basket + grapes
+  `<g transform="translate(150,160)"><path d="M60,120 L140,120 L130,160 L70,160 Z" fill="#6a5038" stroke="#8a7058" stroke-width="2"/><ellipse cx="100" cy="115" rx="35" ry="12" fill="#9a1a1a"/><circle cx="85" cy="105" r="8" fill="#b52a2a"/><circle cx="100" cy="100" r="9" fill="#9a1a1a"/><circle cx="115" cy="105" r="8" fill="#b52a2a"/><path d="M85,105 L75,80" stroke="#8a7058" stroke-width="2"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Optimal maturity</text></g>`,
+  // Leaf fall: yellow leaves falling
+  `<g transform="translate(150,160)"><path d="M100,130 Q90,80 100,40" stroke="#5a5a4a" stroke-width="3" fill="none"/><ellipse cx="80" cy="80" rx="10" ry="18" fill="#FFD93D" transform="rotate(-30,80,80)" opacity="0.7"/><ellipse cx="120" cy="90" rx="10" ry="18" fill="#FFD93D" transform="rotate(25,120,90)" opacity="0.6"/><ellipse cx="95" cy="110" rx="9" ry="16" fill="#FF8C42" transform="rotate(-10,95,110)" opacity="0.5"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Nutrient translocation</text></g>`,
+  // Post-harvest: root focus
+  `<g transform="translate(150,160)"><path d="M100,60 Q100,90 100,120" stroke="#5a5a4a" stroke-width="4" fill="none"/><path d="M100,120 Q80,140 70,155" stroke="#8B7355" stroke-width="3" fill="none" opacity="0.8"/><path d="M100,120 Q120,145 130,150" stroke="#8B7355" stroke-width="3" fill="none" opacity="0.8"/><path d="M100,110 Q90,125 85,140" stroke="#8B7355" stroke-width="2.5" fill="none" opacity="0.7"/><circle cx="100" cy="60" r="12" fill="#5a6a7a"/><text x="100" y="165" fill="var(--muted)" font-size="12" text-anchor="middle">Root growth resumes</text></g>`,
+];
+
+function drawDetail(index){
+  const s=STAGES[index];
+  detailViz.innerHTML=`<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">${ILLUSTRATIONS[index]}</svg>`;
+  // Animate elements in
+  const g=detailViz.querySelector('svg > g');
+  if(g){
+    gsap.fromTo(g,{opacity:0,y:10},{opacity:1,y:0,duration:0.5,ease:'power2.out'});
+  }
+}
+
+// === Stage selection ===
+function selectStage(index, animateSlider=true){
+  activeIndex=index;
+  const s=STAGES[index];
+
+  // Rotate wheel so active segment is at top (12 o'clock)
+  const targetRotation=-index*30;
+  gsap.to('#segmentsGroup',{rotation:targetRotation,duration:0.8,ease:'back.out(1.2)'});
+  gsap.to('#labelsGroup',{rotation:targetRotation,duration:0.8,ease:'back.out(1.2)'});
+
+  // Highlight active segment
+  segEls.forEach((el,i)=>{
+    gsap.to(el,{scale:i===index?1.04:1,transformOrigin:'0px 0px',duration:0.4,ease:'power2.out'});
+    gsap.to(el,{opacity:i===index?1:0.7,duration:0.3});
+  });
+
+  // Hub update
+  gsap.to([hubMonth,hubStage],{opacity:0,duration:0.15,onComplete:()=>{
+    hubMonth.textContent=s.label;
+    hubStage.textContent=s.name;
+    hubDot.style.background=s.color;
+    hubDot.style.boxShadow=`0 0 8px ${s.color}`;
+    gsap.to([hubMonth,hubStage],{opacity:1,duration:0.2});
+  }});
+
+  // Hub pulse
+  gsap.fromTo('.hub',{scale:1},{scale:1.06,duration:0.15,yoyo:true,repeat:1,ease:'power2.out'});
+
+  // Panel text
+  gsap.to([panelTitle,panelDesc],{opacity:0,y:-6,duration:0.2,onComplete:()=>{
+    panelTitle.textContent=`${s.name} — ${s.label}`;
+    panelTitle.style.color=s.color;
+    panelDesc.textContent=s.desc;
+    gsap.to([panelTitle,panelDesc],{opacity:1,y:0,duration:0.3,ease:'power2.out'});
+  }});
+
+  // Metrics
+  gsap.to('#gddVal',{textContent:s.gdd,duration:0.6,snap:{textContent:5},ease:'power2.out'});
+  gsap.to('#brixVal',{textContent:s.brix,duration:0.4,ease:'power2.out'});
+  gsap.to('#phVal',{textContent:s.ph,duration:0.4,ease:'power2.out'});
+  gsap.to('#taVal',{textContent:s.ta,duration:0.4,ease:'power2.out'});
+  gsap.to('#soilTempVal',{textContent:s.soil,duration:0.5,snap:{textContent:0.5},ease:'power2.out'});
+  gsap.to('#rainVal',{textContent:s.rain,duration:0.5,snap:{textContent:5},ease:'power2.out'});
+
+  // Detail viz
+  drawDetail(index);
+
+  // Slider
+  if(animateSlider) slider.value=index;
+
+  // Telemetry chips update
+  updateTelemetry(index);
+}
+
+function updateTelemetry(idx){
+  const s=STAGES[idx];
+  const telemetry=document.getElementById('telemetry');
+  let html='';
+  html+=`<div class="chip"><span class="dot"></span>GDD: ${s.gdd}</div>`;
+  html+=`<div class="chip"><span class="dot ${s.brix==='—'?'low':(s.brix>18?'high':'')}"></span>Brix: ${s.brix}</div>`;
+  html+=`<div class="chip"><span class="dot ${s.ph==='—'?'low':(s.ph>3.4?'high':'')}"></span>pH: ${s.ph}</div>`;
+  html+=`<div class="chip"><span class="dot ${s.soil<12?'low':(s.soil>22?'high':'')}"></span>Soil: ${s.soil}°C</div>`;
+  html+=`<div class="chip"><span class="dot"></span>Rain: ${s.rain}mm</div>`;
+
+  // Replace with GSAP fade
+  if(telemetry.innerHTML!==''){
+    gsap.to(telemetry.children,{opacity:0,y:-4,stagger:0.02,duration:0.15,onComplete:()=>{
+      telemetry.innerHTML=html;
+      gsap.fromTo(telemetry.children,{opacity:0,y:4},{opacity:1,y:0,stagger:0.04,duration:0.25,ease:'power2.out'});
+    }});
+  } else {
+    telemetry.innerHTML=html;
+    gsap.fromTo(telemetry.children,{opacity:0,y:6},{opacity:1,y:0,stagger:0.05,duration:0.4,ease:'power2.out'});
+  }
+}
+
+// === Slider interaction ===
+slider.addEventListener('input',()=>{
+  const val=parseFloat(slider.value);
+  const idx=Math.round(val);
+  if(idx!==activeIndex) selectStage(idx,false);
+  // Smooth rotation following slider
+  const targetRotation=-val*30;
+  gsap.set('#segmentsGroup',{rotation:targetRotation});
+  gsap.set('#labelsGroup',{rotation:targetRotation});
+});
+
+// === Keyboard nav ===
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'){ selectStage((activeIndex+1)%12); }
+  if(e.key==='ArrowLeft'){ selectStage((activeIndex+11)%12); }
+});
+
+// === Ambient floating particles ===
+function spawnParticle(){
+  const p=document.createElement('div');
+  p.className='particle';
+  const size=Math.random()*4+2;
+  p.style.width=size+'px';
+  p.style.height=size+'px';
+  p.style.background=STAGES[activeIndex].color;
+  p.style.left=Math.random()*window.innerWidth+'px';
+  p.style.top=window.innerHeight+'px';
+  p.style.opacity=Math.random()*0.4+0.1;
+  document.body.appendChild(p);
+  gsap.to(p,{y:-window.innerHeight-20,x:(Math.random()-0.5)*100,duration:Math.random()*8+6,ease:'none',onComplete:()=>p.remove()});
+}
+setInterval(spawnParticle,800);
+
+// === Auto-rotate through seasons (gentle ambient motion) ===
+let autoRotating=true;
+function autoTick(){
+  if(!autoRotating) return;
+  const t=performance.now()*0.0003;
+  const idx=Math.floor(((t%12)+12)%12);
+  if(idx!==activeIndex) selectStage(idx,false);
+  slider.value=(t%12);
+  requestAnimationFrame(autoTick);
+}
+// Stop auto-rotate on first interaction
+function stopAuto(){ autoRotating=false; }
+wheelSvg.addEventListener('click',stopAuto);
+slider.addEventListener('mousedown',stopAuto);
+slider.addEventListener('touchstart',stopAuto);
+document.addEventListener('keydown',stopAuto);
+
+// === Init ===
+selectStage(0);
+autoTick();
+</script>
+</body>
+</html>
