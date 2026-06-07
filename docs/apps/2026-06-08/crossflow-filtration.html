@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Crossflow Filtration &amp; Membrane Fouling Simulator</title>
+<script>p5.disableFriendlyErrors = true;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0ece3; }
+  .disclaimer { position: sticky; top: 0; z-index: 100; background: #2a1a10; color: #e8b080; padding: 0.6rem 1rem; text-align: center; font-size: 0.8rem; border-bottom: 1px solid #5a3a20; }
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+  #ui-layer > * { pointer-events: auto; }
+  .panel { position: absolute; background: rgba(255, 252, 247, 0.94); border: 1px solid #d4cfc7; border-radius: 12px; padding: 0.9rem 1.1rem; max-width: min(280px, calc(100vw - 20px)); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+  .panel h3 { margin: 0 0 0.6rem; font-size: 0.95rem; color: #2d2a26; border-bottom: 1px solid #e2ddd4; padding-bottom: 0.4rem; }
+  .control { margin-bottom: 0.6rem; }
+  .control label { display: block; font-size: 0.78rem; color: #7a7268; margin-bottom: 0.2rem; }
+  .control input[type=range] { width: 100%; cursor: pointer; }
+  .control .val { display: inline-block; font-size: 0.75rem; color: #2d2a26; font-weight: 600; margin-left: 0.3rem; }
+  .metric { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.35rem; color: #5a544d; }
+  .metric b { color: #2d2a26; font-weight: 700; }
+  button { background: #2d2a26; color: #f0ece3; border: none; border-radius: 6px; padding: 0.5rem 0.9rem; font-size: 0.82rem; cursor: pointer; width: 100%; margin-top: 0.4rem; }
+  button:hover { background: #4a4239; }
+  button:active { transform: scale(0.98); }
+  .chart-label { font-size: 0.7rem; color: #7a7268; margin-top: 0.5rem; margin-bottom: 0.15rem; }
+  canvas.chart { width: 100%; height: 55px; background: rgba(0,0,0,0.03); border-radius: 4px; }
+
+  /* Positioning */
+  #controls-panel { top: 50px; left: 14px; width: 260px; }
+  #metrics-panel { top: 50px; right: 14px; width: 260px; }
+
+  @media (max-width: 768px) {
+    body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    #canvas-container { position: fixed; top: 0; left: 0; z-index: 0; height: 100vh; }
+    #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 50px 8px 20px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; z-index: 10; }
+    .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; padding: 0.7rem 0.9rem; background: rgba(255, 252, 247, 0.82); }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+<div id="canvas-container"></div>
+<div id="ui-layer">
+  <div class="panel" id="controls-panel">
+    <h3>Filtration Controls</h3>
+    <div class="control">
+      <label>TMP <span class="val" id="tmpVal">0.5 bar</span></label>
+      <input type="range" id="tmpSlider" min="0.1" max="2.0" step="0.1" value="0.5">
+    </div>
+    <div class="control">
+      <label>Crossflow Velocity <span class="val" id="velVal">1.0 m/s</span></label>
+      <input type="range" id="velSlider" min="0.3" max="3.0" step="0.1" value="1.0">
+    </div>
+    <div class="control">
+      <label>Membrane Pore Size <span class="val" id="poreVal">0.2 µm</span></label>
+      <input type="range" id="poreSlider" min="0.01" max="1.0" step="0.01" value="0.2">
+    </div>
+    <div class="control">
+      <label>Temperature <span class="val" id="tempVal">20 °C</span></label>
+      <input type="range" id="tempSlider" min="10" max="40" step="1" value="20">
+    </div>
+    <div class="control">
+      <label>Feed Turbidity <span class="val" id="turbVal">50 NTU</span></label>
+      <input type="range" id="turbSlider" min="10" max="200" step="10" value="50">
+    </div>
+    <button id="backpulseBtn">Backpulse Clean</button>
+    <button id="resetBtn" style="margin-top:6px;background:#7a7268;">Reset Simulation</button>
+  </div>
+
+  <div class="panel" id="metrics-panel">
+    <h3>Live Metrics</h3>
+    <div class="metric"><span>Permeate Flux</span><b id="fluxVal">0.0 LMH</b></div>
+    <div class="metric"><span>Fouling Resistance</span><b id="resVal">0.0 %</b></div>
+    <div class="metric"><span>Cake Thickness</span><b id="cakeVal">0.0 µm</b></div>
+    <div class="metric"><span>Permeate Vol</span><b id="volVal">0.00 L</b></div>
+    <div class="metric"><span>Rejection Rate</span><b id="rejVal">0.0 %</b></div>
+    <div class="chart-label">Flux History (LMH)</div>
+    <canvas id="fluxChart" class="chart" width="240" height="55"></canvas>
+    <div class="chart-label">Cake Thickness (µm)</div>
+    <canvas id="cakeChart" class="chart" width="240" height="55"></canvas>
+  </div>
+</div>
+
+<script>
+// === Configuration ===
+const CONFIG = {
+  seed: 42,
+  tmp: 0.5,
+  crossflowVelocity: 1.0,
+  poreSize: 0.2,
+  temperature: 20,
+  turbidity: 50,
+  backpulse: false,
+  backpulseTimer: 0,
+  paused: false
+};
+
+// === Color Palette ===
+const PALETTE = {
+  bg: '#f0ece3',
+  grid: '#e2ddd4',
+  wall: '#c4bdb0',
+  membrane: '#8fa8b8',
+  wineTint: [120, 20, 40],
+  yeast: [107, 26, 46],
+  bacteria: [61, 107, 61],
+  colloid: [139, 105, 20],
+  permeate: [212, 168, 67],
+  cake: [42, 10, 18],
+  chartLine: [45, 42, 38],
+  text: '#2d2a26'
+};
+
+// === Globals ===
+let particles = [];
+let permeateDrops = [];
+let cakeThickness = [];
+const cakeSegments = 120;
+let fluxHistory = [];
+let cakeHistory = [];
+let totalPermeateVol = 0;
+let totalRejected = 0;
+let totalPassed = 0;
+let channelX, channelY, channelW, channelH;
+let membraneY;
+let segmentWidth;
+const maxCakeVisual = 50;
+let lastFlux = 0;
+
+function setup() {
+  let canvas = createCanvas(windowWidth, windowHeight);
+  canvas.parent('canvas-container');
+  pixelDensity(1);
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+
+  initGeometry();
+  initCake();
+
+  // UI listeners
+  document.getElementById('tmpSlider').addEventListener('input', e => {
+    CONFIG.tmp = parseFloat(e.target.value);
+    document.getElementById('tmpVal').textContent = CONFIG.tmp.toFixed(1) + ' bar';
+  });
+  document.getElementById('velSlider').addEventListener('input', e => {
+    CONFIG.crossflowVelocity = parseFloat(e.target.value);
+    document.getElementById('velVal').textContent = CONFIG.crossflowVelocity.toFixed(1) + ' m/s';
+  });
+  document.getElementById('poreSlider').addEventListener('input', e => {
+    CONFIG.poreSize = parseFloat(e.target.value);
+    document.getElementById('poreVal').textContent = CONFIG.poreSize.toFixed(2) + ' µm';
+  });
+  document.getElementById('tempSlider').addEventListener('input', e => {
+    CONFIG.temperature = parseInt(e.target.value);
+    document.getElementById('tempVal').textContent = CONFIG.temperature + ' °C';
+  });
+  document.getElementById('turbSlider').addEventListener('input', e => {
+    CONFIG.turbidity = parseInt(e.target.value);
+    document.getElementById('turbVal').textContent = CONFIG.turbidity + ' NTU';
+  });
+  document.getElementById('backpulseBtn').addEventListener('click', () => {
+    CONFIG.backpulse = true;
+    CONFIG.backpulseTimer = 90;
+  });
+  document.getElementById('resetBtn').addEventListener('click', resetSimulation);
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  initGeometry();
+}
+
+function initGeometry() {
+  channelW = Math.min(width * 0.72, 960);
+  channelH = Math.min(height * 0.32, 240);
+  channelX = (width - channelW) / 2;
+  channelY = (height - channelH) / 2 - 30;
+  membraneY = channelY + channelH;
+  segmentWidth = channelW / cakeSegments;
+}
+
+function initCake() {
+  cakeThickness = new Array(cakeSegments).fill(0);
+}
+
+function resetSimulation() {
+  particles = [];
+  permeateDrops = [];
+  initCake();
+  fluxHistory = [];
+  cakeHistory = [];
+  totalPermeateVol = 0;
+  totalRejected = 0;
+  totalPassed = 0;
+}
+
+function draw() {
+  if (CONFIG.paused) return;
+
+  background(PALETTE.bg);
+  drawGrid();
+
+  // Backpulse countdown
+  if (CONFIG.backpulse) {
+    CONFIG.backpulseTimer--;
+    if (CONFIG.backpulseTimer <= 0) CONFIG.backpulse = false;
+  }
+
+  spawnParticles();
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    p.update();
+    if (p.dead) {
+      particles.splice(i, 1);
+    }
+  }
+
+  for (let i = permeateDrops.length - 1; i >= 0; i--) {
+    let d = permeateDrops[i];
+    d.update();
+    if (d.dead) {
+      permeateDrops.splice(i, 1);
+    }
+  }
+
+  updateCake();
+
+  drawChannel();
+  drawCake();
+  drawPermeateZone();
+
+  // Draw particles after channel so they appear inside
+  for (let p of particles) p.display();
+  for (let d of permeateDrops) d.display();
+
+  drawLabels();
+  drawGauge();
+
+  calculateMetrics();
+
+  if (frameCount % 6 === 0) {
+    updateDOMCharts();
+  }
+}
+
+function drawGrid() {
+  stroke(PALETTE.grid);
+  strokeWeight(1);
+  for (let x = 0; x < width; x += 50) line(x, 0, x, height);
+  for (let y = 0; y < height; y += 50) line(0, y, width, y);
+}
+
+function spawnParticles() {
+  let spawnRate = Math.floor(CONFIG.turbidity / 10);
+  if (CONFIG.backpulse) spawnRate = 0;
+  let maxSpeed = CONFIG.crossflowVelocity * 2.8;
+
+  for (let i = 0; i < spawnRate; i++) {
+    if (particles.length > 700) break;
+    let typeRoll = random(1);
+    let type, size, col;
+    if (typeRoll < 0.12) {
+      type = 'yeast';
+      size = random(4.5, 7.5);
+      col = PALETTE.yeast;
+    } else if (typeRoll < 0.32) {
+      type = 'bacteria';
+      size = random(2.2, 3.8);
+      col = PALETTE.bacteria;
+    } else {
+      type = 'colloid';
+      size = random(1.2, 2.4);
+      col = PALETTE.colloid;
+    }
+    let y = random(channelY + size + 4, membraneY - size - 4);
+    let vx = maxSpeed * flowProfile((y - channelY) / channelH);
+    particles.push(new Particle(channelX - random(10, 40), y, vx, 0, size, type, col));
+  }
+}
+
+function flowProfile(normY) {
+  return 4 * normY * (1 - normY);
+}
+
+function updateCake() {
+  let erosion = 0;
+  if (!CONFIG.backpulse) {
+    let shear = Math.pow(CONFIG.crossflowVelocity, 1.35) * 0.006;
+    erosion = shear;
+  } else {
+    erosion = 0.6;
+    for (let i = 0; i < cakeSegments; i++) {
+      if (cakeThickness[i] > 1.5 && random(1) < 0.12) {
+        let x = channelX + i * segmentWidth + random(segmentWidth);
+        let t = cakeThickness[i];
+        let type = random(1) < 0.3 ? 'yeast' : (random(1) < 0.5 ? 'bacteria' : 'colloid');
+        let size = type === 'yeast' ? random(4.5, 7.5) : (type === 'bacteria' ? random(2.2, 3.8) : random(1.2, 2.4));
+        let c = type === 'yeast' ? PALETTE.yeast : (type === 'bacteria' ? PALETTE.bacteria : PALETTE.colloid);
+        particles.push(new Particle(x, membraneY - t - size - 2, random(-1, 3), -random(1.5, 4.5), size, type, c));
+        cakeThickness[i] -= 0.6;
+      }
+    }
+  }
+  for (let i = 0; i < cakeSegments; i++) {
+    let factor = 0.4 + 0.6 * Math.min(cakeThickness[i] / 15, 1);
+    cakeThickness[i] = Math.max(0, cakeThickness[i] - erosion * factor);
+  }
+}
+
+function drawChannel() {
+  // Wine tint fill
+  noStroke();
+  fill(PALETTE.wineTint[0], PALETTE.wineTint[1], PALETTE.wineTint[2], 16);
+  rect(channelX + 2, channelY + 2, channelW - 4, channelH - 4, 4);
+
+  // Inner shadow
+  noFill();
+  stroke(0, 0, 0, 12);
+  strokeWeight(5);
+  line(channelX + 4, channelY + 6, channelX + 4, membraneY - 6);
+  line(channelX + channelW - 4, channelY + 6, channelX + channelW - 4, membraneY - 6);
+
+  // Walls
+  stroke(PALETTE.wall);
+  strokeWeight(3);
+  noFill();
+  rect(channelX, channelY, channelW, channelH, 3);
+
+  // Membrane line
+  stroke(PALETTE.membrane);
+  strokeWeight(5);
+  line(channelX, membraneY, channelX + channelW, membraneY);
+
+  // Pore marks
+  stroke(255, 255, 255, 60);
+  strokeWeight(2);
+  for (let x = channelX + 12; x < channelX + channelW - 10; x += 22) {
+    point(x, membraneY);
+  }
+}
+
+function drawCake() {
+  noStroke();
+  fill(PALETTE.cake[0], PALETTE.cake[1], PALETTE.cake[2], 210);
+  beginShape();
+  vertex(channelX, membraneY);
+  for (let i = 0; i < cakeSegments; i++) {
+    let x = channelX + i * segmentWidth;
+    let vis = Math.min(cakeThickness[i] * 1.4, maxCakeVisual);
+    let rough = noise(i * 0.15, frameCount * 0.02) * 2.5;
+    vertex(x, membraneY - vis + rough);
+  }
+  vertex(channelX + channelW, membraneY);
+  endShape(CLOSE);
+
+  // Cake top highlight
+  noFill();
+  stroke(90, 35, 50, 110);
+  strokeWeight(1.2);
+  beginShape();
+  for (let i = 0; i < cakeSegments; i++) {
+    let x = channelX + i * segmentWidth;
+    let vis = Math.min(cakeThickness[i] * 1.4, maxCakeVisual);
+    let rough = noise(i * 0.15, frameCount * 0.02) * 2.5;
+    vertex(x, membraneY - vis + rough);
+  }
+  endShape();
+}
+
+function drawPermeateZone() {
+  noStroke();
+  fill(240, 235, 225, 50);
+  rect(channelX + 2, membraneY + 3, channelW - 4, 70, 0, 0, 6, 6);
+
+  // Membrane glow where flux is high
+  if (lastFlux > 5 && !CONFIG.backpulse) {
+    let glowAlpha = Math.min(lastFlux, 150) * 0.35;
+    fill(PALETTE.permeate[0], PALETTE.permeate[1], PALETTE.permeate[2], glowAlpha);
+    noStroke();
+    for (let k = 0; k < 5; k++) {
+      let gx = channelX + random(channelW);
+      ellipse(gx, membraneY + 2, random(10, 24), random(3, 7));
+    }
+  }
+
+  fill(PALETTE.text);
+  noStroke();
+  textSize(11);
+  textAlign(CENTER);
+  text('PERMEATE COLLECTION', channelX + channelW / 2, membraneY + 62);
+}
+
+function drawLabels() {
+  fill(PALETTE.text);
+  noStroke();
+  textSize(12);
+  textAlign(LEFT);
+  text('FEED INLET', channelX + 8, channelY - 10);
+  textAlign(RIGHT);
+  text('RETENTATE OUTLET', channelX + channelW - 8, channelY - 10);
+}
+
+function drawGauge() {
+  // Small pressure gauge near inlet
+  let cx = channelX - 42;
+  let cy = channelY + channelH / 2;
+  noStroke();
+  fill(255, 252, 247, 220);
+  ellipse(cx, cy, 56, 56);
+  stroke(PALETTE.wall);
+  strokeWeight(2);
+  noFill();
+  ellipse(cx, cy, 56, 56);
+
+  // Needle
+  let angle = map(CONFIG.tmp, 0, 2.0, -PI * 0.75, PI * 0.75);
+  stroke(PALETTE.yeast[0], PALETTE.yeast[1], PALETTE.yeast[2], 200);
+  strokeWeight(2.5);
+  line(cx, cy, cx + cos(angle) * 20, cy + sin(angle) * 20);
+
+  fill(PALETTE.text);
+  noStroke();
+  textSize(9);
+  textAlign(CENTER);
+  text('TMP', cx, cy + 22);
+  text(CONFIG.tmp.toFixed(1) + ' bar', cx, cy + 32);
+}
+
+function calculateMetrics() {
+  let mu = 1.2e-3 * Math.exp(-0.025 * (CONFIG.temperature - 20));
+  let tmpPa = CONFIG.tmp * 1e5;
+  let Rm = 3e11 / (CONFIG.poreSize + 0.03);
+  let totalCake = cakeThickness.reduce((a, b) => a + b, 0);
+  let Rc = totalCake * 4e8;
+  let Rtot = Rm + Rc;
+  let J_ms = tmpPa / (mu * Rtot);
+  let fluxLMH = J_ms * 3.6e6;
+
+  if (CONFIG.backpulse) {
+    fluxLMH = -Math.abs(fluxLMH) * 1.5;
+  }
+  fluxLMH = Math.max(-200, Math.min(400, fluxLMH));
+  lastFlux = fluxLMH;
+
+  if (!CONFIG.backpulse && fluxLMH > 0) {
+    totalPermeateVol += fluxLMH * 0.0008;
+  }
+
+  let total = totalRejected + totalPassed;
+  let rejection = total > 0 ? (totalRejected / total) * 100 : 0;
+  let avgCakeMicron = totalCake > 0 ? (totalCake / cakeSegments) * 8 : 0;
+  let foulPct = Rtot > 0 ? (Rc / Rtot) * 100 : 0;
+
+  document.getElementById('fluxVal').textContent = fluxLMH.toFixed(1) + ' LMH';
+  document.getElementById('resVal').textContent = foulPct.toFixed(1) + ' %';
+  document.getElementById('cakeVal').textContent = avgCakeMicron.toFixed(1) + ' µm';
+  document.getElementById('volVal').textContent = totalPermeateVol.toFixed(2) + ' L';
+  document.getElementById('rejVal').textContent = rejection.toFixed(1) + ' %';
+
+  fluxHistory.push(fluxLMH);
+  cakeHistory.push(avgCakeMicron);
+  if (fluxHistory.length > 100) fluxHistory.shift();
+  if (cakeHistory.length > 100) cakeHistory.shift();
+}
+
+function updateDOMCharts() {
+  drawSparkline('fluxChart', fluxHistory, '#2d2a26', -50, 250);
+  drawSparkline('cakeChart', cakeHistory, '#6b1a2e', 0, 60);
+}
+
+function drawSparkline(canvasId, data, colorStr, minVal, maxVal) {
+  let canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  let ctx = canvas.getContext('2d');
+  let w = canvas.width;
+  let h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  if (data.length < 2) return;
+
+  ctx.strokeStyle = colorStr;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    let x = (i / (data.length - 1)) * w;
+    let norm = (data[i] - minVal) / (maxVal - minVal);
+    let y = h - norm * h;
+    y = Math.max(2, Math.min(h - 2, y));
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // area fill
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  let r = parseInt(colorStr.slice(1, 3), 16);
+  let g = parseInt(colorStr.slice(3, 5), 16);
+  let b = parseInt(colorStr.slice(5, 7), 16);
+  ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.12)';
+  ctx.fill();
+}
+
+// === Particle Class ===
+class Particle {
+  constructor(x, y, vx, vy, size, type, col) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.size = size;
+    this.type = type;
+    this.col = col;
+    this.dead = false;
+    this.age = 0;
+  }
+
+  update() {
+    if (this.dead) return;
+    this.age++;
+
+    let tempFactor = Math.sqrt(CONFIG.temperature / 20);
+    this.vx += random(-0.12, 0.12) * tempFactor;
+    this.vy += random(-0.12, 0.12) * tempFactor;
+    this.vx *= 0.985;
+    this.vy *= 0.985;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Backpulse blast near membrane
+    if (CONFIG.backpulse && this.y > membraneY - 40 && this.y < membraneY + 15) {
+      this.vy -= 0.7;
+      this.vx += random(-0.8, 0.8);
+    }
+
+    // Top wall
+    if (this.y - this.size < channelY) {
+      this.y = channelY + this.size;
+      this.vy *= -0.55;
+    }
+    // Membrane
+    if (this.y + this.size > membraneY) {
+      this.handleMembrane();
+    }
+    // Exit right
+    if (this.x > channelX + channelW + 20) {
+      this.dead = true;
+    }
+    // Exit left (during backpulse)
+    if (this.x < channelX - 60) {
+      this.dead = true;
+    }
+  }
+
+  handleMembrane() {
+    let effSize = this.size;
+    let pore = CONFIG.poreSize * 20;
+    let rejectProb = 0;
+    if (effSize > pore * 0.55) {
+      rejectProb = 1.0;
+    } else if (effSize < pore * 0.12) {
+      rejectProb = 0.0;
+    } else {
+      rejectProb = (effSize - pore * 0.12) / (pore * 0.43);
+    }
+
+    if (random(1) < rejectProb) {
+      let seg = Math.floor((this.x - channelX) / segmentWidth);
+      seg = constrain(seg, 0, cakeSegments - 1);
+      cakeThickness[seg] += this.size * 0.35;
+      totalRejected += 1;
+      this.dead = true;
+    } else {
+      totalPassed += 1;
+      this.dead = true;
+      permeateDrops.push(new PermeateDrop(this.x, membraneY + 3, this.size * 0.55));
+    }
+  }
+
+  display() {
+    noStroke();
+    let alpha = this.type === 'colloid' ? 170 : 225;
+    fill(this.col[0], this.col[1], this.col[2], alpha);
+    ellipse(this.x, this.y, this.size * 2);
+    // Specular highlight
+    fill(255, 255, 255, 55);
+    ellipse(this.x - this.size * 0.25, this.y - this.size * 0.25, this.size * 0.55);
+  }
+}
+
+// === Permeate Drop Class ===
+class PermeateDrop {
+  constructor(x, y, size) {
+    this.x = x;
+    this.y = y;
+    this.size = size;
+    this.vy = random(0.6, 1.8);
+    this.vx = random(-0.25, 0.25);
+    this.dead = false;
+  }
+
+  update() {
+    this.y += this.vy;
+    this.x += this.vx;
+    this.vx *= 0.92;
+    if (this.y > membraneY + 68) {
+      this.dead = true;
+    }
+  }
+
+  display() {
+    noStroke();
+    fill(PALETTE.permeate[0], PALETTE.permeate[1], PALETTE.permeate[2], 195);
+    ellipse(this.x, this.y, this.size * 2);
+    fill(255, 255, 255, 90);
+    ellipse(this.x - this.size * 0.2, this.y - this.size * 0.2, this.size * 0.45);
+  }
+}
+
+function keyPressed() {
+  if (key === 's' || key === 'S') saveCanvas('crossflow-filtration', 'png');
+  if (key === ' ') CONFIG.paused = !CONFIG.paused;
+}
+</script>
+</body>
+</html>
