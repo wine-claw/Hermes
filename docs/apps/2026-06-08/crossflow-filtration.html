@@ -2,47 +2,168 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate">
 <title>Wine Crossflow Filtration &amp; Membrane Fouling Simulator</title>
 <script>p5.disableFriendlyErrors = true;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
 <style>
-  html, body { margin: 0; padding: 0; overflow: hidden; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0ece3; }
-  .disclaimer { position: sticky; top: 0; z-index: 100; background: #2a1a10; color: #e8b080; padding: 0.6rem 1rem; text-align: center; font-size: 0.8rem; border-bottom: 1px solid #5a3a20; }
-  #canvas-container { position: fixed; inset: 0; z-index: 0; }
-  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
-  #ui-layer > * { pointer-events: auto; }
-  .panel { position: absolute; background: rgba(255, 252, 247, 0.94); border: 1px solid #d4cfc7; border-radius: 12px; padding: 0.9rem 1.1rem; max-width: min(280px, calc(100vw - 20px)); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-  .panel h3 { margin: 0 0 0.6rem; font-size: 0.95rem; color: #2d2a26; border-bottom: 1px solid #e2ddd4; padding-bottom: 0.4rem; }
-  .control { margin-bottom: 0.6rem; }
-  .control label { display: block; font-size: 0.78rem; color: #7a7268; margin-bottom: 0.2rem; }
-  .control input[type=range] { width: 100%; cursor: pointer; }
-  .control .val { display: inline-block; font-size: 0.75rem; color: #2d2a26; font-weight: 600; margin-left: 0.3rem; }
-  .metric { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.35rem; color: #5a544d; }
-  .metric b { color: #2d2a26; font-weight: 700; }
-  button { background: #2d2a26; color: #f0ece3; border: none; border-radius: 6px; padding: 0.5rem 0.9rem; font-size: 0.82rem; cursor: pointer; width: 100%; margin-top: 0.4rem; }
-  button:hover { background: #4a4239; }
-  button:active { transform: scale(0.98); }
-  .chart-label { font-size: 0.7rem; color: #7a7268; margin-top: 0.5rem; margin-bottom: 0.15rem; }
-  canvas.chart { width: 100%; height: 55px; background: rgba(0,0,0,0.03); border-radius: 4px; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body {
+    width:100%; height:100%; overflow:hidden;
+    background:#f0ece3; color:#2d2a26;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
 
-  /* Positioning */
-  #controls-panel { top: 50px; left: 14px; width: 260px; }
-  #metrics-panel { top: 50px; right: 14px; width: 260px; }
+  /* p5.js canvas container fills viewport */
+  #sim {
+    position:fixed; inset:0; z-index:0;
+    width:100%; height:100%;
+    touch-action:none;
+  }
 
+  /* Sticky disclaimer banner */
+  #disclaimer {
+    position:fixed; top:0; left:0; right:0; z-index:5;
+    background:#2a1a10; color:#e8b080;
+    padding:0.5rem 0.8rem; text-align:center; font-size:0.75rem;
+    border-bottom:1px solid #5a3a20;
+  }
+
+  /* ── MOBILE LAYOUT (default) ── */
+
+  /* Bottom action bar */
+  #bottom-bar {
+    position:fixed; bottom:0; left:0; right:0; z-index:10;
+    height:56px;
+    display:flex; align-items:center; justify-content:space-around;
+    background:rgba(42,26,16,0.92); backdrop-filter:blur(8px);
+    border-top:1px solid rgba(232,176,128,0.15);
+  }
+  #bottom-bar button {
+    flex:1; height:100%; border:none; background:transparent;
+    color:#e8b080; font-size:11px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:3px;
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  #bottom-bar button:active { color:#fff; }
+  #bottom-bar button .icon { font-size:18px; }
+
+  /* Slide-up drawers */
+  .drawer {
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    max-height:75vh; min-height:220px;
+    transform:translateY(100%);
+    transition:transform .35s cubic-bezier(.4,0,.2,1);
+    background:#1a120e; border-radius:16px 16px 0 0;
+    display:flex; flex-direction:column;
+    box-shadow:0 -8px 32px rgba(0,0,0,.5);
+    color:#f0ece3;
+  }
+  .drawer.open { transform:translateY(0); }
+  .drawer-handle {
+    width:100%; padding:12px 0 4px;
+    display:flex; justify-content:center; cursor:pointer;
+  }
+  .drawer-handle::after {
+    content:''; width:40px; height:4px; border-radius:2px;
+    background:rgba(232,176,128,.25);
+  }
+  .drawer-content {
+    flex:1; overflow-y:auto; padding:8px 16px 24px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .drawer-content h3 { font-size:14px; margin-bottom:10px; color:#fff; border-bottom:1px solid rgba(232,176,128,.2); padding-bottom:6px; }
+  .drawer-content p, .drawer-content label { font-size:13px; line-height:1.5; color:#d4cfc7; }
+
+  .control { margin-bottom:0.7rem; }
+  .control label { display:block; font-size:0.82rem; color:#b8b0a4; margin-bottom:0.25rem; }
+  .control input[type=range] { width:100%; cursor:pointer; }
+  .control .val { display:inline-block; font-size:0.78rem; color:#f0ece3; font-weight:600; margin-left:0.3rem; }
+
+  .metric { display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.4rem; color:#b8b0a4; }
+  .metric b { color:#f0ece3; font-weight:700; }
+
+  button.action {
+    background:#2d2a26; color:#f0ece3; border:none; border-radius:6px;
+    padding:0.55rem 0.9rem; font-size:0.85rem; cursor:pointer; width:100%; margin-top:0.5rem;
+  }
+  button.action:hover { background:#4a4239; }
+  button.action:active { transform:scale(0.98); }
+  button.secondary { background:#7a7268; }
+
+  .chart-label { font-size:0.72rem; color:#7a7268; margin-top:0.6rem; margin-bottom:0.2rem; }
+  canvas.chart { width:100%; height:55px; background:rgba(0,0,0,0.08); border-radius:4px; }
+
+  /* Drawer backdrop */
+  #backdrop {
+    position:fixed; inset:0; z-index:15;
+    background:rgba(0,0,0,.45); opacity:0;
+    transition:opacity .3s ease; pointer-events:none;
+  }
+  #backdrop.show { opacity:1; pointer-events:auto; }
+
+  /* ── DESKTOP LAYOUT ── */
+  @media (min-width: 769px) {
+    #bottom-bar { display:none !important; }
+    .drawer { display:none !important; }
+    #backdrop { display:none; }
+
+    .panel {
+      position:fixed; z-index:10;
+      width:280px; max-height:calc(100vh - 60px);
+      overflow-y:auto;
+      background:rgba(255,252,247,.95); backdrop-filter:blur(10px);
+      border:1px solid rgba(212,207,199,.6);
+      border-radius:12px; padding:14px;
+      color:#2d2a26;
+    }
+    #panel-left  { top:50px; left:14px; }
+    #panel-right { top:50px; right:14px; }
+
+    .panel h3 { margin:0 0 0.6rem; font-size:0.95rem; color:#2d2a26; border-bottom:1px solid #e2ddd4; padding-bottom:0.4rem; }
+    .panel .control label { color:#7a7268; }
+    .panel .control .val { color:#2d2a26; }
+    .panel .metric { color:#5a544d; }
+    .panel .metric b { color:#2d2a26; }
+    .panel button.action { background:#2d2a26; color:#f0ece3; }
+    .panel button.secondary { background:#7a7268; }
+  }
+
+  /* Mobile: hide desktop panels */
   @media (max-width: 768px) {
-    body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    #canvas-container { position: fixed; top: 0; left: 0; z-index: 0; height: 100vh; }
-    #ui-layer { position: relative; top: auto; left: auto; right: auto; bottom: auto; padding: 50px 8px 20px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; z-index: 10; }
-    .panel { position: relative !important; top: auto !important; left: auto !important; right: auto !important; bottom: auto !important; width: 100% !important; max-width: none !important; padding: 0.7rem 0.9rem; background: rgba(255, 252, 247, 0.82); }
+    .panel { display:none !important; }
   }
 </style>
 </head>
 <body>
-<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
-<div id="canvas-container"></div>
-<div id="ui-layer">
-  <div class="panel" id="controls-panel">
+
+<!-- p5.js canvas container -->
+<div id="sim"></div>
+
+<!-- Disclaimer -->
+<div id="disclaimer">⚠️ This app was made by AI. It is experimental and not professionally validated. Do not rely on it for any decisions.</div>
+
+<!-- Backdrop for drawer dismiss -->
+<div id="backdrop"></div>
+
+<!-- Mobile bottom action bar -->
+<nav id="bottom-bar">
+  <button onclick="openDrawer('controls')">
+    <span class="icon">🎛</span><span>Controls</span>
+  </button>
+  <button onclick="openDrawer('metrics')">
+    <span class="icon">📊</span><span>Metrics</span>
+  </button>
+  <button onclick="openDrawer('info')">
+    <span class="icon">ⓘ</span><span>Info</span>
+  </button>
+</nav>
+
+<!-- Mobile slide-up drawers -->
+<div class="drawer" id="drawer-controls">
+  <div class="drawer-handle" onclick="closeAllDrawers()"></div>
+  <div class="drawer-content">
     <h3>Filtration Controls</h3>
     <div class="control">
       <label>TMP <span class="val" id="tmpVal">0.5 bar</span></label>
@@ -64,11 +185,14 @@
       <label>Feed Turbidity <span class="val" id="turbVal">50 NTU</span></label>
       <input type="range" id="turbSlider" min="10" max="200" step="10" value="50">
     </div>
-    <button id="backpulseBtn">Backpulse Clean</button>
-    <button id="resetBtn" style="margin-top:6px;background:#7a7268;">Reset Simulation</button>
+    <button class="action" id="mobBackpulse">Backpulse Clean</button>
+    <button class="action secondary" id="mobReset" style="margin-top:6px;">Reset Simulation</button>
   </div>
+</div>
 
-  <div class="panel" id="metrics-panel">
+<div class="drawer" id="drawer-metrics">
+  <div class="drawer-handle" onclick="closeAllDrawers()"></div>
+  <div class="drawer-content">
     <h3>Live Metrics</h3>
     <div class="metric"><span>Permeate Flux</span><b id="fluxVal">0.0 LMH</b></div>
     <div class="metric"><span>Fouling Resistance</span><b id="resVal">0.0 %</b></div>
@@ -82,8 +206,134 @@
   </div>
 </div>
 
+<div class="drawer" id="drawer-info">
+  <div class="drawer-handle" onclick="closeAllDrawers()"></div>
+  <div class="drawer-content">
+    <h3>About</h3>
+    <p>This app simulates cross-flow membrane filtration for wine clarification. Adjust transmembrane pressure, velocity, pore size, temperature and feed turbidity to observe fouling dynamics, cake layer growth, and permeate flux decline in real time. Use backpulse cleaning to restore membrane performance.</p>
+    <p style="margin-top:12px; color:#e8b080;">⚠️ This app was made by AI. It is experimental and not professionally validated. Do not rely on it for any decisions.</p>
+  </div>
+</div>
+
+<!-- Desktop floating panels -->
+<aside class="panel" id="panel-left">
+  <h3>Filtration Controls</h3>
+  <div class="control">
+    <label>TMP <span class="val" id="desk-tmpVal">0.5 bar</span></label>
+    <input type="range" id="desk-tmpSlider" min="0.1" max="2.0" step="0.1" value="0.5">
+  </div>
+  <div class="control">
+    <label>Crossflow Velocity <span class="val" id="desk-velVal">1.0 m/s</span></label>
+    <input type="range" id="desk-velSlider" min="0.3" max="3.0" step="0.1" value="1.0">
+  </div>
+  <div class="control">
+    <label>Membrane Pore Size <span class="val" id="desk-poreVal">0.2 µm</span></label>
+    <input type="range" id="desk-poreSlider" min="0.01" max="1.0" step="0.01" value="0.2">
+  </div>
+  <div class="control">
+    <label>Temperature <span class="val" id="desk-tempVal">20 °C</span></label>
+    <input type="range" id="desk-tempSlider" min="10" max="40" step="1" value="20">
+  </div>
+  <div class="control">
+    <label>Feed Turbidity <span class="val" id="desk-turbVal">50 NTU</span></label>
+    <input type="range" id="desk-turbSlider" min="10" max="200" step="10" value="50">
+  </div>
+  <button class="action" id="deskBackpulse">Backpulse Clean</button>
+  <button class="action secondary" id="deskReset" style="margin-top:6px;">Reset Simulation</button>
+</aside>
+
+<aside class="panel" id="panel-right">
+  <h3>Live Metrics</h3>
+  <div class="metric"><span>Permeate Flux</span><b id="desk-fluxVal">0.0 LMH</b></div>
+  <div class="metric"><span>Fouling Resistance</span><b id="desk-resVal">0.0 %</b></div>
+  <div class="metric"><span>Cake Thickness</span><b id="desk-cakeVal">0.0 µm</b></div>
+  <div class="metric"><span>Permeate Vol</span><b id="desk-volVal">0.00 L</b></div>
+  <div class="metric"><span>Rejection Rate</span><b id="desk-rejVal">0.0 %</b></div>
+  <div class="chart-label">Flux History (LMH)</div>
+  <canvas id="desk-fluxChart" class="chart" width="240" height="55"></canvas>
+  <div class="chart-label">Cake Thickness (µm)</div>
+  <canvas id="desk-cakeChart" class="chart" width="240" height="55"></canvas>
+</aside>
+
 <script>
-// === Configuration ===
+  /* ── Drawer helpers ── */
+  function openDrawer(name) {
+    closeAllDrawers();
+    document.getElementById('drawer-'+name).classList.add('open');
+    document.getElementById('backdrop').classList.add('show');
+  }
+  function closeAllDrawers() {
+    document.querySelectorAll('.drawer').forEach(d=>d.classList.remove('open'));
+    document.getElementById('backdrop').classList.remove('show');
+  }
+  document.getElementById('backdrop').addEventListener('click', closeAllDrawers);
+
+  /* ── Bi-directional sync: mobile ↔ desktop sliders ── */
+  const syncPairs = [
+    ['tmpSlider','desk-tmpSlider'],
+    ['velSlider','desk-velSlider'],
+    ['poreSlider','desk-poreSlider'],
+    ['tempSlider','desk-tempSlider'],
+    ['turbSlider','desk-turbSlider']
+  ];
+  syncPairs.forEach(([mob,desk])=>{
+    const m=document.getElementById(mob), d=document.getElementById(desk);
+    if(!m||!d) return;
+    m.addEventListener('input',()=>{ d.value=m.value; d.dispatchEvent(new Event('input')); });
+    d.addEventListener('input',()=>{ m.value=d.value; m.dispatchEvent(new Event('input')); });
+  });
+
+  /* ── Button wiring (both mobile and desktop) ── */
+  function triggerBackpulse() {
+    CONFIG.backpulse = true;
+    CONFIG.backpulseTimer = 90;
+  }
+  function triggerReset() { resetSimulation(); }
+
+  document.getElementById('mobBackpulse').addEventListener('click', triggerBackpulse);
+  document.getElementById('deskBackpulse').addEventListener('click', triggerBackpulse);
+  document.getElementById('mobReset').addEventListener('click', triggerReset);
+  document.getElementById('deskReset').addEventListener('click', triggerReset);
+
+  /* ── Value label sync ── */
+  function updateLabels() {
+    document.getElementById('tmpVal').textContent = CONFIG.tmp.toFixed(1) + ' bar';
+    document.getElementById('desk-tmpVal').textContent = CONFIG.tmp.toFixed(1) + ' bar';
+    document.getElementById('velVal').textContent = CONFIG.crossflowVelocity.toFixed(1) + ' m/s';
+    document.getElementById('desk-velVal').textContent = CONFIG.crossflowVelocity.toFixed(1) + ' m/s';
+    document.getElementById('poreVal').textContent = CONFIG.poreSize.toFixed(2) + ' µm';
+    document.getElementById('desk-poreVal').textContent = CONFIG.poreSize.toFixed(2) + ' µm';
+    document.getElementById('tempVal').textContent = CONFIG.temperature + ' °C';
+    document.getElementById('desk-tempVal').textContent = CONFIG.temperature + ' °C';
+    document.getElementById('turbVal').textContent = CONFIG.turbidity + ' NTU';
+    document.getElementById('desk-turbVal').textContent = CONFIG.turbidity + ' NTU';
+  }
+
+  // Wire slider inputs to CONFIG and labels
+  ['tmpSlider','desk-tmpSlider'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.addEventListener('input',e=>{ CONFIG.tmp=parseFloat(e.target.value); updateLabels(); });
+  });
+  ['velSlider','desk-velSlider'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.addEventListener('input',e=>{ CONFIG.crossflowVelocity=parseFloat(e.target.value); updateLabels(); });
+  });
+  ['poreSlider','desk-poreSlider'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.addEventListener('input',e=>{ CONFIG.poreSize=parseFloat(e.target.value); updateLabels(); });
+  });
+  ['tempSlider','desk-tempSlider'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.addEventListener('input',e=>{ CONFIG.temperature=parseInt(e.target.value); updateLabels(); });
+  });
+  ['turbSlider','desk-turbSlider'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.addEventListener('input',e=>{ CONFIG.turbidity=parseInt(e.target.value); updateLabels(); });
+  });
+</script>
+
+<script>
+// === p5.js Simulation ===
 const CONFIG = {
   seed: 42,
   tmp: 0.5,
@@ -96,7 +346,6 @@ const CONFIG = {
   paused: false
 };
 
-// === Color Palette ===
 const PALETTE = {
   bg: '#f0ece3',
   grid: '#e2ddd4',
@@ -112,7 +361,6 @@ const PALETTE = {
   text: '#2d2a26'
 };
 
-// === Globals ===
 let particles = [];
 let permeateDrops = [];
 let cakeThickness = [];
@@ -130,40 +378,12 @@ let lastFlux = 0;
 
 function setup() {
   let canvas = createCanvas(windowWidth, windowHeight);
-  canvas.parent('canvas-container');
+  canvas.parent('sim');
   pixelDensity(1);
   randomSeed(CONFIG.seed);
   noiseSeed(CONFIG.seed);
-
   initGeometry();
   initCake();
-
-  // UI listeners
-  document.getElementById('tmpSlider').addEventListener('input', e => {
-    CONFIG.tmp = parseFloat(e.target.value);
-    document.getElementById('tmpVal').textContent = CONFIG.tmp.toFixed(1) + ' bar';
-  });
-  document.getElementById('velSlider').addEventListener('input', e => {
-    CONFIG.crossflowVelocity = parseFloat(e.target.value);
-    document.getElementById('velVal').textContent = CONFIG.crossflowVelocity.toFixed(1) + ' m/s';
-  });
-  document.getElementById('poreSlider').addEventListener('input', e => {
-    CONFIG.poreSize = parseFloat(e.target.value);
-    document.getElementById('poreVal').textContent = CONFIG.poreSize.toFixed(2) + ' µm';
-  });
-  document.getElementById('tempSlider').addEventListener('input', e => {
-    CONFIG.temperature = parseInt(e.target.value);
-    document.getElementById('tempVal').textContent = CONFIG.temperature + ' °C';
-  });
-  document.getElementById('turbSlider').addEventListener('input', e => {
-    CONFIG.turbidity = parseInt(e.target.value);
-    document.getElementById('turbVal').textContent = CONFIG.turbidity + ' NTU';
-  });
-  document.getElementById('backpulseBtn').addEventListener('click', () => {
-    CONFIG.backpulse = true;
-    CONFIG.backpulseTimer = 90;
-  });
-  document.getElementById('resetBtn').addEventListener('click', resetSimulation);
 }
 
 function windowResized() {
@@ -197,11 +417,9 @@ function resetSimulation() {
 
 function draw() {
   if (CONFIG.paused) return;
-
   background(PALETTE.bg);
   drawGrid();
 
-  // Backpulse countdown
   if (CONFIG.backpulse) {
     CONFIG.backpulseTimer--;
     if (CONFIG.backpulseTimer <= 0) CONFIG.backpulse = false;
@@ -212,37 +430,28 @@ function draw() {
   for (let i = particles.length - 1; i >= 0; i--) {
     let p = particles[i];
     p.update();
-    if (p.dead) {
-      particles.splice(i, 1);
-    }
+    if (p.dead) particles.splice(i, 1);
   }
 
   for (let i = permeateDrops.length - 1; i >= 0; i--) {
     let d = permeateDrops[i];
     d.update();
-    if (d.dead) {
-      permeateDrops.splice(i, 1);
-    }
+    if (d.dead) permeateDrops.splice(i, 1);
   }
 
   updateCake();
-
   drawChannel();
   drawCake();
   drawPermeateZone();
 
-  // Draw particles after channel so they appear inside
   for (let p of particles) p.display();
   for (let d of permeateDrops) d.display();
 
   drawLabels();
   drawGauge();
-
   calculateMetrics();
 
-  if (frameCount % 6 === 0) {
-    updateDOMCharts();
-  }
+  if (frameCount % 6 === 0) updateDOMCharts();
 }
 
 function drawGrid() {
@@ -262,17 +471,11 @@ function spawnParticles() {
     let typeRoll = random(1);
     let type, size, col;
     if (typeRoll < 0.12) {
-      type = 'yeast';
-      size = random(4.5, 7.5);
-      col = PALETTE.yeast;
+      type = 'yeast'; size = random(4.5, 7.5); col = PALETTE.yeast;
     } else if (typeRoll < 0.32) {
-      type = 'bacteria';
-      size = random(2.2, 3.8);
-      col = PALETTE.bacteria;
+      type = 'bacteria'; size = random(2.2, 3.8); col = PALETTE.bacteria;
     } else {
-      type = 'colloid';
-      size = random(1.2, 2.4);
-      col = PALETTE.colloid;
+      type = 'colloid'; size = random(1.2, 2.4); col = PALETTE.colloid;
     }
     let y = random(channelY + size + 4, membraneY - size - 4);
     let vx = maxSpeed * flowProfile((y - channelY) / channelH);
@@ -310,30 +513,25 @@ function updateCake() {
 }
 
 function drawChannel() {
-  // Wine tint fill
   noStroke();
   fill(PALETTE.wineTint[0], PALETTE.wineTint[1], PALETTE.wineTint[2], 16);
   rect(channelX + 2, channelY + 2, channelW - 4, channelH - 4, 4);
 
-  // Inner shadow
   noFill();
   stroke(0, 0, 0, 12);
   strokeWeight(5);
   line(channelX + 4, channelY + 6, channelX + 4, membraneY - 6);
   line(channelX + channelW - 4, channelY + 6, channelX + channelW - 4, membraneY - 6);
 
-  // Walls
   stroke(PALETTE.wall);
   strokeWeight(3);
   noFill();
   rect(channelX, channelY, channelW, channelH, 3);
 
-  // Membrane line
   stroke(PALETTE.membrane);
   strokeWeight(5);
   line(channelX, membraneY, channelX + channelW, membraneY);
 
-  // Pore marks
   stroke(255, 255, 255, 60);
   strokeWeight(2);
   for (let x = channelX + 12; x < channelX + channelW - 10; x += 22) {
@@ -355,7 +553,6 @@ function drawCake() {
   vertex(channelX + channelW, membraneY);
   endShape(CLOSE);
 
-  // Cake top highlight
   noFill();
   stroke(90, 35, 50, 110);
   strokeWeight(1.2);
@@ -374,7 +571,6 @@ function drawPermeateZone() {
   fill(240, 235, 225, 50);
   rect(channelX + 2, membraneY + 3, channelW - 4, 70, 0, 0, 6, 6);
 
-  // Membrane glow where flux is high
   if (lastFlux > 5 && !CONFIG.backpulse) {
     let glowAlpha = Math.min(lastFlux, 150) * 0.35;
     fill(PALETTE.permeate[0], PALETTE.permeate[1], PALETTE.permeate[2], glowAlpha);
@@ -403,7 +599,6 @@ function drawLabels() {
 }
 
 function drawGauge() {
-  // Small pressure gauge near inlet
   let cx = channelX - 42;
   let cy = channelY + channelH / 2;
   noStroke();
@@ -414,7 +609,6 @@ function drawGauge() {
   noFill();
   ellipse(cx, cy, 56, 56);
 
-  // Needle
   let angle = map(CONFIG.tmp, 0, 2.0, -PI * 0.75, PI * 0.75);
   stroke(PALETTE.yeast[0], PALETTE.yeast[1], PALETTE.yeast[2], 200);
   strokeWeight(2.5);
@@ -454,10 +648,15 @@ function calculateMetrics() {
   let foulPct = Rtot > 0 ? (Rc / Rtot) * 100 : 0;
 
   document.getElementById('fluxVal').textContent = fluxLMH.toFixed(1) + ' LMH';
+  document.getElementById('desk-fluxVal').textContent = fluxLMH.toFixed(1) + ' LMH';
   document.getElementById('resVal').textContent = foulPct.toFixed(1) + ' %';
+  document.getElementById('desk-resVal').textContent = foulPct.toFixed(1) + ' %';
   document.getElementById('cakeVal').textContent = avgCakeMicron.toFixed(1) + ' µm';
+  document.getElementById('desk-cakeVal').textContent = avgCakeMicron.toFixed(1) + ' µm';
   document.getElementById('volVal').textContent = totalPermeateVol.toFixed(2) + ' L';
+  document.getElementById('desk-volVal').textContent = totalPermeateVol.toFixed(2) + ' L';
   document.getElementById('rejVal').textContent = rejection.toFixed(1) + ' %';
+  document.getElementById('desk-rejVal').textContent = rejection.toFixed(1) + ' %';
 
   fluxHistory.push(fluxLMH);
   cakeHistory.push(avgCakeMicron);
@@ -468,6 +667,8 @@ function calculateMetrics() {
 function updateDOMCharts() {
   drawSparkline('fluxChart', fluxHistory, '#2d2a26', -50, 250);
   drawSparkline('cakeChart', cakeHistory, '#6b1a2e', 0, 60);
+  drawSparkline('desk-fluxChart', fluxHistory, '#2d2a26', -50, 250);
+  drawSparkline('desk-cakeChart', cakeHistory, '#6b1a2e', 0, 60);
 }
 
 function drawSparkline(canvasId, data, colorStr, minVal, maxVal) {
@@ -492,7 +693,6 @@ function drawSparkline(canvasId, data, colorStr, minVal, maxVal) {
   }
   ctx.stroke();
 
-  // area fill
   ctx.lineTo(w, h);
   ctx.lineTo(0, h);
   ctx.closePath();
@@ -503,56 +703,36 @@ function drawSparkline(canvasId, data, colorStr, minVal, maxVal) {
   ctx.fill();
 }
 
-// === Particle Class ===
 class Particle {
   constructor(x, y, vx, vy, size, type, col) {
-    this.x = x;
-    this.y = y;
-    this.vx = vx;
-    this.vy = vy;
-    this.size = size;
-    this.type = type;
-    this.col = col;
-    this.dead = false;
-    this.age = 0;
+    this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+    this.size = size; this.type = type; this.col = col;
+    this.dead = false; this.age = 0;
   }
 
   update() {
     if (this.dead) return;
     this.age++;
-
     let tempFactor = Math.sqrt(CONFIG.temperature / 20);
     this.vx += random(-0.12, 0.12) * tempFactor;
     this.vy += random(-0.12, 0.12) * tempFactor;
-    this.vx *= 0.985;
-    this.vy *= 0.985;
+    this.vx *= 0.985; this.vy *= 0.985;
+    this.x += this.vx; this.y += this.vy;
 
-    this.x += this.vx;
-    this.y += this.vy;
-
-    // Backpulse blast near membrane
     if (CONFIG.backpulse && this.y > membraneY - 40 && this.y < membraneY + 15) {
       this.vy -= 0.7;
       this.vx += random(-0.8, 0.8);
     }
 
-    // Top wall
     if (this.y - this.size < channelY) {
       this.y = channelY + this.size;
       this.vy *= -0.55;
     }
-    // Membrane
     if (this.y + this.size > membraneY) {
       this.handleMembrane();
     }
-    // Exit right
-    if (this.x > channelX + channelW + 20) {
-      this.dead = true;
-    }
-    // Exit left (during backpulse)
-    if (this.x < channelX - 60) {
-      this.dead = true;
-    }
+    if (this.x > channelX + channelW + 20) this.dead = true;
+    if (this.x < channelX - 60) this.dead = true;
   }
 
   handleMembrane() {
@@ -585,30 +765,21 @@ class Particle {
     let alpha = this.type === 'colloid' ? 170 : 225;
     fill(this.col[0], this.col[1], this.col[2], alpha);
     ellipse(this.x, this.y, this.size * 2);
-    // Specular highlight
     fill(255, 255, 255, 55);
     ellipse(this.x - this.size * 0.25, this.y - this.size * 0.25, this.size * 0.55);
   }
 }
 
-// === Permeate Drop Class ===
 class PermeateDrop {
   constructor(x, y, size) {
-    this.x = x;
-    this.y = y;
-    this.size = size;
-    this.vy = random(0.6, 1.8);
-    this.vx = random(-0.25, 0.25);
+    this.x = x; this.y = y; this.size = size;
+    this.vy = random(0.6, 1.8); this.vx = random(-0.25, 0.25);
     this.dead = false;
   }
 
   update() {
-    this.y += this.vy;
-    this.x += this.vx;
-    this.vx *= 0.92;
-    if (this.y > membraneY + 68) {
-      this.dead = true;
-    }
+    this.y += this.vy; this.x += this.vx; this.vx *= 0.92;
+    if (this.y > membraneY + 68) this.dead = true;
   }
 
   display() {
