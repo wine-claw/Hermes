@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="googlebot" content="noindex, nofollow">
+<title>Wine Must Maceration — Reaction-Diffusion Skin Contact Simulator</title>
+<style>
+  :root{
+    --bg:#0a0a0f;
+    --surface:rgba(18,22,30,0.92);
+    --border:#2a3441;
+    --text:#c9d1d9;
+    --muted:#8b949e;
+    --accent:#b76eff;
+    --accent2:#ff6b8a;
+    --wine:#7a1f3d;
+    --wine2:#4a154b;
+    --warn-bg:#2a1a10;
+    --warn-border:#5a3a20;
+    --warn-text:#e8b080;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html, body{ width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--text); }
+
+  /* Disclaimer banner */
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.65rem 1rem; text-align:center; font-size:0.82rem; position:sticky; top:0; z-index:100; }
+  .disclaimer strong{ font-weight:600; }
+
+  /* Canvas behind everything */
+  canvas#glcanvas{ position:fixed; inset:0; z-index:0; width:100%; height:100%; display:block; }
+
+  /* UI layer */
+  #ui-layer{ position:absolute; inset:0; z-index:10; pointer-events:none; }
+  #ui-layer > *{ pointer-events:auto; }
+
+  .panel{ position:absolute; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0.9rem 1.1rem; max-width:min(300px, calc(100vw - 20px)); backdrop-filter:blur(6px); }
+  .panel h2{ font-size:0.95rem; margin-bottom:0.6rem; display:flex; align-items:center; gap:0.4rem; }
+  .panel h2 .dot{ width:8px; height:8px; border-radius:50%; background:var(--accent); display:inline-block; }
+  .panel h2 .dot.running{ background:#39d353; animation:pulse 2s infinite; }
+  @keyframes pulse{ 0%{opacity:1} 50%{opacity:0.4} 100%{opacity:1} }
+
+  .row{ margin-bottom:0.7rem; }
+  .row label{ display:block; font-size:0.78rem; color:var(--muted); margin-bottom:0.25rem; }
+  .row input[type="range"]{ width:100%; accent-color:var(--accent); }
+  .row .val{ display:inline-block; font-variant-numeric:tabular-nums; font-weight:600; font-size:0.85rem; color:var(--text); }
+
+  /* Telemetry panel */
+  #panel-telemetry{ top:48px; right:12px; }
+  .metric{ display:flex; justify-content:space-between; font-size:0.82rem; margin-bottom:0.35rem; }
+  .metric span:first-child{ color:var(--muted); }
+  .metric span:last-child{ font-weight:600; font-variant-numeric:tabular-nums; }
+  .spark{ width:100%; height:44px; margin-top:0.4rem; border-radius:6px; background:rgba(0,0,0,0.25); }
+
+  /* Controls panel */
+  #panel-controls{ top:48px; left:12px; }
+
+  /* Preset chips */
+  .chips{ display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.5rem; }
+  .chip{ font-size:0.72rem; padding:0.25rem 0.55rem; border-radius:999px; border:1px solid var(--border); background:rgba(255,255,255,0.04); color:var(--muted); cursor:pointer; user-select:none; }
+  .chip:hover{ border-color:var(--accent); color:var(--text); }
+  .chip.active{ background:linear-gradient(135deg,var(--accent),var(--wine)); color:#fff; border-color:transparent; }
+
+  /* Hint */
+  .hint{ font-size:0.72rem; color:var(--muted); margin-top:0.5rem; }
+  .hint kbd{ background:rgba(255,255,255,0.08); padding:0.05rem 0.3rem; border-radius:4px; font-family:monospace; font-size:0.7rem; }
+
+  /* Close controls bar */
+  #panel-close{ position:absolute; top:48px; right:12px; pointer-events:auto; }
+  #btn-close{ background:rgba(12,18,28,0.85); border:1px solid var(--border); color:var(--muted); padding:0.4rem 0.7rem; border-radius:8px; font-size:0.75rem; cursor:pointer; }
+  #btn-close:hover{ color:var(--text); }
+
+  /* Mobile */
+  body.mobile { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  body.mobile canvas#glcanvas{ position:fixed; top:0; left:0; z-index:0; }
+  body.mobile #ui-layer{ position:relative; inset:auto; padding:44px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; pointer-events:auto; }
+  body.mobile .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:0.75rem 0.95rem; background:rgba(18,22,30,0.78); pointer-events:auto; }
+  body.mobile #panel-close{ position:relative !important; top:auto !important; right:auto !important; }
+  body.mobile #btn-close{ width:100%; }
+  body.mobile .chips{ gap:0.3rem; }
+
+  /* Collapse */
+  #ui-layer.collapsed .panel,
+  #ui-layer.collapsed #panel-close { display:none; }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> This mini-app is for educational and demonstration purposes only. Not for commercial or production use.</div>
+
+<canvas id="glcanvas"></canvas>
+
+<div id="ui-layer">
+  <div id="panel-controls" class="panel">
+    <h2><span class="dot running"></span> Must Maceration Simulation</h2>
+
+    <div class="row">
+      <label>Skin Contact Time <span class="val" id="v-skin">6</span> days</label>
+      <input type="range" id="r-skin" min="1" max="30" step="0.5" value="6">
+    </div>
+    <div class="row">
+      <label>Ferment Temperature <span class="val" id="v-temp">26</span> °C</label>
+      <input type="range" id="r-temp" min="18" max="34" step="0.5" value="26">
+    </div>
+    <div class="row">
+      <label>pH Shift <span class="val" id="v-ph">3.5</span></label>
+      <input type="range" id="r-ph" min="2.9" max="4.2" step="0.05" value="3.5">
+    </div>
+    <div class="row">
+      <label>Pump-over Intensity <span class="val" id="v-pump">0.3</span></label>
+      <input type="range" id="r-pump" min="0" max="1" step="0.05" value="0.3">
+    </div>
+    <div class="row">
+      <label>Seed Inclusion <span class="val" id="v-seed">0.15</span></label>
+      <input type="range" id="r-seed" min="0" max="0.4" step="0.01" value="0.15">
+    </div>
+
+    <div class="chips">
+      <div class="chip active" data-preset="pinot">Pinot Noir</div>
+      <div class="chip" data-preset="cab">Cabernet</div>
+      <div class="chip" data-preset="syrah">Syrah</div>
+      <div class="chip" data-preset="nebbiolo">Nebbiolo</div>
+      <div class="chip" data-preset="grenache">Grenache</div>
+    </div>
+
+    <p class="hint"><kbd>Drag</kbd> on canvas to inject must / stir.<br><kbd>Space</kbd> to pause · <kbd>R</kbd> to reset.</p>
+  </div>
+
+  <div id="panel-close">
+    <button id="btn-close">✕ Close controls</button>
+  </div>
+
+  <div id="panel-telemetry" class="panel">
+    <h2><span class="dot"></span> Extraction Telemetry</h2>
+    <div class="metric"><span>Anthocyanin Index</span><span id="m-anth">0.0</span></div>
+    <div class="metric"><span>Tannin Load</span><span id="m-tannin">0.0</span></div>
+    <div class="metric"><span>Extraction Efficiency</span><span id="m-eff">0%</span></div>
+    <div class="metric"><span>Phase</span><span id="m-phase">Cap management</span></div>
+    <canvas id="sparkline" class="spark" width="260" height="44"></canvas>
+  </div>
+</div>
+
+<script>
+/* ================================================================ */
+/*  Wine Must Maceration — Gray-Scott Reaction-Diffusion over WebGL */
+/* ================================================================ */
+
+const qs =(s)=>document.querySelector(s);
+const qsa=(s)=>document.querySelectorAll(s);
+
+// Mobile detect
+const isMobile = window.innerWidth <= 768;
+if(isMobile) document.body.classList.add('mobile');
+
+const canvas = qs('#glcanvas');
+const gl = canvas.getContext('webgl', { premultipliedAlpha:false, alpha:false }) || canvas.getContext('experimental-webgl');
+if(!gl){ alert('WebGL not supported'); }
+
+/* ------------------------------------------------- Uniform float handling */
+function setUniforms(prog, map){
+  for(const [name, val] of Object.entries(map)){
+    const loc = gl.getUniformLocation(prog, name);
+    if(loc===null) continue;
+    if(Array.isArray(val)){
+      if(val.length===1) gl.uniform1f(loc, val[0]);
+      if(val.length===2) gl.uniform2f(loc, val[0], val[1]);
+      if(val.length===3) gl.uniform3f(loc, val[0], val[1], val[2]);
+      if(val.length===4) gl.uniform4f(loc, val[0], val[1], val[2], val[3]);
+    } else {
+      gl.uniform1f(loc, val);
+    }
+  }
+}
+
+/* ------------------------------------------------- Shaders */
+const VERT = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const SIM_FRAG = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_res;
+uniform float u_feed;      // skin contact => feed
+uniform float u_kill;      // ethanol/seed => kill
+uniform float u_diffA;     // diffusion A
+uniform float u_diffB;     // diffusion B
+uniform float u_dt;
+uniform float u_pump;      // pump-over stir amplitude
+uniform float u_time;
+
+// domain-warped noise for organic skin texture
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p);
+  f = f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
+}
+float fbm(vec2 p){
+  float v=0.0, a=0.5;
+  for(int i=0;i<4;i++){ v+=a*noise(p); p*=2.0; a*=0.5; }
+  return v;
+}
+
+vec2 texel = vec2(1.0)/u_res;
+
+vec4 fetch(vec2 uv){
+  return texture2D(u_tex, uv);
+}
+
+void main(){
+  vec4 c = fetch(v_uv);
+  float a = c.r;
+  float b = c.g;
+
+  // laplacian 3x3
+  vec4 n = fetch(v_uv + vec2(0.0, texel.y));
+  vec4 s = fetch(v_uv - vec2(0.0, texel.y));
+  vec4 e = fetch(v_uv + vec2(texel.x, 0.0));
+  vec4 w = fetch(v_uv - vec2(texel.x, 0.0));
+  vec4 ne = fetch(v_uv + texel);
+  vec4 nw = fetch(v_uv + vec2(-texel.x, texel.y));
+  vec4 se = fetch(v_uv + vec2(texel.x, -texel.y));
+  vec4 sw = fetch(v_uv - texel);
+
+  float la = (n.r+s.r+e.r+w.r)*0.2 + (ne.r+nw.r+se.r+sw.r)*0.05 - a;
+  float lb = (n.g+s.g+e.g+w.g)*0.2 + (ne.g+nw.g+se.g+sw.g)*0.05 - b;
+
+  float reaction = a*b*b;
+
+  // subtle domain warp on feed to mimic cap heterogeneity
+  float warp = 1.0 + 0.15 * fbm(v_uv*8.0 + u_time*0.2);
+  float feed = u_feed * warp;
+
+  float na = a + (u_diffA*la - reaction + feed*(1.0-a)) * u_dt;
+  float nb = b + (u_diffB*lb + reaction - (u_kill + feed)*b) * u_dt;
+
+  // clamp
+  na = clamp(na, 0.0, 1.0);
+  nb = clamp(nb, 0.0, 1.0);
+
+  gl_FragColor = vec4(na, nb, c.b, 1.0);
+}`;
+
+const DISP_FRAG = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_ph;       // pH shift color control
+uniform float u_time;
+uniform vec2 u_res;
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p);
+  f = f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
+}
+float fbm(vec2 p){
+  float v=0.0, a=0.5;
+  for(int i=0;i<4;i++){ v+=a*noise(p); p*=2.0; a*=0.5; }
+  return v;
+}
+
+// oklab-ish rgb interpolation helpers
+vec3 srgbMix(vec3 a, vec3 b, float t){ return mix(a,b,t); }
+
+void main(){
+  vec4 c = texture2D(u_tex, v_uv);
+  float A = c.r;
+  float B = c.g;
+
+  // Color map: wine must anthocyanin palette
+  // low B -> clear must (pale berry)
+  // mid B -> crimson / violet
+  // high B -> deep purple-black
+  // pH shift warms (low pH=red) or cools (high pH=blue/mauve)
+
+  vec3 pale = vec3(0.92,0.82,0.78);
+  vec3 garnet = vec3(0.55,0.12,0.18);       // warm acidic
+  vec3 crimson = vec3(0.42,0.06,0.22);      // classic red
+  vec3 violet = vec3(0.28,0.06,0.38);       // rich mid
+  vec3 ink = vec3(0.06,0.02,0.10);          // over-extracted
+
+  float phFactor = (u_ph - 3.0) * 0.8; // 0 near 3.0, +1 near 4.2 (cooler)
+
+  float t = B;
+  vec3 col;
+  if(t < 0.2){
+    col = srgbMix(pale, garnet, t/0.2);
+  } else if(t < 0.5){
+    col = srgbMix(garnet, crimson, (t-0.2)/0.3);
+  } else if(t < 0.8){
+    col = srgbMix(crimson, violet, (t-0.5)/0.3);
+  } else {
+    col = srgbMix(violet, ink, (t-0.8)/0.2);
+  }
+
+  // pH shift: low pH = warm push toward garnet; high pH = cool push toward ink/violet
+  vec3 warm = vec3(0.70,0.18,0.12);
+  vec3 cool= vec3(0.15,0.04,0.28);
+  col = srgbMix(col, warm, max(0.0, -phFactor * 0.4));
+  col = srgbMix(col, cool, max(0.0,  phFactor * 0.4));
+
+  // subtle A channel tinting (cell wall matter / cap)
+  col = mix(col, vec3(0.45,0.30,0.18), A * 0.25);
+
+  // vignette
+  vec2 uv = v_uv - 0.5;
+  float vig = 1.0 - dot(uv, uv) * 1.8;
+  vig = clamp(vig, 0.0, 1.0);
+  col *= 0.3 + 0.7*vig;
+
+  // subtle film grain
+  float grain = (noise(v_uv*1200.0 + fract(u_time)*77.0) - 0.5) * 0.04;
+  col += grain;
+
+  gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
+}`;
+
+/* ------------------------------------------------- Program helpers */
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    console.error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+function prog(vs, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+const simProg = prog(VERT, SIM_FRAG);
+const dispProg = prog(VERT, DISP_FRAG);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+
+function bindAttribs(prg){
+  const loc = gl.getAttribLocation(prg, 'a_pos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+}
+
+/* ------------------------------------------------- Framebuffers */
+let W = Math.floor(window.innerWidth);
+let H = Math.floor(window.innerHeight);
+// reaction-diffusion texture size: smaller for diffusion stability on many devices
+let TW = Math.min(1024, W);
+let TH = Math.min(1024, H);
+
+function createTex(w,h){
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+
+function createFBO(tex){
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return fb;
+}
+
+let texA = createTex(TW, TH), fboA = createFBO(texA);
+let texB = createTex(TW, TH), fboB = createFBO(texB);
+
+function initField(){
+  const size = TW*TH*4;
+  const data = new Uint8Array(size);
+  for(let i=0;i<size;i+=4){
+    data[i]   = 255; // A=1
+    data[i+1] = 0;   // B=0
+    data[i+2] = 0;
+    data[i+3] = 255;
+  }
+  // Random seed spots
+  for(let k=0;k<12;k++){
+    const cx = Math.floor(Math.random()*TW);
+    const cy = Math.floor(Math.random()*TH);
+    const r  = Math.floor(Math.max(4, Math.min(TW,TH)*0.04));
+    for(let y=-r;y<=r;y++){
+      for(let x=-r;x<=r;x++){
+        if(x*x+y*y<=r*r){
+          const px = (cx+x+TW)%TW;
+          const py = (cy+y+TH)%TH;
+          const idx = (py*TW+px)*4;
+          data[idx]   = 0;
+          data[idx+1] = 255; // B=1 seed
+        }
+      }
+    }
+  }
+  gl.bindTexture(gl.TEXTURE_2D, texA);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, TW, TH, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+}
+initField();
+
+/* ------------------------------------------------- State / parameters */
+const PARAMS = {
+  skinDays: 6,
+  temp: 26,
+  ph: 3.5,
+  pump: 0.3,
+  seed: 0.15,
+  paused: false,
+};
+
+const PRESETS = {
+  pinot:    {feed:0.029, kill:0.057},
+  cab:      {feed:0.035, kill:0.060},
+  syrah:    {feed:0.032, kill:0.059},
+  nebbiolo: {feed:0.036, kill:0.062},
+  grenache: {feed:0.031, kill:0.056},
+};
+
+function feedFromUI(){ return 0.018 + (PARAMS.skinDays/30.0)*0.028; }
+function killFromUI(){ return 0.045 + (PARAMS.seed)*0.12 + (PARAMS.temp-18)/16.0*0.015; }
+function diffA(){ return 1.0; }
+function diffB(){ return 0.34 + (PARAMS.temp-18)/16.0*0.12; }
+
+/* ------------------------------------------------- UI wiring */
+function syncSlider(id, outId, key, scale=1, fmt=(v)=>v.toFixed(1)){
+  const el = qs('#'+id);
+  const out = qs('#'+outId);
+  el.addEventListener('input', ()=>{
+    PARAMS[key] = parseFloat(el.value);
+    out.textContent = fmt(PARAMS[key]);
+  });
+}
+syncSlider('r-skin','v-skin','skinDays',1,(v)=>v.toFixed(1));
+syncSlider('r-temp','v-temp','temp',1,(v)=>v.toFixed(1));
+syncSlider('r-ph','v-ph','ph',1,(v)=>v.toFixed(2));
+syncSlider('r-pump','v-pump','pump',1,(v)=>v.toFixed(2));
+syncSlider('r-seed','v-seed','seed',1,(v)=>v.toFixed(2));
+
+qsa('.chip').forEach(chip=>{
+  chip.addEventListener('click', ()=>{
+    qsa('.chip').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');
+    const p = PRESETS[chip.dataset.preset];
+    if(!p) return;
+    // Map preset feed/kill back to sliders for consistency
+    PARAMS.skinDays = Math.round(((p.feed-0.018)/0.028)*30);
+    PARAMS.seed = Math.max(0, (p.kill-0.045 - (PARAMS.temp-18)/16.0*0.015)/0.12);
+    // Update slider UIs
+    qs('#r-skin').value = PARAMS.skinDays;
+    qs('#v-skin').textContent = PARAMS.skinDays.toFixed(1);
+    qs('#r-seed').value = PARAMS.seed;
+    qs('#v-seed').textContent = PARAMS.seed.toFixed(2);
+  });
+});
+
+/* panels collapse */
+qs('#btn-close').addEventListener('click', ()=>{
+  qs('#ui-layer').classList.toggle('collapsed');
+});
+
+/* mouse/touch injection */
+let mouseDown=false, mx=0, my=0;
+function setMouse(x,y,down){ mx=x/TW; my=1.0-y/TH; mouseDown=down; }
+canvas.addEventListener('mousedown', e=>setMouse(e.clientX, e.clientY, true));
+window.addEventListener('mouseup', ()=>mouseDown=false);
+canvas.addEventListener('mousemove', e=>{ if(mouseDown) setMouse(e.clientX, e.clientY, true); else { mx=e.clientX/TW; my=1.0-e.clientY/TH; }});
+canvas.addEventListener('touchstart', e=>{ const t=e.touches[0]; setMouse(t.clientX, t.clientY, true); },{passive:false});
+canvas.addEventListener('touchmove', e=>{ const t=e.touches[0]; setMouse(t.clientX, t.clientY, true); e.preventDefault(); },{passive:false});
+window.addEventListener('touchend', ()=>mouseDown=false);
+
+/* keyboard */
+window.addEventListener('keydown', e=>{
+  if(e.code==='Space'){ PARAMS.paused=!PARAMS.paused; }
+  if(e.code==='KeyR'){ initField(); }
+});
+
+/* ------------------------------------------------- Sparkline */
+const sparkCanvas = qs('#sparkline');
+const sparkCtx = sparkCanvas.getContext('2d');
+let sparkHistory = [];
+const MAX_HIST = 120;
+
+function drawSparkline(anth, tannin, eff){
+  sparkHistory.push({a:anth, t:tannin, e:eff});
+  if(sparkHistory.length>MAX_HIST) sparkHistory.shift();
+  const w=sparkCanvas.width, h=sparkCanvas.height;
+  sparkCtx.clearRect(0,0,w,h);
+  if(sparkHistory.length<2) return;
+  function line(data, color, maxVal){
+    sparkCtx.beginPath();
+    sparkCtx.strokeStyle=color;
+    sparkCtx.lineWidth=1.5;
+    for(let i=0;i<data.length;i++){
+      const x = (i/(MAX_HIST-1))*w;
+      const y = h - (data[i]/maxVal)*h;
+      if(i===0) sparkCtx.moveTo(x,y); else sparkCtx.lineTo(x,y);
+    }
+    sparkCtx.stroke();
+  }
+  const as = sparkHistory.map(d=>d.a);
+  const ts = sparkHistory.map(d=>d.t);
+  const es = sparkHistory.map(d=>d.e);
+  line(as, '#b76eff', 1.0);
+  line(ts, '#ff6b8a', 1.0);
+  line(es, '#58a6ff', 100);
+}
+
+/* ------------------------------------------------- Resize */
+function resize(){
+  W = Math.floor(window.innerWidth);
+  H = Math.floor(window.innerHeight);
+  canvas.width=W; canvas.height=H;
+  // reaction texture stays fixed TW x TH for performance; we scale via uv
+  gl.viewport(0,0,W,H);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ------------------------------------------------- Step & Render */
+let lastAvgB = 0.0;
+let lastEff = 0.0;
+
+function stepSim(){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+  gl.viewport(0,0,TW,TH);
+  gl.useProgram(simProg);
+  bindAttribs(simProg);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texA);
+  setUniforms(simProg, {
+    u_tex:0,
+    u_res:[TW,TH],
+    u_feed:feedFromUI(),
+    u_kill:killFromUI(),
+    u_diffA:diffA(),
+    u_diffB:diffB(),
+    u_dt:1.0,
+    u_pump:PARAMS.pump,
+    u_time:performance.now()*0.001,
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  // swap
+  let tmp=texA; texA=texB; texB=tmp;
+  tmp=fboA; fboA=fboB; fboB=tmp;
+}
+
+function paint(){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0,0,W,H);
+  gl.useProgram(dispProg);
+  bindAttribs(dispProg);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texA);
+  setUniforms(dispProg, {
+    u_tex:0,
+    u_ph:PARAMS.ph,
+    u_time:performance.now()*0.001,
+    u_res:[W,H],
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+// compute averages for telemetry by reading back a tiny region (expensive full read only every ~15 frames)
+let frameCount=0;
+function telemetry(){
+  // Use approximations from shader state to avoid heavy GPU readback
+  const feed = feedFromUI();
+  const kill = killFromUI();
+  const eff = Math.min(100, (feed*8.5 + PARAMS.pump*25 + PARAMS.skinDays*1.5));
+  const anth = Math.min(1.0, feed*12.0 + PARAMS.pump*0.3);
+  const tannin = Math.min(1.0, kill*8.0 + PARAMS.seed*2.0);
+  qs('#m-anth').textContent = anth.toFixed(3);
+  qs('#m-tannin').textContent = tannin.toFixed(3);
+  qs('#m-eff').textContent = Math.round(eff) + '%';
+
+  let phase = 'Cap management';
+  if(PARAMS.skinDays<2) phase='Cold soak';
+  else if(PARAMS.skinDays<6) phase='Ferment + skin contact';
+  else if(PARAMS.skinDays<15) phase='Extended maceration';
+  else phase='Post-ferment soak';
+  qs('#m-phase').textContent = phase;
+
+  drawSparkline(anth, tannin, eff);
+  lastAvgB = anth;
+  lastEff = eff;
+}
+
+/* ------------------------------------------------- Main loop */
+function loop(){
+  if(!PARAMS.paused){
+    stepSim();
+  }
+  paint();
+  frameCount++;
+  if(frameCount%6===0) telemetry();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* initial telemetry */
+telemetry();
+</script>
+</body>
+</html>
