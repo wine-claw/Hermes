@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Pour & Swirl Dynamics</title>
+<style>
+  :root{
+    --bg:#06070a;
+    --panel:rgba(14,18,28,0.92);
+    --border:#2a3441;
+    --text:#c9d1d9;
+    --muted:#8b949e;
+    --accent:#e86a56;
+    --accent2:#58a6ff;
+    --wine-dark:#2d0a1e;
+    --wine-mid:#7a1f3a;
+    --wine-light:#b85c3f;
+  }
+  html,body{ margin:0; padding:0; overflow:hidden; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  canvas{ display:block; touch-action:none; }
+
+  .disclaimer{ background:#2a1a10; border-bottom:1px solid #5a3a20; color:#e8b080; padding:0.6rem 1rem; text-align:center; font-size:0.78rem; position:sticky; top:0; z-index:200; }
+
+  #ui-layer{ position:absolute; inset:0; pointer-events:none; z-index:10; }
+  #ui-layer > * { pointer-events:auto; }
+
+  .panel{ position:absolute; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:0.9rem 1.1rem; backdrop-filter:blur(6px); max-width:min(280px, calc(100vw - 20px)); }
+  .panel h2{ font-size:0.95rem; margin:0 0 0.6rem; color:var(--accent); }
+  .panel label{ display:block; font-size:0.78rem; color:var(--muted); margin:0.5rem 0 0.15rem; }
+  .panel input[type="range"]{ width:100%; accent-color:var(--accent); }
+  .panel select{ width:100%; background:#0f1320; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.35rem 0.5rem; font-size:0.85rem; }
+  .panel .value{ font-size:0.75rem; color:var(--muted); text-align:right; }
+  .panel button{ background:linear-gradient(135deg,var(--accent),#c94f42); color:#fff; border:none; border-radius:8px; padding:0.45rem 0.8rem; font-size:0.82rem; cursor:pointer; font-weight:600; margin-top:0.5rem; width:100%; }
+  .panel button:hover{ filter:brightness(1.1); }
+
+  .readout{ position:absolute; top:48px; right:10px; display:flex; flex-direction:column; gap:0.35rem; pointer-events:none; }
+  .badge{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:0.35rem 0.6rem; font-size:0.72rem; color:var(--muted); backdrop-filter:blur(4px); }
+  .badge strong{ color:var(--text); font-size:0.82rem; }
+
+  /* Mobile */
+  @media (max-width:768px){
+    body{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    canvas{ position:fixed; top:0; left:0; z-index:0; }
+    #ui-layer{ position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:50px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; }
+    .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:0.6rem 0.85rem; background:rgba(14,18,28,0.78); }
+    .readout{ position:relative !important; top:auto !important; right:auto !important; flex-direction:row; flex-wrap:wrap; pointer-events:none; }
+    .disclaimer{ font-size:0.72rem; padding:0.45rem 0.6rem; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<canvas id="sim"></canvas>
+<div id="ui-layer">
+  <div class="panel" id="ctrl-panel" style="top:48px; left:10px;">
+    <h2>Controls</h2>
+    <label>Glass Type</label>
+    <select id="glassSelect">
+      <option value="bordeaux">Bordeaux (tall, broad)</option>
+      <option value="burgundy">Burgundy (wide bowl)</option>
+      <option value="flute">Champagne Flute</option>
+      <option value="iso">ISO Tasting</option>
+    </select>
+    <label>Wine Fill <span class="value" id="fillVal">60%</span></label>
+    <input id="fillRange" type="range" min="15" max="85" value="60">
+    <label>Pour Rate <span class="value" id="pourVal">Off</span></label>
+    <input id="pourRange" type="range" min="0" max="100" value="0">
+    <label>Swirl Intensity <span class="value" id="swirlVal">Medium</span></label>
+    <input id="swirlRange" type="range" min="0" max="100" value="40">
+    <label>Temperature <span class="value" id="tempVal">18 °C</span></label>
+    <input id="tempRange" type="range" min="4" max="30" value="18">
+    <button id="autoSwirlBtn">Toggle Auto-Swirl</button>
+  </div>
+
+  <div class="readout" id="readout">
+    <div class="badge">Surface Area<br><strong id="saOut">0</strong> cm²</div>
+    <div class="badge">Dissolved O₂<br><strong id="doOut">0</strong> mg/L</div>
+    <div class="badge">Swirl RPM<br><strong id="rpmOut">0</strong></div>
+    <div class="badge">Leg Density<br><strong id="legOut">0</strong></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+let W, H, CX, CY, SCALE;
+
+function resize(){
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * Math.min(window.devicePixelRatio||1, 2);
+  canvas.height = H * Math.min(window.devicePixelRatio||1, 2);
+  canvas.style.width = W+'px';
+  canvas.style.height = H+'px';
+  ctx.setTransform(Math.min(window.devicePixelRatio||1, 2), 0, 0, Math.min(window.devicePixelRatio||1, 2), 0, 0);
+  CX = W/2;
+  CY = H*0.75;
+  SCALE = Math.min(W, H) / 900;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// === Configuration ===
+const CONFIG = {
+  glass: 'bordeaux',
+  fillPct: 0.60,
+  pourRate: 0,
+  swirlIntensity: 0.4,
+  temperature: 18,
+  autoSwirl: false,
+  gravity: 0.25,
+  surfaceTension: 0.12,
+  damping: 0.96,
+  viscosity: 0.015,
+};
+
+// === Glass Profiles: array of {yNorm, radiusNorm} from bottom (0) to rim (1) ===
+const GLASS_PROFILES = {
+  bordeaux: [
+    {y:0.00, r:0.18},{y:0.05, r:0.22},{y:0.10, r:0.28},{y:0.18, r:0.38},{y:0.28, r:0.48},
+    {y:0.40, r:0.56},{y:0.52, r:0.60},{y:0.64, r:0.62},{y:0.76, r:0.60},{y:0.88, r:0.52},{y:0.95, r:0.42},{y:1.00, r:0.38}
+  ],
+  burgundy: [
+    {y:0.00, r:0.20},{y:0.04, r:0.30},{y:0.08, r:0.42},{y:0.14, r:0.58},{y:0.24, r:0.78},
+    {y:0.38, r:0.90},{y:0.54, r:0.92},{y:0.68, r:0.86},{y:0.80, r:0.72},{y:0.90, r:0.56},{y:0.96, r:0.44},{y:1.00, r:0.38}
+  ],
+  flute: [
+    {y:0.00, r:0.16},{y:0.05, r:0.18},{y:0.15, r:0.22},{y:0.35, r:0.26},{y:0.55, r:0.28},
+    {y:0.72, r:0.28},{y:0.84, r:0.26},{y:0.93, r:0.22},{y:0.97, r:0.18},{y:1.00, r:0.16}
+  ],
+  iso: [
+    {y:0.00, r:0.20},{y:0.06, r:0.30},{y:0.14, r:0.42},{y:0.26, r:0.54},{y:0.42, r:0.62},
+    {y:0.58, r:0.64},{y:0.72, r:0.60},{y:0.84, r:0.50},{y:0.93, r:0.38},{y:1.00, r:0.32}
+  ]
+};
+
+// === Physics State ===
+let nodes = [];
+let particles = [];
+let bubbles = [];
+let legs = [];
+let glassHeight = 500; // base pixels, scaled by SCALE
+let glassWidthMax = 240;
+let swirlPhase = 0;
+let swirlAngularVel = 0;
+let targetAngularVel = 0;
+let glassAngle = 0;
+let dissolveO2 = 2.5; // mg/L at start
+let surfaceArea = 0;
+let pourTimer = 0;
+let totalVolume = 0; // abstract volume units
+let splashCooldown = 0;
+let mouseX = 0, mouseY = 0, lastMouseX = 0;
+let mouseDragging = false;
+
+function getGlassRadiusAtY(yNorm){
+  const prof = GLASS_PROFILES[CONFIG.glass];
+  if(yNorm <= prof[0].y) return prof[0].r;
+  if(yNorm >= prof[prof.length-1].y) return prof[prof.length-1].r;
+  for(let i=0;i<prof.length-1;i++){
+    if(yNorm >= prof[i].y && yNorm <= prof[i+1].y){
+      const t = (yNorm - prof[i].y)/(prof[i+1].y - prof[i].y);
+      return prof[i].r + t*(prof[i+1].r - prof[i].r);
+    }
+  }
+  return prof[prof.length-1].r;
+}
+
+function initLiquid(){
+  nodes = [];
+  const n = 120;
+  for(let i=0;i<=n;i++){
+    nodes.push({
+      idx: i,
+      xNorm: i/n, // 0..1 across interior
+      yOffset: 0,
+      vel: 0,
+      acc: 0,
+    });
+  }
+}
+initLiquid();
+
+function glassR(yNorm){ return getGlassRadiusAtY(yNorm); }
+
+// Target waterline based on fill percentage and cross-sectional area
+function computeTargetWaterline(){
+  const prof = GLASS_PROFILES[CONFIG.glass];
+  const targetArea = CONFIG.fillPct * 0.01;
+  // approximate area under radius curve squared
+  let totalArea = 0;
+  const steps = 200;
+  for(let i=0;i<steps;i++){
+    const y = i/steps;
+    totalArea += Math.PI * Math.pow(glassR(y),2) * (1/steps);
+  }
+  let acc = 0;
+  for(let i=0;i<steps;i++){
+    const y = i/steps;
+    acc += Math.PI * Math.pow(glassR(y),2) * (1/steps);
+    if(acc >= targetArea * totalArea) return y;
+  }
+  return 0.5;
+}
+
+let targetWaterline = computeTargetWaterline();
+
+// === Particles: splash droplets ===
+class SplashParticle {
+  constructor(xScreen, yScreen, vx, vy, size, life){
+    this.x = xScreen; this.y = yScreen;
+    this.vx = vx; this.vy = vy;
+    this.size = size;
+    this.life = life; this.maxLife = life;
+    this.color = `rgba(${180+Math.random()*60},${40+Math.random()*30},${50+Math.random()*40},`;
+  }
+  update(){
+    this.vy += 0.15;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life--;
+  }
+  draw(ctx){
+    const a = Math.max(0, this.life/this.maxLife);
+    ctx.fillStyle = this.color + a.toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size*a, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// === Bubbles: dissolved O2 rising ===
+class Bubble {
+  constructor(xScreen, yScreen){
+    this.x = xScreen + (Math.random()-0.5)*20;
+    this.y = yScreen;
+    this.r = 1 + Math.random()*2.5;
+    this.vy = -0.5 - Math.random()*1.5;
+    this.wobble = Math.random()*Math.PI*2;
+    this.life = 120 + Math.random()*60;
+    this.maxLife = this.life;
+  }
+  update(){
+    this.wobble += 0.1;
+    this.y += this.vy;
+    this.x += Math.sin(this.wobble)*0.3;
+    this.life--;
+  }
+  draw(ctx){
+    const a = Math.max(0, Math.min(1, this.life/this.maxLife));
+    ctx.fillStyle = `rgba(220,235,255,${(a*0.55).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r*a, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// === Wine Legs: rivulets on glass wall ===
+class WineLeg {
+  constructor(side, yNormStart){
+    this.side = side; // -1 left, 1 right
+    this.yNorm = yNormStart;
+    this.vyNorm = 0.0005 + Math.random()*0.002;
+    this.width = 1.2 + Math.random()*2.5;
+    this.alpha = 0.4 + Math.random()*0.35;
+  }
+  update(){
+    this.yNorm += this.vyNorm;
+    this.vyNorm *= 1.005; // accelerate slightly
+    // taper
+    this.alpha -= 0.001;
+  }
+  active(){ return this.alpha > 0 && this.yNorm < 1.0; }
+  draw(ctx, prof){
+    const r = glassR(this.yNorm);
+    const gx = CX + this.side * r * glassWidthMax * SCALE;
+    const gy = CY - this.yNorm * glassHeight * SCALE;
+    const r2 = glassR(Math.min(1, this.yNorm + 0.015));
+    const gx2 = CX + this.side * r2 * glassWidthMax * SCALE;
+    const gy2 = CY - (this.yNorm + 0.015) * glassHeight * SCALE;
+    ctx.strokeStyle = `rgba(200,120,90,${this.alpha.toFixed(3)})`;
+    ctx.lineWidth = this.width;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(gx, gy);
+    ctx.lineTo(gx2, gy2);
+    ctx.stroke();
+  }
+}
+
+// === Surface Mesh / Spring Physics ===
+function updateSurface(dt){
+  targetWaterline = computeTargetWaterline();
+  const n = nodes.length;
+  const k = CONFIG.surfaceTension;
+  const damp = CONFIG.damping;
+  const g = CONFIG.gravity;
+
+  // Base waterline Y in screen coords
+  const baseY = CY - targetWaterline * glassHeight * SCALE;
+
+  // Compute glass interior width at target waterline
+  const rAtWL = glassR(targetWaterline);
+  const halfWidth = rAtWL * glassWidthMax * SCALE;
+
+  // Update node x positions to match current glass width at their waterline layer
+  for(let i=0;i<n;i++){
+    const node = nodes[i];
+    node.xScreen = CX - halfWidth + node.xNorm * 2 * halfWidth;
+  }
+
+  // Swirl drive: angular oscillation plus manual / auto swirl
+  let swirlInput = 0;
+  if(CONFIG.autoSwirl){
+    swirlPhase += 0.04 + CONFIG.swirlIntensity * 0.001;
+    swirlInput = Math.sin(swirlPhase) * CONFIG.swirlIntensity * 0.6;
+  } else if(mouseDragging){
+    // derive swirl from horizontal mouse velocity
+    swirlInput = (mouseX - lastMouseX) * 0.15;
+  }
+
+  // Target angular velocity (glass rocking)
+  targetAngularVel = targetAngularVel * 0.92 + swirlInput * 0.08;
+  swirlAngularVel = swirlAngularVel * 0.95 + targetAngularVel * 0.05;
+  glassAngle += swirlAngularVel * 0.02;
+  glassAngle *= 0.98; // return to upright
+
+  // Centripetal / gravity slosh on each node
+  for(let i=0;i<n;i++){
+    const node = nodes[i];
+    const relX = (node.xNorm - 0.5) * 2; // -1 to 1
+    // Gravity tilt
+    const tiltForce = -Math.sin(glassAngle) * relX * g * 18;
+    // Centrifugal from swirl
+    const centrifugal = relX * Math.abs(swirlAngularVel) * 0.35;
+    // Restoring toward base waterline
+    const restore = (baseY - (CY - targetWaterline*glassHeight*SCALE + node.yOffset)) * 0.008;
+    // Actually restore is simply -node.yOffset * spring constant
+    const restoreSimple = -node.yOffset * 0.04;
+
+    node.acc = tiltForce + centrifugal + restoreSimple;
+  }
+
+  // Spring neighbors
+  for(let i=0;i<n;i++){
+    const node = nodes[i];
+    let force = 0;
+    if(i>0){ const d = nodes[i-1].yOffset - node.yOffset; force += d * k; }
+    if(i<n-1){ const d = nodes[i+1].yOffset - node.yOffset; force += d * k; }
+    node.acc += force;
+  }
+
+  // Integrate
+  for(let i=0;i<n;i++){
+    const node = nodes[i];
+    node.vel += node.acc;
+    node.vel *= damp;
+    // Viscosity (based on temp)
+    const visc = CONFIG.viscosity * (1 - (CONFIG.temperature - 4)/26 * 0.4);
+    node.vel *= (1 - visc);
+    node.yOffset += node.vel;
+    node.acc = 0;
+  }
+
+  // Volume correction: total area under surface should equal target
+  // approximate mean offset
+  let meanOffset = 0;
+  for(let node of nodes) meanOffset += node.yOffset;
+  meanOffset /= n;
+  for(let node of nodes) node.yOffset -= meanOffset * 0.02;
+
+  // Clamp to glass walls
+  for(let i=0;i<n;i++){
+    const node = nodes[i];
+    const wallTop = -targetWaterline * glassHeight * SCALE + 20;
+    const wallBottom = (1-targetWaterline) * glassHeight * SCALE - 20;
+    if(node.yOffset < wallTop) node.yOffset = wallTop;
+    if(node.yOffset > wallBottom) node.yOffset = wallBottom;
+  }
+
+  // Smoothing pass (Laplacian)
+  const smoothed = nodes.map((node,i)=>{
+    if(i===0 || i===nodes.length-1) return node.yOffset;
+    return node.yOffset*0.5 + (nodes[i-1].yOffset + nodes[i+1].yOffset)*0.25;
+  });
+  for(let i=1;i<n-1;i++) nodes[i].yOffset = smoothed[i];
+
+  // Splash on high surface velocity near edges
+  if(splashCooldown <= 0){
+    for(let i of [2, n-3]){
+      const v = Math.abs(nodes[i].vel);
+      if(v > 2.5){
+        const sx = nodes[i].xScreen;
+        const sy = CY - targetWaterline*glassHeight*SCALE + nodes[i].yOffset;
+        for(let k=0;k<3;k++){
+          particles.push(new SplashParticle(
+            sx, sy,
+            (Math.random()-0.5)*3, -Math.random()*3 - 1,
+            1.5 + Math.random()*2,
+            40 + Math.random()*30
+          ));
+        }
+        splashCooldown = 4;
+        break;
+      }
+    }
+  } else {
+    splashCooldown--;
+  }
+
+  // Pouring effect: influx from top center
+  if(CONFIG.pourRate > 0){
+    pourTimer += CONFIG.pourRate * 0.0005;
+    if(pourTimer > 1){
+      pourTimer -= 1;
+      CONFIG.fillPct = Math.min(85, CONFIG.fillPct + 0.15);
+      document.getElementById('fillRange').value = Math.round(CONFIG.fillPct);
+      document.getElementById('fillVal').textContent = Math.round(CONFIG.fillPct)+'%';
+      // Add splash particles at center
+      const sx = CX + (Math.random()-0.5)*10;
+      const sy = CY - glassHeight*SCALE + 10;
+      for(let k=0;k<4;k++){
+        particles.push(new SplashParticle(
+          sx, sy,
+          (Math.random()-0.5)*2, Math.random()*3 + 1,
+          2 + Math.random()*2,
+          30 + Math.random()*20
+        ));
+      }
+    }
+  }
+
+  // Bubble generation proportional to surface turbulent kinetic energy
+  let tke = 0;
+  for(let i=1;i<n-1;i++){
+    tke += Math.abs(nodes[i].vel);
+  }
+  tke /= n;
+  const bubbleChance = tke * 0.015 + (CONFIG.pourRate > 0 ? 0.08 : 0) + (glassAngle > 0.3 ? 0.02 : 0);
+  if(Math.random() < bubbleChance && bubbles.length < 250){
+    const i = Math.floor(Math.random()*(n-2))+1;
+    const bx = nodes[i].xScreen;
+    const by = CY - targetWaterline*glassHeight*SCALE + nodes[i].yOffset + 4;
+    bubbles.push(new Bubble(bx, by));
+  }
+
+  // Oxygen dissolution model
+  const tempK = CONFIG.temperature + 273.15;
+  const satO2 = 14.6 * (298.15/tempK) * Math.exp(-1300 * (1/tempK - 1/298.15)); // simplified
+  // Surface area increase from waves
+  let arcLen = 0;
+  for(let i=1;i<n;i++){
+    const dx = nodes[i].xScreen - nodes[i-1].xScreen;
+    const dy = (nodes[i].yOffset - nodes[i-1].yOffset);
+    arcLen += Math.sqrt(dx*dx + dy*dy);
+  }
+  surfaceArea = arcLen * 0.03; // cm² scaling
+  const areaFactor = Math.min(3, arcLen / (halfWidth*2));
+  // Dissolve toward saturation based on surface turbulence
+  const drive = (satO2 - dissolveO2) * 0.001 * areaFactor * (1 + tke*0.1);
+  dissolveO2 += drive;
+  if(dissolveO2 < 0) dissolveO2 = 0;
+
+  // Leg generation from swirl and wetting
+  if(Math.abs(swirlAngularVel) > 0.5 && legs.length < 60){
+    if(Math.random() < 0.15) legs.push(new WineLeg(-1, targetWaterline + Math.random()*0.05));
+    if(Math.random() < 0.15) legs.push(new WineLeg(1, targetWaterline + Math.random()*0.05));
+  }
+}
+
+// === Drawing ===
+function drawGlass(ctx){
+  const prof = GLASS_PROFILES[CONFIG.glass];
+  const h = glassHeight * SCALE;
+  const rScale = glassWidthMax * SCALE;
+
+  // Glass body path
+  ctx.beginPath();
+  for(let i=0;i<prof.length;i++){
+    const px = CX + prof[i].r * rScale;
+    const py = CY - prof[i].y * h;
+    if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  // Rim
+  ctx.lineTo(CX - prof[prof.length-1].r * rScale, CY - prof[prof.length-1].y * h);
+  for(let i=prof.length-1;i>=0;i--){
+    const px = CX - prof[i].r * rScale;
+    const py = CY - prof[i].y * h;
+    ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+
+  // Glass fill (dark inner)
+  ctx.fillStyle = 'rgba(8,10,14,0.65)';
+  ctx.fill();
+
+  // Glass stroke
+  ctx.strokeStyle = 'rgba(180,200,220,0.18)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Rim highlight
+  ctx.beginPath();
+  ctx.moveTo(CX + prof[prof.length-1].r * rScale - 2, CY - h);
+  ctx.lineTo(CX - prof[prof.length-1].r * rScale + 2, CY - h);
+  ctx.strokeStyle = 'rgba(220,235,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Stem and base (simple)
+  ctx.beginPath();
+  ctx.moveTo(CX - 4*SCALE, CY);
+  ctx.lineTo(CX - 4*SCALE, CY + 80*SCALE);
+  ctx.lineTo(CX - 40*SCALE, CY + 80*SCALE + 10*SCALE);
+  ctx.lineTo(CX + 40*SCALE, CY + 80*SCALE + 10*SCALE);
+  ctx.lineTo(CX + 4*SCALE, CY + 80*SCALE);
+  ctx.lineTo(CX + 4*SCALE, CY);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(200,215,230,0.06)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(180,200,220,0.12)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function drawLiquid(ctx){
+  const n = nodes.length;
+  const h = glassHeight * SCALE;
+  const prof = GLASS_PROFILES[CONFIG.glass];
+
+  // Build liquid polygon: along surface then down right wall to bottom then up left wall
+  ctx.beginPath();
+  // Surface from left to right
+  for(let i=0;i<n;i++){
+    const node = nodes[i];
+    const px = node.xScreen;
+    const py = CY - targetWaterline*h + node.yOffset;
+    if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  // Down right wall to bottom
+  const rightWallPoints = [];
+  for(let i=0;i<prof.length;i++){
+    const yNorm = prof[i].y;
+    if(yNorm > targetWaterline - 0.01){
+      rightWallPoints.push({
+        x: CX + prof[i].r * glassWidthMax * SCALE,
+        y: CY - yNorm * h
+      });
+    }
+  }
+  // sort descending y (bottom to top actually we need top to bottom)
+  rightWallPoints.sort((a,b)=>b.y - a.y);
+  for(let p of rightWallPoints) ctx.lineTo(p.x, p.y);
+
+  // Bottom closing
+  // Find leftmost bottom
+  const leftX = CX - prof[0].r * glassWidthMax * SCALE;
+  const rightX = CX + prof[0].r * glassWidthMax * SCALE;
+  ctx.lineTo(leftX, CY);
+
+  // Up left wall
+  const leftWallPoints = [];
+  for(let i=0;i<prof.length;i++){
+    const yNorm = prof[i].y;
+    if(yNorm > targetWaterline - 0.01){
+      leftWallPoints.push({
+        x: CX - prof[i].r * glassWidthMax * SCALE,
+        y: CY - yNorm * h
+      });
+    }
+  }
+  leftWallPoints.sort((a,b)=>a.y - b.y);
+  for(let p of leftWallPoints) ctx.lineTo(p.x, p.y);
+
+  ctx.closePath();
+
+  // Wine color based on oxygenation
+  const oxFrac = Math.min(1, dissolveO2 / 8);
+  const r1 = 45 + oxFrac*40, g1 = 10 + oxFrac*20, b1 = 20 + oxFrac*15;
+  const r2 = 120 + oxFrac*80, g2 = 25 + oxFrac*40, b2 = 35 + oxFrac*25;
+  const grad = ctx.createLinearGradient(CX, CY - h, CX, CY);
+  grad.addColorStop(0, `rgba(${Math.round(r2)},${Math.round(g2)},${Math.round(b2)},0.92)`);
+  grad.addColorStop(1, `rgba(${Math.round(r1)},${Math.round(g1)},${Math.round(b1)},0.98)`);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Surface highlight (thin bright line)
+  ctx.beginPath();
+  for(let i=0;i<n;i++){
+    const node = nodes[i];
+    const px = node.xScreen;
+    const py = CY - targetWaterline*h + node.yOffset;
+    if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = `rgba(255,210,190,${0.15 + Math.abs(swirlAngularVel)*0.05})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawLegs(ctx){
+  const prof = GLASS_PROFILES[CONFIG.glass];
+  for(let leg of legs){
+    if(!leg.active()) continue;
+    leg.draw(ctx, prof);
+  }
+}
+
+function drawBackground(ctx){
+  // Subtle vignette
+  const grad = ctx.createRadialGradient(CX, CY, 40*SCALE, CX, CY, Math.max(W,H));
+  grad.addColorStop(0, 'rgba(12,14,22,0)');
+  grad.addColorStop(1, 'rgba(4,5,8,0.85)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Table reflection
+  ctx.fillStyle = 'rgba(6,7,10,0.95)';
+  ctx.fillRect(0, CY+80*SCALE+20*SCALE, W, H-(CY+80*SCALE+20*SCALE));
+  // Table surface line
+  ctx.strokeStyle = 'rgba(40,50,65,0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, CY+80*SCALE+20*SCALE);
+  ctx.lineTo(W, CY+80*SCALE+20*SCALE);
+  ctx.stroke();
+}
+
+// === Interaction ===
+canvas.addEventListener('mousedown', e=>{
+  mouseDragging = true;
+  mouseX = e.clientX; mouseY = e.clientY;
+  lastMouseX = mouseX;
+});
+window.addEventListener('mousemove', e=>{
+  mouseX = e.clientX; mouseY = e.clientY;
+});
+window.addEventListener('mouseup', ()=>{ mouseDragging = false; });
+canvas.addEventListener('touchstart', e=>{
+  mouseDragging = true;
+  mouseX = e.touches[0].clientX; mouseY = e.touches[0].clientY;
+  lastMouseX = mouseX;
+  e.preventDefault();
+}, {passive:false});
+window.addEventListener('touchmove', e=>{
+  if(mouseDragging){
+    mouseX = e.touches[0].clientX; mouseY = e.touches[0].clientY;
+  }
+}, {passive:false});
+window.addEventListener('touchend', ()=>{ mouseDragging = false; });
+
+// === UI Wiring ===
+const glassSelect = document.getElementById('glassSelect');
+const fillRange = document.getElementById('fillRange');
+const pourRange = document.getElementById('pourRange');
+const swirlRange = document.getElementById('swirlRange');
+const tempRange = document.getElementById('tempRange');
+const autoBtn = document.getElementById('autoSwirlBtn');
+
+glassSelect.addEventListener('change', e=>{ CONFIG.glass = e.target.value; initLiquid(); });
+fillRange.addEventListener('input', e=>{ CONFIG.fillPct = +e.target.value; document.getElementById('fillVal').textContent = Math.round(CONFIG.fillPct)+'%'; });
+pourRange.addEventListener('input', e=>{ CONFIG.pourRate = +e.target.value; document.getElementById('pourVal').textContent = CONFIG.pourRate>0?CONFIG.pourRate+'%':'Off'; });
+swirlRange.addEventListener('input', e=>{ CONFIG.swirlIntensity = +e.target.value/100; document.getElementById('swirlVal').textContent = CONFIG.swirlIntensity<0.2?'Gentle':CONFIG.swirlIntensity<0.6?'Medium':'Vigorous'; });
+tempRange.addEventListener('input', e=>{ CONFIG.temperature = +e.target.value; document.getElementById('tempVal').textContent = CONFIG.temperature+' °C'; });
+autoBtn.addEventListener('click', ()=>{ CONFIG.autoSwirl = !CONFIG.autoSwirl; autoBtn.textContent = CONFIG.autoSwirl ? 'Stop Auto-Swirl' : 'Toggle Auto-Swirl'; autoBtn.style.background = CONFIG.autoSwirl ? 'linear-gradient(135deg,#2e7d32,#4caf50)' : 'linear-gradient(135deg,#e86a56,#c94f42)'; });
+
+// === Readout Updates ===
+function updateReadouts(){
+  document.getElementById('saOut').textContent = surfaceArea.toFixed(1);
+  document.getElementById('doOut').textContent = dissolveO2.toFixed(1);
+  document.getElementById('rpmOut').textContent = Math.round(Math.abs(swirlAngularVel)*60);
+  document.getElementById('legOut').textContent = legs.length;
+}
+
+// === Loop ===
+function loop(){
+  updateSurface();
+
+  // Update particles
+  for(let i=particles.length-1;i>=0;i--){
+    particles[i].update();
+    if(particles[i].life <= 0) particles.splice(i,1);
+  }
+  for(let i=bubbles.length-1;i>=0;i--){
+    bubbles[i].update();
+    if(bubbles[i].life <= 0) bubbles.splice(i,1);
+  }
+  for(let i=legs.length-1;i>=0;i--){
+    legs[i].update();
+    if(!legs[i].active()) legs.splice(i,1);
+  }
+
+  lastMouseX = mouseX;
+
+  // Render
+  ctx.clearRect(0,0,W,H);
+  drawBackground(ctx);
+
+  // Back legs (behind glass for nonexistent glass transparency, but we draw in front after liquid)
+  // Actually draw legs behind liquid is wrong; legs run on glass surface outside liquid
+  // We'll draw them after glass stroke but before particles
+
+  drawGlass(ctx);
+  drawLiquid(ctx);
+  drawLegs(ctx);
+
+  // Bubbles in front of liquid
+  for(let b of bubbles) b.draw(ctx);
+  for(let p of particles) p.draw(ctx);
+
+  updateReadouts();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
