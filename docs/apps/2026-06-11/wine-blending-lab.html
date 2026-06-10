@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Blending Laboratory</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root {
+  --bg: #1a1110;
+  --surface: #231716;
+  --panel: #2a1d1b;
+  --border: #4a3028;
+  --text: #e8d5b7;
+  --muted: #b89b7a;
+  --accent: #d4653e;
+  --accent2: #c9a060;
+  --chart1: #d4653e;
+  --chart2: #c9a060;
+  --chart3: #8b9a5e;
+  --chart4: #6a8caf;
+  --chart5: #a07090;
+  --danger: #e06040;
+}
+html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x:hidden; }
+body { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+
+.disclaimer { background: #1a1110; border-bottom: 1px solid #4a3028; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+.disclaimer strong { font-weight: 600; }
+
+#app { display:flex; flex-direction:column; gap:1rem; padding:1rem; max-width:1100px; margin:0 auto; }
+
+header { text-align:center; padding:0.5rem 0 0.25rem; }
+header h1 { font-size:clamp(1.4rem,4vw,2rem); color:var(--accent); margin:0; letter-spacing:0.02em; }
+header p { color:var(--muted); font-size:0.85rem; margin:0.25rem 0 0; }
+
+#top-bar { display:flex; flex-wrap:wrap; gap:0.75rem; justify-content:center; }
+#top-bar button { background:var(--panel); color:var(--text); border:1px solid var(--border); padding:0.45rem 0.9rem; border-radius:6px; cursor:pointer; font-size:0.82rem; }
+#top-bar button:hover { border-color:var(--accent); }
+
+#blend-name { flex:1 1 220px; min-width:180px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.7rem; font-size:0.9rem; }
+
+.panels { display:flex; flex-wrap:wrap; gap:1rem; }
+.panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:0.9rem 1rem; flex:1 1 280px; min-width:260px; }
+.panel h2 { font-size:0.95rem; color:var(--accent2); margin:0 0 0.6rem; letter-spacing:0.03em; }
+
+.row { display:flex; align-items:center; gap:0.6rem; margin-bottom:0.6rem; }
+.row label { flex:0 0 90px; font-size:0.78rem; color:var(--muted); }
+.row input[type=range] { flex:1; }
+.row .val { flex:0 0 48px; text-align:right; font-size:0.78rem; color:var(--text); font-variant-numeric:tabular-nums; }
+
+#composition-chart, #sensory-chart, #cost-chart, #analytics-chart { width:100%; height:220px; }
+#sensory-chart { height:260px; }
+
+.swatch { width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:4px; }
+
+.metric { display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid rgba(74,48,40,0.4); font-size:0.82rem; }
+.metric:last-child { border-bottom:none; }
+.metric .k { color:var(--muted); }
+.metric .v { font-variant-numeric:tabular-nums; color:var(--text); font-weight:600; }
+
+#glasses { display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; padding:0.5rem 0; }
+.glass-wrap { text-align:center; }
+.glass-wrap .lbl { font-size:0.72rem; color:var(--muted); margin-top:0.3rem; }
+.glass { width:90px; height:140px; position:relative; margin:0 auto; }
+.glass svg { position:absolute; inset:0; }
+
+@media(max-width:768px){
+  .panels { flex-direction:column; }
+  .panel { min-width:auto; width:100%; }
+  #blend-name { width:100%; }
+}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="app">
+<header>
+  <h1>🍷 Wine Blending Laboratory</h1>
+  <p>Adjust base-wine proportions, see real-time chemistry & sensory shifts</p>
+</header>
+
+<div id="top-bar">
+  <input id="blend-name" value="My Custom Cuvée" />
+  <button onclick="resetAll()">Reset</button>
+  <button onclick="randomize()">Randomize</button>
+  <button onclick="downloadBlend()">Download JSON</button>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>Base Wines</h2>
+    <div id="wine-controls"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Blend Composition</h2>
+    <div id="composition-chart"></div>
+  </div>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>Target & Actual Glasses</h2>
+    <div id="glasses"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Blend Metrics</h2>
+    <div id="metrics"></div>
+  </div>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>Sensory Profile</h2>
+    <div id="sensory-chart"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Cost Breakdown</h2>
+    <div id="cost-chart"></div>
+  </div>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>Analytics — Alcohol vs Sugar</h2>
+    <div id="analytics-chart"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const WINES = [
+  { id:'cab', name:'Cabernet Sauvignon', abv:14.2, rs:2.1, tannin:8.5, acid:6.2, color:[78,18,28], price:18.00, sensory:{body:9,tannin:9,fruit:7,acid:6,oak:8} },
+  { id:'mer', name:'Merlot', abv:13.8, rs:3.4, tannin:5.2, acid:5.5, color:[92,22,32], price:15.50, sensory:{body:7,tannin:6,fruit:8,acid:5,oak:6} },
+  { id:'pin', name:'Pinot Noir', abv:13.0, rs:1.8, tannin:3.8, acid:7.1, color:[110,35,45], price:22.00, sensory:{body:5,tannin:4,fruit:7,acid:8,oak:4} },
+  { id:'sy', name:'Syrah/Shiraz', abv:14.8, rs:2.6, tannin:7.9, acid:5.9, color:[64,12,22], price:17.00, sensory:{body:9,tannin:8,fruit:8,acid:5,oak:7} },
+  { id:'zin', name:'Zinfandel', abv:15.5, rs:5.2, tannin:6.1, acid:5.2, color:[88,20,30], price:14.00, sensory:{body:8,tannin:7,fruit:9,acid:4,oak:5} },
+];
+
+const TARGETS = {
+  'Bordeaux-style': { cab:0.60, mer:0.25, pin:0.00, sy:0.10, zin:0.05 },
+  'Rhône-style':    { cab:0.00, mer:0.00, pin:0.20, sy:0.70, zin:0.10 },
+  'Burgundy-style': { cab:0.00, mer:0.10, pin:0.85, sy:0.05, zin:0.00 },
+  'Super-Tuscan':   { cab:0.40, mer:0.35, pin:0.00, sy:0.20, zin:0.05 },
+};
+
+let proportions = WINES.map(()=>20); // percent, 0-100
+
+function total(){ return proportions.reduce((a,b)=>a+b,0); }
+function frac(i){ const t=total(); return t>0 ? proportions[i]/t : 0; }
+
+function blendValue(key){
+  const t=total(); if(t===0) return 0;
+  return d3.sum(WINES.map((w,i)=>w[key]*proportions[i]))/t;
+}
+function blendColor(){
+  const t=total(); if(t===0) return [60,20,30];
+  let c=[0,0,0];
+  WINES.forEach((w,i)=>{ const f=proportions[i]/t; c[0]+=w.color[0]*f; c[1]+=w.color[1]*f; c[2]+=w.color[2]*f; });
+  return c.map(Math.round);
+}
+function blendSensory(){
+  const t=total(); if(t===0) return {body:5,tannin:5,fruit:5,acid:5,oak:5};
+  let s={body:0,tannin:0,fruit:0,acid:0,oak:0};
+  WINES.forEach((w,i)=>{ const f=proportions[i]/t; for(let k in s) s[k]+=w.sensory[k]*f; });
+  for(let k in s) s[k]=Math.round(s[k]*10)/10;
+  return s;
+}
+function blendPrice(){
+  const t=total(); if(t===0) return 0;
+  return d3.sum(WINES.map((w,i)=>w.price*proportions[i]))/t;
+}
+
+function buildControls(){
+  const box=d3.select('#wine-controls'); box.html('');
+  WINES.forEach((w,i)=>{
+    const row=box.append('div').attr('class','row');
+    row.append('span').attr('class','swatch').style('background',`rgb(${w.color.join(',')})`);
+    row.append('label').text(w.name);
+    const rng=row.append('input').attr('type','range').attr('min',0).attr('max',100).attr('value',proportions[i])
+      .on('input',function(){ proportions[i]=+this.value; update(); });
+    const val=row.append('span').attr('class','val').text(proportions[i]+'%');
+    rng.on('input',function(){ val.text(+this.value+'%'); });
+  });
+}
+
+// Donut chart
+let compositionG;
+function initComposition(){
+  const w=220,h=220,r=Math.min(w,h)/2-10;
+  const svg=d3.select('#composition-chart').append('svg').attr('viewBox',`0 0 ${w} ${h}`).style('width','100%').style('height','100%');
+  compositionG=svg.append('g').attr('transform',`translate(${w/2},${h/2})`);
+  compositionG.append('text').attr('text-anchor','middle').attr('dy','0.35em').attr('fill','var(--text)').attr('font-size','13px').attr('font-weight','600').text('100%');
+}
+function updateComposition(){
+  const t=total(); const data=WINES.map((w,i)=>({name:w.name, value:proportions[i], color:`rgb(${w.color.join(',')})`}));
+  const pie=d3.pie().value(d=>d.value).sort(null);
+  const arc=d3.arc().innerRadius(50).outerRadius(90);
+  const arcs=compositionG.selectAll('path').data(pie(data),d=>d.data.name);
+  arcs.enter().append('path').merge(arcs).attr('d',arc).attr('fill',d=>d.data.color).attr('stroke','var(--bg)').attr('stroke-width','2px');
+  arcs.exit().remove();
+  compositionG.select('text').text(t>0?Math.round(t)+'%':'0%');
+}
+
+// Glass visualization
+function wineColorString(c,alpha=1){
+  return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+}
+function buildGlasses(){
+  const box=d3.select('#glasses'); box.html('');
+  // Target selector
+  const selRow=box.append('div').style('width','100%').style('text-align','center').style('margin-bottom','0.5rem');
+  selRow.append('label').style('color','var(--muted)').style('font-size','0.75rem').style('margin-right','0.4rem').text('Target style:');
+  const select=selRow.append('select').style('background','var(--surface)').style('color','var(--text)').style('border','1px solid var(--border)').style('border-radius','4px').style('padding','0.3rem 0.5rem').style('font-size','0.8rem');
+  select.append('option').text('None (free blend)').attr('value','');
+  Object.keys(TARGETS).forEach(k=>select.append('option').text(k).attr('value',k));
+  select.on('change',function(){
+    const key=this.value;
+    if(TARGETS[key]){
+      WINES.forEach((w,i)=>{ proportions[i]=Math.round(TARGETS[key][w.id]*100); });
+      buildControls(); update();
+    }
+  });
+
+  // Each wine glass
+  WINES.forEach((w,i)=>{
+    const wrap=box.append('div').attr('class','glass-wrap');
+    wrap.append('div').attr('class','glass').html(`
+      <svg viewBox="0 0 100 160" width="90" height="140">
+        <defs>
+          <linearGradient id="grad-${w.id}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="rgba(${w.color.join(',')},0.35)"/>
+            <stop offset="100%" stop-color="rgba(${w.color.join(',')},0.85)"/>
+          </linearGradient>
+        </defs>
+        <ellipse cx="50" cy="20" rx="22" ry="4" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+        <path d="M28,20 C28,70 35,110 45,125 L45,145 L28,150 L72,150 L55,145 L55,125 C65,110 72,70 72,20" fill="url(#grad-${w.id})" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+        <ellipse cx="50" cy="20" rx="22" ry="4" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+      </svg>
+    `);
+    wrap.append('div').attr('class','lbl').text(`${w.name} — ${proportions[i]}%`);
+  });
+  // Blend glass
+  const bWrap=box.append('div').attr('class','glass-wrap');
+  bWrap.append('div').attr('class','glass').attr('id','blend-glass');
+  bWrap.append('div').attr('class','lbl').attr('id','blend-glass-label').text('Your Blend');
+}
+function updateGlasses(){
+  const c=blendColor();
+  const label=d3.select('#blend-glass-label');
+  label.text('Your Blend');
+  const g=d3.select('#blend-glass');
+  g.html(`
+    <svg viewBox="0 0 100 160" width="90" height="140">
+      <defs>
+        <linearGradient id="grad-blend" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(${c.join(',')},0.40)"/>
+          <stop offset="100%" stop-color="rgba(${c.join(',')},0.90)"/>
+        </linearGradient>
+      </defs>
+      <ellipse cx="50" cy="20" rx="22" ry="4" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+      <path d="M28,20 C28,70 35,110 45,125 L45,145 L28,150 L72,150 L55,145 L55,125 C65,110 72,70 72,20" fill="url(#grad-blend)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+      <ellipse cx="50" cy="20" rx="22" ry="4" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+    </svg>
+  `);
+  d3.selectAll('.glass-wrap .lbl').each(function(d,i){
+    if(i<WINES.length) d3.select(this).text(`${WINES[i].name} — ${proportions[i]}%`);
+  });
+}
+
+// Radar / sensory chart
+let sensoryG, sensoryR=90;
+function initSensory(){
+  const w=280,h=260,m=30;
+  const svg=d3.select('#sensory-chart').append('svg').attr('viewBox',`0 0 ${w} ${h}`).style('width','100%').style('height','100%');
+  sensoryG=svg.append('g').attr('transform',`translate(${w/2},${h/2})`);
+  const axes=['body','tannin','fruit','acid','oak'];
+  const angle=i=>(i*2*Math.PI/axes.length)-Math.PI/2;
+  // grid
+  [2,4,6,8,10].forEach(v=>{
+    const pts=axes.map((_,i)=>{ const a=angle(i), r=v/10*sensoryR; return [Math.cos(a)*r, Math.sin(a)*r]; });
+    sensoryG.append('polygon').attr('points',pts.map(p=>p.join(',')).join(' ')).attr('fill','none').attr('stroke','rgba(200,180,150,0.12)').attr('stroke-width','1');
+  });
+  axes.forEach((a,i)=>{
+    const ang=angle(i); const x=Math.cos(ang)*sensoryR, y=Math.sin(ang)*sensoryR;
+    sensoryG.append('line').attr('x1',0).attr('y1',0).attr('x2',x).attr('y2',y).attr('stroke','rgba(200,180,150,0.15)');
+    sensoryG.append('text').attr('x',x*1.18).attr('y',y*1.18).attr('text-anchor','middle').attr('dominant-baseline','central').attr('fill','var(--muted)').attr('font-size','11px').text(a.toUpperCase());
+  });
+}
+function updateSensory(){
+  const s=blendSensory();
+  const axes=['body','tannin','fruit','acid','oak'];
+  const angle=i=>(i*2*Math.PI/axes.length)-Math.PI/2;
+  const pts=axes.map((k,i)=>{ const a=angle(i), r=(s[k]/10)*sensoryR; return [Math.cos(a)*r, Math.sin(a)*r]; });
+  let path= sensoryG.selectAll('path.radar').data([1]);
+  path.enter().append('path').attr('class','radar').merge(path).attr('d',d3.line()(pts)+'Z').attr('fill','rgba(196,101,62,0.25)').attr('stroke','var(--accent)').attr('stroke-width','2');
+}
+
+// Cost breakdown horizontal bar
+let costG;
+function initCost(){
+  const w=260,h=220,m={top:10,right:20,bottom:30,left:80};
+  const svg=d3.select('#cost-chart').append('svg').attr('viewBox',`0 0 ${w} ${h}`).style('width','100%').style('height','100%');
+  costG=svg.append('g').attr('transform',`translate(${m.left},${m.top})`);
+  const innerW=w-m.left-m.right, innerH=h-m.top-m.bottom;
+  costG.append('g').attr('class','x-axis').attr('transform',`translate(0,${innerH})`);
+  costG.append('text').attr('x',innerW/2).attr('y',innerH+22).attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size','10px').text('$/L contribution');
+}
+function updateCost(){
+  const t=total(); const data=WINES.map((w,i)=>({name:w.name, value: t>0?(w.price*proportions[i]/t):0, color:`rgb(${w.color.join(',')})`})).sort((a,b)=>b.value-a.value);
+  const w=180,h=180,m={top:10,right:20,bottom:30,left:80};
+  const innerH=h-m.top-m.bottom;
+  const x=d3.scaleLinear().domain([0,d3.max(data,d=>d.value)||10]).range([0,180]);
+  const y=d3.scaleBand().domain(data.map(d=>d.name)).range([0,innerH]).padding(0.15);
+  const bars=costG.selectAll('rect').data(data,d=>d.name);
+  bars.enter().append('rect').merge(bars).attr('x',0).attr('y',d=>y(d.name)).attr('width',d=>x(d.value)).attr('height',y.bandwidth()).attr('fill',d=>d.color).attr('rx',3);
+  bars.exit().remove();
+  const labels=costG.selectAll('text.lbl').data(data,d=>d.name);
+  labels.enter().append('text').attr('class','lbl').merge(labels).attr('x',-6).attr('y',d=>y(d.name)+y.bandwidth()/2).attr('dy','0.35em').attr('text-anchor','end').attr('fill','var(--muted)').attr('font-size','10px').text(d=>d.name.split(' ')[0]);
+  labels.exit().remove();
+  const vals=costG.selectAll('text.val').data(data,d=>d.name);
+  vals.enter().append('text').attr('class','val').merge(vals).attr('x',d=>x(d.value)+4).attr('y',d=>y(d.name)+y.bandwidth()/2).attr('dy','0.35em').attr('fill','var(--text)').attr('font-size','10px').text(d=>d.value.toFixed(2));
+  vals.exit().remove();
+}
+
+// Analytics scatter
+let analyticsG, analyticsX, analyticsY;
+function initAnalytics(){
+  const w=300,h=220,m={top:10,right:20,bottom:35,left:40};
+  const svg=d3.select('#analytics-chart').append('svg').attr('viewBox',`0 0 ${w} ${h}`).style('width','100%').style('height','100%');
+  analyticsG=svg.append('g').attr('transform',`translate(${m.left},${m.top})`);
+  const innerW=w-m.left-m.right, innerH=h-m.top-m.bottom;
+  analyticsX=d3.scaleLinear().domain([0,20]).range([0,innerW]);
+  analyticsY=d3.scaleLinear().domain([0,8]).range([innerH,0]);
+  const xa=analyticsG.append('g').attr('transform',`translate(0,${innerH})`).call(d3.axisBottom(analyticsX).ticks(5).tickSize(-innerH));
+  xa.selectAll('text').attr('fill','var(--muted)').attr('font-size','9px');
+  xa.selectAll('line,path').attr('stroke','rgba(200,180,150,0.10)');
+  const ya=analyticsG.append('g').call(d3.axisLeft(analyticsY).ticks(5).tickSize(-innerW));
+  ya.selectAll('text').attr('fill','var(--muted)').attr('font-size','9px');
+  ya.selectAll('line,path').attr('stroke','rgba(200,180,150,0.10)');
+  analyticsG.append('text').attr('x',innerW/2).attr('y',innerH+24).attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size','9px').text('Alcohol %');
+  analyticsG.append('text').attr('transform','rotate(-90)').attr('x',-innerH/2).attr('y',-28).attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size','9px').text('Residual Sugar g/L');
+  // base wines as faint reference dots
+  WINES.forEach(w=>{
+    analyticsG.append('circle').attr('cx',analyticsX(w.abv)).attr('cy',analyticsY(w.rs)).attr('r',4).attr('fill',`rgb(${w.color.join(',')})`).attr('opacity',0.5);
+  });
+}
+function updateAnalytics(){
+  const bAbv=blendValue('abv'); const bRs=blendValue('rs');
+  const blendDot=analyticsG.selectAll('circle.blend').data([1]);
+  blendDot.enter().append('circle').attr('class','blend').merge(blendDot).attr('cx',analyticsX(bAbv)).attr('cy',analyticsY(bRs)).attr('r',7).attr('fill','var(--accent2)').attr('stroke','var(--text)').attr('stroke-width','1.5');
+}
+
+// Metrics panel
+function updateMetrics(){
+  const t=total();
+  const abv=blendValue('abv');
+  const rs=blendValue('rs');
+  const tannin=blendValue('tannin');
+  const acid=blendValue('acid');
+  const price=blendPrice();
+  const col=blendColor();
+  const rows=[
+    {k:'Total Volume', v: t+' pts'},
+    {k:'Alcohol', v: abv.toFixed(1)+'%'},
+    {k:'Residual Sugar', v: rs.toFixed(1)+' g/L'},
+    {k:'Tannin Index', v: tannin.toFixed(1)},
+    {k:'Acidity', v: acid.toFixed(1)+' g/L tartaric'},
+    {k:'Blend Price', v: '$'+price.toFixed(2)+'/L'},
+    {k:'Est. Color Density', v: `rgb(${col.join(',')})`},
+  ];
+  const box=d3.select('#metrics'); box.html('');
+  rows.forEach(r=>{
+    const row=box.append('div').attr('class','metric');
+    row.append('span').attr('class','k').text(r.k);
+    row.append('span').attr('class','v').text(r.v).style('color', r.k.includes('Color')?`rgb(${col.join(',')})`:null);
+  });
+}
+
+function update(){
+  updateComposition();
+  updateGlasses();
+  updateSensory();
+  updateCost();
+  updateAnalytics();
+  updateMetrics();
+}
+
+function resetAll(){
+  proportions=WINES.map(()=>20);
+  buildControls(); update();
+}
+function randomize(){
+  proportions=WINES.map(()=>Math.round(Math.random()*100));
+  buildControls(); update();
+}
+function downloadBlend(){
+  const data={ name:document.getElementById('blend-name').value, date:new Date().toISOString(), proportions:{} };
+  WINES.forEach((w,i)=>data.proportions[w.id]=proportions[i]);
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='blend.json'; a.click();
+}
+
+buildControls();
+initComposition();
+buildGlasses();
+initSensory();
+initCost();
+initAnalytics();
+update();
+</script>
+</body>
+</html>
