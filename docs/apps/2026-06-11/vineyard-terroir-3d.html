@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vineyard Terroir 3D Explorer</title>
+<style>
+  :root{ --bg:#0b0f14; --surface:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; }
+  html,body{ margin:0; padding:0; overflow:hidden; background:var(--bg); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--text); }
+  canvas{ display:block; }
+
+  .disclaimer{ background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060; padding:0.75rem 1rem; text-align:center; font-size:0.85rem; position:sticky; top:0; z-index:100; }
+  .disclaimer strong{ font-weight:600; }
+
+  #canvas-container{ position:fixed; inset:0; z-index:0; }
+
+  #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+  #ui-layer > *{ pointer-events:auto; }
+
+  .panel{ position:absolute; background:rgba(12,18,28,0.92); border:1px solid var(--border); border-radius:10px; padding:0.9rem 1.1rem; max-width:min(280px, calc(100vw - 20px)); backdrop-filter:blur(6px); }
+  .panel h2{ margin:0 0 0.6rem; font-size:0.95rem; color:var(--accent); letter-spacing:0.02em; }
+  .panel h3{ margin:0.7rem 0 0.3rem; font-size:0.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .row{ display:flex; align-items:center; gap:0.5rem; margin:0.35rem 0; }
+  .row label{ font-size:0.78rem; color:var(--muted); min-width:70px; }
+  input[type=range]{ flex:1; accent-color:var(--accent); }
+  .val{ font-size:0.75rem; color:var(--text); min-width:36px; text-align:right; font-variant-numeric:tabular-nums; }
+  .badge{ display:inline-block; font-size:0.65rem; padding:0.15rem 0.45rem; border-radius:4px; background:#2a3441; color:var(--muted); margin-right:0.3rem; cursor:pointer; user-select:none; border:1px solid transparent; }
+  .badge.active{ background:#58a6ff22; color:var(--accent); border-color:#58a6ff44; }
+  .mini-chart{ width:100%; height:50px; background:rgba(0,0,0,0.2); border-radius:4px; margin-top:0.4rem; }
+
+  #panel-controls{ top:52px; left:10px; }
+  #panel-telemetry{ top:52px; right:10px; width:240px; }
+  #panel-heatmap{ bottom:14px; left:10px; }
+  #panel-close{ position:absolute; top:52px; right:10px; z-index:20; display:none; }
+  #btn-close{ background:#2a3441; color:var(--text); border:none; border-radius:6px; padding:0.35rem 0.7rem; font-size:0.75rem; cursor:pointer; }
+
+  @media(max-width:768px){
+    body{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    canvas{ position:fixed; top:0; left:0; z-index:0; }
+    #ui-layer{ position:relative; top:auto; left:auto; right:auto; bottom:auto; padding:50px 8px 20px; display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:10; }
+    .panel{ position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; max-width:none !important; padding:0.6rem 0.85rem; background:rgba(12,18,28,0.78); }
+    #panel-close{ display:block; position:relative; top:auto; right:auto; text-align:right; padding:0; background:transparent; border:none; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div id="panel-controls" class="panel">
+    <h2>🍇 Terroir Controls</h2>
+    <h3>Season</h3>
+    <div class="row"><label>Season</label><input id="season" type="range" min="0" max="3" step="1" value="1"><span class="val" id="season-val">Summer</span></div>
+    <h3>Diurnal Cycle</h3>
+    <div class="row"><label>Time</label><input id="time" type="range" min="0" max="24" step="0.1" value="12"><span class="val" id="time-val">12:00</span></div>
+    <h3>Vineyard</h3>
+    <div class="row"><label>Row spacing</label><input id="spacing" type="range" min="1.5" max="4" step="0.1" value="2.5"><span class="val" id="spacing-val">2.5m</span></div>
+    <div class="row"><label>Trellis height</label><input id="trellis" type="range" min="0.8" max="2.2" step="0.1" value="1.4"><span class="val" id="trellis-val">1.4m</span></div>
+    <div class="row"><label>Foliage density</label><input id="density" type="range" min="0" max="1" step="0.05" value="0.85"><span class="val" id="density-val">85%</span></div>
+  </div>
+
+  <div id="panel-telemetry" class="panel">
+    <h2>📊 Live Telemetry</h2>
+    <div class="row"><label>Solar kWh/m²</label><span class="val" id="solar-val">4.2</span></div>
+    <div class="row"><label>Frost risk</label><span class="val" id="frost-val">Low</span></div>
+    <div class="row"><label>GDD (season)</label><span class="val" id="gdd-val">820</span></div>
+    <div class="row"><label>Elev range</label><span class="val" id="elev-val">0-35m</span></div>
+    <canvas id="chart-gdd" class="mini-chart" width="240" height="50"></canvas>
+  </div>
+
+  <div id="panel-heatmap" class="panel">
+    <h2>🗺️ Heatmap Overlay</h2>
+    <div style="margin:0.3rem 0;">
+      <span class="badge active" data-mode="0">Terrain</span>
+      <span class="badge" data-mode="1">Elevation</span>
+      <span class="badge" data-mode="2">Slope</span>
+      <span class="badge" data-mode="3">Aspect</span>
+      <span class="badge" data-mode="4">Solar</span>
+      <span class="badge" data-mode="5">Frost</span>
+    </div>
+  </div>
+
+  <div id="panel-close"><button id="btn-close">✕ Close controls</button></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+(function(){
+  'use strict';
+
+  // ===== Config =====
+  const CFG = {
+    season: 1,
+    time: 12,
+    rowSpacing: 2.5,
+    trellisHeight: 1.4,
+    foliageDensity: 0.85,
+    heatmapMode: 0,
+    size: 200,
+    res: 120,
+  };
+
+  const SEASONS = ['Spring','Summer','Autumn','Winter'];
+  const SEASON_COLORS = [
+    [new THREE.Color('#7cb342'), new THREE.Color('#aed581')],
+    [new THREE.Color('#33691e'), new THREE.Color('#558b2f')],
+    [new THREE.Color('#e67e22'), new THREE.Color('#f1c40f')],
+    [new THREE.Color('#5d4037'), new THREE.Color('#8d6e63')],
+  ];
+
+  // ===== Noise =====
+  function hash2(x,y){
+    let s = Math.sin(x*12.9898 + y*78.233)*43758.5453;
+    return s - Math.floor(s);
+  }
+  function smoothstep(t){ return t*t*(3-2*t); }
+  function noise2(x,y){
+    let ix = Math.floor(x), iy = Math.floor(y);
+    let fx = smoothstep(x-ix), fy = smoothstep(y-iy);
+    let a = hash2(ix,iy), b = hash2(ix+1,iy);
+    let c = hash2(ix,iy+1), d = hash2(ix+1,iy+1);
+    return (a*(1-fx)+b*fx)*(1-fy) + (c*(1-fx)+d*fx)*fy;
+  }
+  function fbm(x,y,oct){
+    oct = oct || 5;
+    let v=0, amp=0.5, freq=1, sum=0;
+    for(let i=0;i<oct;i++){
+      v += noise2(x*freq,y*freq)*amp;
+      sum += amp;
+      amp *= 0.5;
+      freq *= 2.2;
+    }
+    return v/sum;
+  }
+
+  function getHeight(x,z){
+    let u = (x/CFG.size+0.5)*2.5, v = (z/CFG.size+0.5)*2.5;
+    return Math.max(0, fbm(u,v)*25 + fbm(u*0.3,v*0.3)*15 + Math.pow(Math.max(fbm(u*0.1,v*0.1),0),2)*8);
+  }
+
+  // ===== Scene =====
+  const container = document.getElementById('canvas-container');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#87CEEB');
+  scene.fog = new THREE.Fog('#87CEEB', 80, 250);
+
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 500);
+  camera.position.set(60, 45, 80);
+
+  const renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.maxPolarAngle = Math.PI/2 - 0.05;
+  controls.minDistance = 10;
+  controls.maxDistance = 180;
+  controls.target.set(0, 5, 0);
+
+  // ===== Terrain =====
+  const geom = new THREE.PlaneGeometry(CFG.size, CFG.size, CFG.res, CFG.res);
+  geom.rotateX(-Math.PI/2);
+  const posAttr = geom.attributes.position;
+  const heights = new Float32Array((CFG.res+1)*(CFG.res+1));
+  const slopes = new Float32Array((CFG.res+1)*(CFG.res+1));
+  const aspects = new Float32Array((CFG.res+1)*(CFG.res+1));
+
+  for(let i=0;i<posAttr.count;i++){
+    let x = posAttr.getX(i), z = posAttr.getZ(i);
+    let h = getHeight(x,z);
+    posAttr.setY(i, h);
+    heights[i] = h;
+  }
+  geom.computeVertexNormals();
+
+  for(let iy=0; iy<=CFG.res; iy++){
+    for(let ix=0; ix<=CFG.res; ix++){
+      let i = iy*(CFG.res+1)+ix;
+      let hL = heights[Math.max(0, ix-1) + iy*(CFG.res+1)];
+      let hR = heights[Math.min(CFG.res, ix+1) + iy*(CFG.res+1)];
+      let hD = heights[ix + Math.max(0, iy-1)*(CFG.res+1)];
+      let hU = heights[ix + Math.min(CFG.res, iy+1)*(CFG.res+1)];
+      let dzdx = (hR - hL) / (CFG.size/CFG.res * 2);
+      let dzdy = (hU - hD) / (CFG.size/CFG.res * 2);
+      let slope = Math.atan(Math.sqrt(dzdx*dzdx + dzdy*dzdy));
+      let aspect = Math.atan2(dzdy, -dzdx);
+      slopes[i] = slope;
+      aspects[i] = aspect;
+    }
+  }
+  geom.setAttribute('aSlope', new THREE.BufferAttribute(slopes, 1));
+  geom.setAttribute('aAspect', new THREE.BufferAttribute(aspects, 1));
+
+  const terrainVert = `
+    attribute float aSlope;
+    attribute float aAspect;
+    varying float vHeight;
+    varying float vSlope;
+    varying float vAspect;
+    varying vec3 vNormal;
+    uniform float uMode;
+    void main(){
+      vHeight = position.y;
+      vSlope = aSlope;
+      vAspect = aAspect;
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `;
+
+  const terrainFrag = `
+    varying float vHeight;
+    varying float vSlope;
+    varying float vAspect;
+    varying vec3 vNormal;
+    uniform float uMode;
+    uniform vec3 uSunDir;
+
+    vec3 terrainColor(float h){
+      vec3 low = vec3(0.15,0.35,0.10);
+      vec3 mid = vec3(0.35,0.28,0.15);
+      vec3 high = vec3(0.50,0.48,0.45);
+      float t = clamp((h-5.0)/20.0,0.0,1.0);
+      return mix(mix(low,mid,t), high, t*t);
+    }
+
+    void main(){
+      vec3 color;
+      if(uMode < 0.5){
+        color = terrainColor(vHeight);
+        float slopeFac = 1.0 - vSlope * 0.6;
+        color *= slopeFac;
+      } else if(uMode < 1.5){
+        float t = clamp(vHeight/35.0,0.0,1.0);
+        color = mix(vec3(0.05,0.15,0.5), mix(vec3(0.1,0.5,0.2), vec3(0.6,0.15,0.05), t), t);
+      } else if(uMode < 2.5){
+        float t = clamp(vSlope/(3.1416*0.25),0.0,1.0);
+        color = mix(vec3(0.9,0.9,0.95), vec3(0.7,0.1,0.1), t);
+      } else if(uMode < 3.5){
+        float a = vAspect;
+        vec3 north = vec3(0.2,0.4,0.6);
+        vec3 south = vec3(0.8,0.5,0.2);
+        vec3 east  = vec3(0.5,0.6,0.3);
+        vec3 west  = vec3(0.4,0.3,0.5);
+        float ns = cos(a)*0.5+0.5;
+        float ew = sin(a)*0.5+0.5;
+        color = mix(mix(north,south,ns), mix(east,west,ew), 0.5);
+      } else if(uMode < 4.5){
+        float sunDot = max(dot(vNormal, normalize(-uSunDir)), 0.0);
+        float t = clamp(sunDot,0.0,1.0);
+        color = mix(vec3(0.05,0.05,0.15), vec3(0.9,0.85,0.4), t);
+      } else {
+        float lowRisk = clamp(vHeight/15.0,0.0,1.0);
+        float northFacing = cos(vAspect)*0.5+0.5;
+        float gentle = 1.0 - clamp(vSlope/(3.1416*0.15),0.0,1.0);
+        float risk = (1.0-lowRisk)*0.4 + northFacing*0.35 + gentle*0.25;
+        color = mix(vec3(0.05,0.2,0.5), vec3(0.7,0.1,0.1), clamp(risk,0.0,1.0));
+      }
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `;
+
+  const terrainMat = new THREE.ShaderMaterial({
+    vertexShader: terrainVert,
+    fragmentShader: terrainFrag,
+    uniforms: {
+      uMode: { value: 0 },
+      uSunDir: { value: new THREE.Vector3(0,-1,0) },
+    },
+  });
+
+  const terrainMesh = new THREE.Mesh(geom, terrainMat);
+  terrainMesh.receiveShadow = true;
+  terrainMesh.castShadow = true;
+  scene.add(terrainMesh);
+
+  // ===== Vineyard posts + wires =====
+  const rowCount = 22;
+  const postsPerRow = 70;
+  const postGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.5, 8);
+  postGeom.translate(0, 1.25, 0);
+  const postMatStd = new THREE.MeshStandardMaterial({ color: '#5d4037', roughness:0.9 });
+  const postMeshInst = new THREE.InstancedMesh(postGeom, postMatStd, rowCount*postsPerRow);
+  postMeshInst.castShadow = true;
+  postMeshInst.receiveShadow = true;
+
+  const wireMatLine = new THREE.LineBasicMaterial({ color: '#8d6e63', opacity:0.5, transparent:true });
+  const wirePoints = [];
+  let postIdx = 0;
+  const dummy = new THREE.Object3D();
+  for(let r=0; r<rowCount; r++){
+    let z = -CFG.size*0.4 + r*CFG.rowSpacing;
+    if(z > CFG.size*0.4) break;
+    for(let p=0; p<postsPerRow; p++){
+      let x = -CFG.size*0.4 + p*(CFG.size*0.8/postsPerRow);
+      let h = getHeight(x,z);
+      dummy.position.set(x, h, z);
+      dummy.scale.set(1, CFG.trellisHeight/1.4, 1);
+      dummy.rotation.set(0,0,0);
+      dummy.updateMatrix();
+      postMeshInst.setMatrixAt(postIdx, dummy.matrix);
+      postIdx++;
+      if(p>0){
+        let prevX = -CFG.size*0.4 + (p-1)*(CFG.size*0.8/postsPerRow);
+        let prevH = getHeight(prevX, z);
+        wirePoints.push(new THREE.Vector3(prevX, prevH+CFG.trellisHeight, z));
+        wirePoints.push(new THREE.Vector3(x, h+CFG.trellisHeight, z));
+      }
+    }
+  }
+  postMeshInst.instanceMatrix.needsUpdate = true;
+  scene.add(postMeshInst);
+
+  const wireGeomLine = new THREE.BufferGeometry().setFromPoints(wirePoints);
+  const wireLine = new THREE.LineSegments(wireGeomLine, wireMatLine);
+  scene.add(wireLine);
+
+  // ===== Foliage =====
+  const leafGeom = new THREE.PlaneGeometry(0.6, 0.6);
+  leafGeom.translate(0, 0.3, 0);
+  const leafMat = new THREE.MeshStandardMaterial({
+    color: '#558b2f', side: THREE.DoubleSide, roughness:0.7, transparent:true, opacity:0.9
+  });
+  const maxLeaves = rowCount*postsPerRow*4;
+  const leafMeshInst = new THREE.InstancedMesh(leafGeom, leafMat, maxLeaves);
+  leafMeshInst.castShadow = true;
+  leafMeshInst.receiveShadow = true;
+
+  function updateFoliage(){
+    let idx = 0;
+    const c1 = SEASON_COLORS[CFG.season][0];
+    const c2 = SEASON_COLORS[CFG.season][1];
+    const density = CFG.foliageDensity;
+    for(let r=0; r<rowCount; r++){
+      let z = -CFG.size*0.4 + r*CFG.rowSpacing;
+      if(z > CFG.size*0.4) break;
+      for(let p=0; p<postsPerRow; p++){
+        let x = -CFG.size*0.4 + p*(CFG.size*0.8/postsPerRow);
+        let h = getHeight(x,z);
+        let leavesOnPost = Math.floor(4 * density * (CFG.season===3?0.3:1));
+        for(let l=0; l<leavesOnPost; l++){
+          if(idx >= maxLeaves) break;
+          let ox = (Math.random()-0.5)*1.2;
+          let oz = (Math.random()-0.5)*0.5;
+          let oy = CFG.trellisHeight + (Math.random()-0.3)*0.6;
+          dummy.position.set(x+ox, h+oy, z+oz);
+          dummy.rotation.set(Math.random()*0.5, Math.random()*Math.PI*2, Math.random()*0.3);
+          let sc = 0.7 + Math.random()*0.6;
+          dummy.scale.set(sc, sc, sc);
+          dummy.updateMatrix();
+          leafMeshInst.setMatrixAt(idx, dummy.matrix);
+          let col = c1.clone().lerp(c2, Math.random());
+          leafMeshInst.setColorAt(idx, col);
+          idx++;
+        }
+      }
+    }
+    leafMeshInst.count = idx;
+    leafMeshInst.instanceMatrix.needsUpdate = true;
+    if(leafMeshInst.instanceColor) leafMeshInst.instanceColor.needsUpdate = true;
+  }
+  updateFoliage();
+  scene.add(leafMeshInst);
+
+  // ===== Lights =====
+  const ambient = new THREE.AmbientLight('#404060', 0.4);
+  scene.add(ambient);
+  const hemi = new THREE.HemisphereLight('#87CEEB', '#3e5f22', 0.5);
+  scene.add(hemi);
+  const sunLight = new THREE.DirectionalLight('#fff5e1', 1.5);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.near = 0.5;
+  sunLight.shadow.camera.far = 300;
+  sunLight.shadow.camera.left = -120;
+  sunLight.shadow.camera.right = 120;
+  sunLight.shadow.camera.top = 120;
+  sunLight.shadow.camera.bottom = -120;
+  scene.add(sunLight);
+
+  const sunGeom = new THREE.SphereGeometry(2, 16, 16);
+  const sunMatVis = new THREE.MeshBasicMaterial({ color: '#ffdd88' });
+  const sunMesh = new THREE.Mesh(sunGeom, sunMatVis);
+  scene.add(sunMesh);
+
+  // ===== Frost particles =====
+  const frostCount = 500;
+  const frostGeom = new THREE.BufferGeometry();
+  const frostPos = new Float32Array(frostCount*3);
+  const frostVel = new Float32Array(frostCount*3);
+  for(let i=0; i<frostCount; i++){
+    frostPos[i*3] = (Math.random()-0.5)*CFG.size*0.6;
+    frostPos[i*3+1] = 5 + Math.random()*20;
+    frostPos[i*3+2] = (Math.random()-0.5)*CFG.size*0.6;
+    frostVel[i*3] = 0;
+    frostVel[i*3+1] = -0.02 - Math.random()*0.04;
+    frostVel[i*3+2] = 0;
+  }
+  frostGeom.setAttribute('position', new THREE.BufferAttribute(frostPos, 3));
+  const frostMat = new THREE.PointsMaterial({ color: '#aaccff', size:0.4, transparent:true, opacity:0.5 });
+  const frostPoints = new THREE.Points(frostGeom, frostMat);
+  scene.add(frostPoints);
+
+  // ===== Sky =====
+  const skyGeom2 = new THREE.SphereGeometry(240, 32, 32);
+  const skyMat2 = new THREE.MeshBasicMaterial({ color: '#87CEEB', side: THREE.BackSide });
+  const skyMesh2 = new THREE.Mesh(skyGeom2, skyMat2);
+  scene.add(skyMesh2);
+
+  // ===== Telemetry =====
+  const chartCanvas = document.getElementById('chart-gdd');
+  const chartCtx = chartCanvas.getContext('2d');
+  let gddHistory = [];
+
+  function updateChart(){
+    chartCtx.clearRect(0,0,240,50);
+    chartCtx.strokeStyle = '#58a6ff';
+    chartCtx.lineWidth = 1.5;
+    chartCtx.beginPath();
+    for(let i=0; i<gddHistory.length; i++){
+      let x = i/(Math.max(gddHistory.length-1,1))*240;
+      let y = 50 - (gddHistory[i]/1200)*45;
+      if(i===0) chartCtx.moveTo(x,y); else chartCtx.lineTo(x,y);
+    }
+    chartCtx.stroke();
+    chartCtx.fillStyle = '#58a6ff22';
+    if(gddHistory.length>1){ chartCtx.lineTo(240,50); chartCtx.lineTo(0,50); chartCtx.fill(); }
+  }
+
+  function setSunFromTime(hour){
+    let angle = (hour - 6) / 12 * Math.PI;
+    if(hour < 5 || hour > 20) angle = -Math.PI/2;
+    let r = 120;
+    let y = Math.sin(angle)*r;
+    let x = Math.cos(angle)*r;
+    sunLight.position.set(x, Math.max(y, -10), 40);
+    sunMesh.position.copy(sunLight.position);
+    terrainMat.uniforms.uSunDir.value.copy(sunLight.position).normalize();
+
+    let t = Math.max(0, Math.min(1, y/r));
+    if(hour < 5 || hour > 20){
+      scene.background.set('#0b1020');
+      skyMat2.color.set('#0b1020');
+      scene.fog.color.set('#0b1020');
+      ambient.intensity = 0.1;
+      sunLight.intensity = 0;
+      hemi.intensity = 0.15;
+    } else if(t < 0.2){
+      scene.background.set('#ff9966');
+      skyMat2.color.set('#ff9966');
+      scene.fog.color.set('#ff9966');
+      ambient.intensity = 0.3;
+      sunLight.intensity = 0.8;
+      hemi.intensity = 0.4;
+    } else {
+      scene.background.set('#87CEEB');
+      skyMat2.color.set('#87CEEB');
+      scene.fog.color.set('#87CEEB');
+      ambient.intensity = 0.4;
+      sunLight.intensity = 1.5;
+      hemi.intensity = 0.5;
+    }
+  }
+
+  function updateTelemetry(){
+    let h = CFG.time;
+    let solar = 0;
+    if(h>6 && h<18) solar = Math.sin((h-6)/12*Math.PI) * (4.5 + (1-CFG.season)*0.5);
+    document.getElementById('solar-val').textContent = solar.toFixed(1);
+
+    let frostRisk = 'Low';
+    let frostColor = '#4caf50';
+    if(CFG.season===0 || CFG.season===3){
+      if(h<7 || h>20){ frostRisk = 'Moderate'; frostColor = '#ff9800'; }
+      if(h<5){ frostRisk = 'High'; frostColor = '#f44336'; }
+    }
+    if(CFG.season===1){ frostRisk = 'None'; frostColor = '#4caf50'; }
+    let el = document.getElementById('frost-val');
+    el.textContent = frostRisk;
+    el.style.color = frostColor;
+
+    let baseGDD = [120, 820, 1400, 0][CFG.season];
+    let gdd = baseGDD + Math.floor(solar*10);
+    document.getElementById('gdd-val').textContent = gdd;
+    gddHistory.push(gdd);
+    if(gddHistory.length>60) gddHistory.shift();
+    updateChart();
+
+    let minH = Infinity, maxH = -Infinity;
+    for(let i=0;i<heights.length;i++){ minH=Math.min(minH,heights[i]); maxH=Math.max(maxH,heights[i]); }
+    document.getElementById('elev-val').textContent = Math.floor(minH)+'-'+Math.floor(maxH)+'m';
+  }
+
+  // ===== UI =====
+  document.getElementById('season').addEventListener('input', function(e){
+    CFG.season = parseInt(e.target.value);
+    document.getElementById('season-val').textContent = SEASONS[CFG.season];
+    updateFoliage();
+    terrainMat.uniforms.uSeason.value = CFG.season;
+  });
+
+  document.getElementById('time').addEventListener('input', function(e){
+    CFG.time = parseFloat(e.target.value);
+    let h = Math.floor(CFG.time);
+    let m = Math.floor((CFG.time-h)*60);
+    document.getElementById('time-val').textContent = h+':'+m.toString().padStart(2,'0');
+    setSunFromTime(CFG.time);
+  });
+
+  document.getElementById('spacing').addEventListener('input', function(e){
+    CFG.rowSpacing = parseFloat(e.target.value);
+    document.getElementById('spacing-val').textContent = CFG.rowSpacing.toFixed(1)+'m';
+  });
+
+  document.getElementById('trellis').addEventListener('input', function(e){
+    CFG.trellisHeight = parseFloat(e.target.value);
+    document.getElementById('trellis-val').textContent = CFG.trellisHeight.toFixed(1)+'m';
+    updateFoliage();
+  });
+
+  document.getElementById('density').addEventListener('input', function(e){
+    CFG.foliageDensity = parseFloat(e.target.value);
+    document.getElementById('density-val').textContent = Math.floor(CFG.foliageDensity*100)+'%';
+    updateFoliage();
+  });
+
+  const badges = document.querySelectorAll('.badge[data-mode]');
+  badges.forEach(function(b){
+    b.addEventListener('click', function(){
+      badges.forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      CFG.heatmapMode = parseInt(b.dataset.mode);
+      terrainMat.uniforms.uMode.value = CFG.heatmapMode;
+    });
+  });
+
+  document.getElementById('btn-close').addEventListener('click', function(){
+    document.getElementById('ui-layer').classList.toggle('collapsed');
+  });
+
+  const style = document.createElement('style');
+  style.textContent = '#ui-layer.collapsed .panel, #ui-layer.collapsed #panel-close { display:none; }';
+  document.head.appendChild(style);
+
+  // ===== Animation =====
+  const clock = new THREE.Clock();
+  function animate(){
+    requestAnimationFrame(animate);
+    let dt = clock.getDelta();
+    let t = clock.getElapsedTime();
+    controls.update();
+
+    const fp = frostPoints.geometry.attributes.position.array;
+    for(let i=0; i<frostCount; i++){
+      let ix=i*3, iy=ix+1, iz=ix+2;
+      fp[iy] += frostVel[iy];
+      let h = getHeight(fp[ix], fp[iz]);
+      if(fp[iy] < h + 0.5){
+        fp[iy] = h + 0.5 + Math.random()*2;
+        fp[ix] = (Math.random()-0.5)*CFG.size*0.6;
+        fp[iz] = (Math.random()-0.5)*CFG.size*0.6;
+      }
+    }
+    frostPoints.geometry.attributes.position.needsUpdate = true;
+    frostPoints.visible = (CFG.time < 7 || CFG.time > 19) && CFG.heatmapMode !== 1;
+
+    terrainMat.uniforms.uTime.value = t;
+    updateTelemetry();
+    renderer.render(scene, camera);
+  }
+
+  setSunFromTime(CFG.time);
+  updateTelemetry();
+  animate();
+
+  window.addEventListener('resize', function(){
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+</script>
+</body>
+</html>
