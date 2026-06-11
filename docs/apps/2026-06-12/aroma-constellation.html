@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Aroma Constellation Explorer</title>
+<style>
+  :root {
+    --bg: #0b0a14;
+    --panel: #141320;
+    --border: #2a2841;
+    --text: #e0ddf0;
+    --muted: #8a85a0;
+    --accent: #c9a060;
+    --accent2: #7ec4a0;
+    --accent3: #d08080;
+  }
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  #canvas-container { position:fixed; inset:0; z-index:0; }
+  canvas { display:block; width:100%; height:100%; }
+  #ui-layer { position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+  .panel { pointer-events:auto; background:rgba(20,19,32,0.88); border:1px solid var(--border); border-radius:12px; padding:1rem; backdrop-filter:blur(8px); }
+  #controls { position:absolute; top:1rem; left:1rem; width:280px; }
+  #info { position:absolute; top:1rem; right:1rem; width:220px; text-align:center; }
+  #legend { position:absolute; bottom:1rem; left:1rem; width:260px; }
+  #radar-wrap { position:absolute; bottom:1rem; right:1rem; width:240px; height:240px; }
+  h2 { font-size:1rem; margin:0 0 0.6rem; color:var(--accent); letter-spacing:0.02em; }
+  .row { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem; }
+  label { font-size:0.82rem; color:var(--muted); }
+  select, input[type="range"] { width:100%; margin-bottom:0.6rem; accent-color:var(--accent); }
+  select { background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.35rem 0.5rem; font-size:0.85rem; }
+  .value { font-size:0.75rem; color:var(--muted); min-width:2.5rem; text-align:right; }
+  .chip { display:inline-block; font-size:0.7rem; padding:0.2rem 0.5rem; border-radius:4px; background:var(--panel); border:1px solid var(--border); margin:0.15rem; color:var(--text); }
+  .metric { font-size:1.4rem; font-weight:700; color:var(--accent); }
+  .sub { font-size:0.75rem; color:var(--muted); margin-top:0.2rem; }
+  .legend-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.35rem; font-size:0.78rem; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  @media (max-width:768px) {
+    #controls, #info, #legend, #radar-wrap { position:relative !important; top:auto; left:auto; right:auto; bottom:auto; width:100%; margin:0.5rem; }
+    #ui-layer { display:flex; flex-direction:column; gap:0.5rem; overflow-y:auto; pointer-events:auto; }
+    .panel { width:auto; }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"><canvas id="glcanvas"></canvas></div>
+
+<div id="ui-layer">
+  <div class="panel" id="controls">
+    <h2>Varietal Preset</h2>
+    <select id="varietal">
+      <option value="riesling">Riesling</option>
+      <option value="sauvignon">Sauvignon Blanc</option>
+      <option value="pinotnoir">Pinot Noir</option>
+      <option value="syrah">Syrah</option>
+      <option value="cabernet">Cabernet Sauvignon</option>
+      <option value="chardonnay">Chardonnay</option>
+    </select>
+    <h2>Intensity</h2>
+    <div class="row"><label>Overall</label><span class="value" id="v-intensity">1.0</span></div>
+    <input type="range" id="intensity" min="0.2" max="2.0" step="0.05" value="1.0">
+    <h2>Physics</h2>
+    <div class="row"><label>Drift</label><span class="value" id="v-drift">0.5</span></div>
+    <input type="range" id="drift" min="0" max="2.0" step="0.05" value="0.5">
+    <div class="row"><label>Bloom</label><span class="value" id="v-bloom">0.6</span></div>
+    <input type="range" id="bloom" min="0" max="1.0" step="0.05" value="0.6">
+    <div class="row"><label>Rotation</label><span class="value" id="v-rot">1.0</span></div>
+    <input type="range" id="rotSpeed" min="0" max="2.0" step="0.05" value="1.0">
+  </div>
+
+  <div class="panel" id="info">
+    <div class="metric" id="compound-count">0</div>
+    <div class="sub">Active aroma compounds</div>
+    <div style="margin-top:0.8rem; text-align:left;">
+      <div class="chip" id="top-note">—</div>
+      <div class="chip" id="top-intensity">—</div>
+    </div>
+  </div>
+
+  <div class="panel" id="legend">
+    <div class="legend-row"><span class="dot" style="background:#e8c060"></span> Fruity (esters, norisoprenoids)</div>
+    <div class="legend-row"><span class="dot" style="background:#60a0e8"></span> Floral (terpenes, benzenoids)</div>
+    <div class="legend-row"><span class="dot" style="background:#e06060"></span> Spicy / Herbaceous (thiols, pyrazines)</div>
+    <div class="legend-row"><span class="dot" style="background:#60c0a0"></span> Earthy / Woody (lactones, phenols)</div>
+    <div class="legend-row"><span class="dot" style="background:#c060c0"></span> Chemical / Sulfurous (sulfur compounds)</div>
+  </div>
+
+  <div class="panel" id="radar-wrap">
+    <canvas id="radar" width="240" height="240"></canvas>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   Wine Aroma Constellation Explorer
+   Raw WebGL 3D point-sprite particle system with GLSL glow shaders
+   ================================================================ */
+
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl', { alpha:false, antialias:false, preserveDrawingBuffer:false });
+if (!gl) { alert('WebGL not supported'); }
+
+/* ---------- Data: aroma compounds per varietal ---------- */
+const AROMA_DB = {
+  riesling: [
+    {name:'Linalool', family:'floral', x:0.8, y:0.9, z:0.2, intensity:0.9},
+    {name:'Geraniol', family:'floral', x:0.7, y:0.8, z:0.1, intensity:0.7},
+    {name:'Terpineol', family:'floral', x:0.6, y:0.7, z:0.3, intensity:0.6},
+    {name:'Limonene', family:'fruity', x:0.9, y:0.6, z:0.4, intensity:0.5},
+    {name:'Benzaldehyde', family:'earthy', x:0.3, y:0.4, z:0.8, intensity:0.4},
+    {name:'1,1,6-Trimethyl-1,2-dihydronaphthalene (TDN)', family:'chemical', x:0.2, y:0.3, z:0.9, intensity:0.3},
+    {name:'Beta-ionone', family:'floral', x:0.5, y:0.8, z:0.2, intensity:0.6},
+    {name:'Ethyl acetate', family:'fruity', x:0.7, y:0.5, z:0.3, intensity:0.5},
+  ],
+  sauvignon: [
+    {name:'4-Mercapto-4-methylpentan-2-one (4MMP)', family:'spicy', x:0.2, y:0.9, z:0.1, intensity:0.95},
+    {name:'3-Mercaptohexan-1-ol (3MH)', family:'fruity', x:0.9, y:0.7, z:0.2, intensity:0.85},
+    {name:'3-Mercaptohexyl acetate (3MHA)', family:'fruity', x:0.8, y:0.6, z:0.3, intensity:0.8},
+    {name:'Methoxypyrazine (IBMP)', family:'spicy', x:0.1, y:0.8, z:0.2, intensity:0.9},
+    {name:'Hexyl acetate', family:'fruity', x:0.7, y:0.5, z:0.4, intensity:0.6},
+    {name:'Beta-damascenone', family:'floral', x:0.6, y:0.8, z:0.1, intensity:0.7},
+    {name:'Phenethyl alcohol', family:'floral', x:0.5, y:0.7, z:0.3, intensity:0.5},
+    {name:'Isoamyl acetate', family:'fruity', x:0.8, y:0.4, z:0.3, intensity:0.5},
+  ],
+  pinotnoir: [
+    {name:'Ethyl cinnamate', family:'spicy', x:0.3, y:0.8, z:0.2, intensity:0.7},
+    {name:'Ethyl anthranilate', family:'fruity', x:0.8, y:0.6, z:0.3, intensity:0.6},
+    {name:'Gamma-nonalactone', family:'earthy', x:0.2, y:0.3, z:0.9, intensity:0.5},
+    {name:'Beta-damascenone', family:'floral', x:0.6, y:0.9, z:0.1, intensity:0.8},
+    {name:'Acetoin', family:'earthy', x:0.3, y:0.4, z:0.7, intensity:0.4},
+    {name:'Guaiacol', family:'earthy', x:0.2, y:0.5, z:0.8, intensity:0.5},
+    {name:'Ethyl acetate', family:'fruity', x:0.7, y:0.5, z:0.3, intensity:0.5},
+    {name:'Isoamyl acetate', family:'fruity', x:0.8, y:0.4, z:0.3, intensity:0.4},
+  ],
+  syrah: [
+    {name:'Rotundone', family:'spicy', x:0.2, y:0.9, z:0.1, intensity:0.95},
+    {name:'Beta-damascenone', family:'floral', x:0.6, y:0.8, z:0.2, intensity:0.8},
+    {name:'Isoamyl acetate', family:'fruity', x:0.8, y:0.5, z:0.3, intensity:0.6},
+    {name:'Hexyl acetate', family:'fruity', x:0.7, y:0.5, z:0.4, intensity:0.5},
+    {name:'Guaiacol', family:'earthy', x:0.3, y:0.4, z:0.9, intensity:0.6},
+    {name:'4-Ethylguaiacol', family:'earthy', x:0.2, y:0.3, z:0.9, intensity:0.5},
+    {name:'Ethyl lactate', family:'fruity', x:0.6, y:0.5, z:0.4, intensity:0.4},
+    {name:'Dimethyl sulfide', family:'chemical', x:0.1, y:0.2, z:0.8, intensity:0.3},
+  ],
+  cabernet: [
+    {name:'Methoxypyrazine (IBMP)', family:'spicy', x:0.1, y:0.9, z:0.2, intensity:0.85},
+    {name:'Beta-ionone', family:'floral', x:0.5, y:0.8, z:0.1, intensity:0.7},
+    {name:'Beta-damascenone', family:'floral', x:0.6, y:0.7, z:0.2, intensity:0.75},
+    {name:'Hexyl acetate', family:'fruity', x:0.7, y:0.5, z:0.3, intensity:0.5},
+    {name:'Isoamyl acetate', family:'fruity', x:0.8, y:0.4, z:0.3, intensity:0.5},
+    {name:'Vanillin', family:'earthy', x:0.3, y:0.5, z:0.8, intensity:0.6},
+    {name:'Eugenol', family:'spicy', x:0.2, y:0.7, z:0.5, intensity:0.5},
+    {name:'Ethyl acetate', family:'fruity', x:0.6, y:0.5, z:0.4, intensity:0.4},
+  ],
+  chardonnay: [
+    {name:'Linalool', family:'floral', x:0.7, y:0.9, z:0.1, intensity:0.6},
+    {name:'Beta-damascenone', family:'floral', x:0.6, y:0.8, z:0.2, intensity:0.7},
+    {name:'Vanillin', family:'earthy', x:0.3, y:0.5, z:0.9, intensity:0.8},
+    {name:'Whisky lactone', family:'earthy', x:0.2, y:0.4, z:0.9, intensity:0.9},
+    {name:'Furfural', family:'earthy', x:0.3, y:0.3, z:0.8, intensity:0.5},
+    {name:'Diacetyl', family:'earthy', x:0.4, y:0.4, z:0.7, intensity:0.6},
+    {name:'Hexyl acetate', family:'fruity', x:0.8, y:0.5, z:0.3, intensity:0.4},
+    {name:'Ethyl acetate', family:'fruity', x:0.7, y:0.5, z:0.3, intensity:0.5},
+  ],
+};
+
+const FAMILY_COLORS = {
+  fruity: [0.91,0.75,0.38],
+  floral: [0.38,0.63,0.91],
+  spicy:  [0.88,0.38,0.38],
+  earthy: [0.38,0.75,0.63],
+  chemical:[0.75,0.38,0.75]
+};
+
+/* ---------- Shader sources ---------- */
+const VS = `
+attribute vec3 a_pos;
+attribute vec3 a_col;
+attribute float a_size;
+attribute float a_alpha;
+uniform mat4 u_mvp;
+uniform float u_pointSize;
+varying vec3 v_col;
+varying float v_alpha;
+void main() {
+  gl_Position = u_mvp * vec4(a_pos, 1.0);
+  gl_PointSize = a_size * u_pointSize;
+  v_col = a_col;
+  v_alpha = a_alpha;
+}`;
+
+const FS = `
+precision mediump float;
+varying vec3 v_col;
+varying float v_alpha;
+uniform float u_bloom;
+void main() {
+  vec2 coord = gl_PointCoord - vec2(0.5);
+  float dist = length(coord);
+  if (dist > 0.5) discard;
+  float glow = exp(-dist * dist * (2.0 + u_bloom * 6.0));
+  float core = smoothstep(0.5, 0.05, dist);
+  float alpha = (glow * 0.35 + core * 0.85) * v_alpha;
+  gl_FragColor = vec4(v_col, alpha);
+}`;
+
+const LINE_VS = `
+attribute vec3 a_pos;
+uniform mat4 u_mvp;
+void main() {
+  gl_Position = u_mvp * vec4(a_pos, 1.0);
+}`;
+
+const LINE_FS = `
+precision mediump float;
+uniform vec3 u_col;
+uniform float u_alpha;
+void main() {
+  gl_FragColor = vec4(u_col, u_alpha);
+}`;
+
+/* ---------- Shader helpers ---------- */
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+    throw new Error('Shader compile error');
+  }
+  return s;
+}
+
+function prog(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Link error');
+  return p;
+}
+
+const particleProg = prog(VS, FS);
+const lineProg = prog(LINE_VS, LINE_FS);
+
+/* ---------- Particle system ---------- */
+const N = 2048; // max particles (8 compounds * up to 256 clones)
+const posArr = new Float32Array(N * 3);
+const colArr = new Float32Array(N * 3);
+const sizeArr = new Float32Array(N);
+const alphaArr = new Float32Array(N);
+let activeCount = 0;
+
+const particles = []; // logical objects
+
+function lerp(a,b,t){ return a + (b-a)*t; }
+function randn(){ return Math.random()*2-1; }
+
+function spawnParticles(varietal, intensityMul) {
+  particles.length = 0;
+  const db = AROMA_DB[varietal] || AROMA_DB['riesling'];
+  let idx = 0;
+  for (const cmp of db) {
+    const count = Math.floor(80 * cmp.intensity * intensityMul);
+    const col = FAMILY_COLORS[cmp.family] || [0.8,0.8,0.8];
+    for (let i = 0; i < count && idx < N; i++, idx++) {
+      const p = {
+        baseX: (cmp.x - 0.5) * 3.0,
+        baseY: (cmp.y - 0.5) * 3.0,
+        baseZ: (cmp.z - 0.5) * 3.0,
+        x: 0, y: 0, z: 0,
+        vx: randn() * 0.002,
+        vy: randn() * 0.002,
+        vz: randn() * 0.002,
+        size: 4 + cmp.intensity * 18,
+        alpha: 0.2 + cmp.intensity * 0.6,
+        r: col[0], g: col[1], b: col[2],
+        family: cmp.family,
+        name: cmp.name,
+        intensity: cmp.intensity,
+        phase: Math.random() * Math.PI * 2
+      };
+      p.x = p.baseX + randn() * 0.3;
+      p.y = p.baseY + randn() * 0.3;
+      p.z = p.baseZ + randn() * 0.3;
+      particles.push(p);
+    }
+  }
+  activeCount = idx;
+  updateBuffers();
+  updateInfo(db);
+}
+
+function updateBuffers() {
+  for (let i = 0; i < activeCount; i++) {
+    const p = particles[i];
+    posArr[i*3] = p.x; posArr[i*3+1] = p.y; posArr[i*3+2] = p.z;
+    colArr[i*3] = p.r; colArr[i*3+1] = p.g; colArr[i*3+2] = p.b;
+    sizeArr[i] = p.size;
+    alphaArr[i] = p.alpha;
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, posArr.subarray(0, activeCount*3));
+  gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, colArr.subarray(0, activeCount*3));
+  gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, sizeArr.subarray(0, activeCount));
+  gl.bindBuffer(gl.ARRAY_BUFFER, alphaBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, alphaArr.subarray(0, activeCount));
+}
+
+/* ---------- Buffers ---------- */
+const posBuf = gl.createBuffer();
+const colBuf = gl.createBuffer();
+const sizeBuf = gl.createBuffer();
+const alphaBuf = gl.createBuffer();
+
+function initBuffers() {
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, posArr.byteLength, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, colArr.byteLength, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, sizeArr.byteLength, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, alphaBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, alphaArr.byteLength, gl.DYNAMIC_DRAW);
+}
+initBuffers();
+
+/* ---------- Grid lines ---------- */
+const gridVerts = [];
+for (let i = -3; i <= 3; i++) {
+  gridVerts.push(i, -3, 0, i, 3, 0);
+  gridVerts.push(-3, i, 0, 3, i, 0);
+  gridVerts.push(0, -3, i, 0, 3, i);
+  gridVerts.push(-3, 0, i, 3, 0, i);
+}
+const gridBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, gridBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(gridVerts), gl.STATIC_DRAW);
+
+/* ---------- Camera / interaction ---------- */
+let yaw = 0.5, pitch = 0.4, zoom = 5.0;
+let dragging = false, lastX = 0, lastY = 0;
+
+canvas.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('mouseup', () => dragging = false);
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  yaw += (e.clientX - lastX) * 0.005;
+  pitch += (e.clientY - lastY) * 0.005;
+  pitch = Math.max(-1.4, Math.min(1.4, pitch));
+  lastX = e.clientX; lastY = e.clientY;
+});
+canvas.addEventListener('touchstart', e => { if(e.touches.length===1){ dragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; } }, {passive:false});
+canvas.addEventListener('touchmove', e => { if(dragging && e.touches.length===1){ yaw+=(e.touches[0].clientX-lastX)*0.005; pitch+=(e.touches[0].clientY-lastY)*0.005; pitch=Math.max(-1.4,Math.min(1.4,pitch)); lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; e.preventDefault(); } }, {passive:false});
+canvas.addEventListener('touchend', () => dragging = false);
+canvas.addEventListener('wheel', e => { zoom *= e.deltaY > 0 ? 1.05 : 0.95; zoom = Math.max(2, Math.min(15, zoom)); e.preventDefault(); }, {passive:false});
+
+/* ---------- Matrix math ---------- */
+function perspective(out, fovy, aspect, near, far) {
+  const f = 1.0 / Math.tan(fovy / 2);
+  const nf = 1 / (near - far);
+  out[0]=f/aspect; out[1]=0; out[2]=0; out[3]=0;
+  out[4]=0; out[5]=f; out[6]=0; out[7]=0;
+  out[8]=0; out[9]=0; out[10]=(far+near)*nf; out[11]=-1;
+  out[12]=0; out[13]=0; out[14]=2*far*near*nf; out[15]=0;
+}
+function multiply(out, a, b) {
+  for (let i=0;i<4;i++) for (let j=0;j<4;j++) {
+    let s=0; for (let k=0;k<4;k++) s+=a[i*4+k]*b[k*4+j];
+    out[i*4+j]=s;
+  }
+}
+function identity(m) { for(let i=0;i<16;i++) m[i]=i%5===0?1:0; }
+function rotateX(m, a){ const c=Math.cos(a),s=Math.sin(a),t=[1,0,0,0,0,c,s,0,0,-s,c,0,0,0,0,1]; multiply(m,m,t); }
+function rotateY(m, a){ const c=Math.cos(a),s=Math.sin(a),t=[c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1]; multiply(m,m,t); }
+function translate(m, x,y,z){ const t=[1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1]; multiply(m,m,t); }
+
+const proj = new Float32Array(16);
+const view = new Float32Array(16);
+const mvp = new Float32Array(16);
+
+/* ---------- UI wiring ---------- */
+const els = {
+  varietal: document.getElementById('varietal'),
+  intensity: document.getElementById('intensity'),
+  drift: document.getElementById('drift'),
+  bloom: document.getElementById('bloom'),
+  rotSpeed: document.getElementById('rotSpeed'),
+};
+const disp = {
+  intensity: document.getElementById('v-intensity'),
+  drift: document.getElementById('v-drift'),
+  bloom: document.getElementById('v-bloom'),
+  rot: document.getElementById('v-rot'),
+};
+
+function updateInfo(db) {
+  document.getElementById('compound-count').textContent = db.length;
+  const top = db.slice().sort((a,b)=>b.intensity-a.intensity)[0];
+  document.getElementById('top-note').textContent = top.name;
+  document.getElementById('top-intensity').textContent = 'I=' + top.intensity.toFixed(2);
+}
+
+function onParamChange() {
+  disp.intensity.textContent = parseFloat(els.intensity.value).toFixed(2);
+  disp.drift.textContent = parseFloat(els.drift.value).toFixed(2);
+  disp.bloom.textContent = parseFloat(els.bloom.value).toFixed(2);
+  disp.rot.textContent = parseFloat(els.rotSpeed.value).toFixed(2);
+  spawnParticles(els.varietal.value, parseFloat(els.intensity.value));
+}
+
+Object.values(els).forEach(el => el.addEventListener('input', onParamChange));
+
+/* ---------- Radar chart ---------- */
+const radarCanvas = document.getElementById('radar');
+const rctx = radarCanvas.getContext('2d');
+const radarLabels = ['Fruity','Floral','Spicy','Earthy','Chemical'];
+const radarColor = '#c9a060';
+
+function drawRadar() {
+  const w = radarCanvas.width, h = radarCanvas.height;
+  const cx = w/2, cy = h/2, r = 80;
+  rctx.clearRect(0,0,w,h);
+  rctx.strokeStyle = '#2a2841';
+  rctx.lineWidth = 1;
+  for (let ring=0.2; ring<=1; ring+=0.2) {
+    rctx.beginPath();
+    for (let i=0;i<=5;i++) {
+      const a = i*2*Math.PI/5 - Math.PI/2;
+      const x = cx + Math.cos(a)*r*ring;
+      const y = cy + Math.sin(a)*r*ring;
+      if (i===0) rctx.moveTo(x,y); else rctx.lineTo(x,y);
+    }
+    rctx.closePath(); rctx.stroke();
+  }
+  for (let i=0;i<5;i++) {
+    const a = i*2*Math.PI/5 - Math.PI/2;
+    rctx.beginPath(); rctx.moveTo(cx,cy); rctx.lineTo(cx+Math.cos(a)*r, cy+Math.sin(a)*r); rctx.stroke();
+    rctx.fillStyle = '#8a85a0'; rctx.font = '11px system-ui';
+    rctx.textAlign='center'; rctx.textBaseline='middle';
+    rctx.fillText(radarLabels[i], cx+Math.cos(a)*(r+18), cy+Math.sin(a)*(r+18));
+  }
+  // compute family scores
+  const db = AROMA_DB[els.varietal.value] || AROMA_DB['riesling'];
+  const scores = [0,0,0,0,0];
+  const famIdx = {fruity:0, floral:1, spicy:2, earthy:3, chemical:4};
+  for (const c of db) { const i=famIdx[c.family]; if (i!==undefined) scores[i]+=c.intensity; }
+  const maxS = Math.max(...scores, 1);
+  const vals = scores.map(s=>Math.min(s/maxS,1));
+  rctx.beginPath();
+  for (let i=0;i<=5;i++) {
+    const a = (i%5)*2*Math.PI/5 - Math.PI/2;
+    const v = vals[i%5];
+    const x = cx + Math.cos(a)*r*v;
+    const y = cy + Math.sin(a)*r*v;
+    if (i===0) rctx.moveTo(x,y); else rctx.lineTo(x,y);
+  }
+  rctx.fillStyle = 'rgba(201,160,96,0.25)';
+  rctx.fill();
+  rctx.strokeStyle = radarColor; rctx.lineWidth = 2;
+  rctx.stroke();
+}
+
+/* ---------- Resize ---------- */
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ---------- Animation loop ---------- */
+let time = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  time += 0.016;
+
+  const drift = parseFloat(els.drift.value);
+  const rotSpeed = parseFloat(els.rotSpeed.value);
+  yaw += 0.002 * rotSpeed;
+
+  // Update particle physics
+  for (let i = 0; i < activeCount; i++) {
+    const p = particles[i];
+    p.vx += (randn() * 0.0001 * drift);
+    p.vy += (randn() * 0.0001 * drift);
+    p.vz += (randn() * 0.0001 * drift);
+    p.vx *= 0.98; p.vy *= 0.98; p.vz *= 0.98;
+    p.x += p.vx; p.y += p.vy; p.z += p.vz;
+    // Orbit / drift around base
+    const orbR = 0.02 * drift;
+    p.x += Math.sin(time + p.phase) * orbR;
+    p.y += Math.cos(time + p.phase * 1.3) * orbR;
+    // Pull toward base
+    p.x += (p.baseX - p.x) * 0.005;
+    p.y += (p.baseY - p.y) * 0.005;
+    p.z += (p.baseZ - p.z) * 0.005;
+    posArr[i*3] = p.x; posArr[i*3+1] = p.y; posArr[i*3+2] = p.z;
+    // Pulse size
+    sizeArr[i] = p.size * (1 + 0.15 * Math.sin(time * 2 + p.phase));
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, posArr.subarray(0, activeCount*3));
+  gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, sizeArr.subarray(0, activeCount));
+
+  // Clear
+  gl.clearColor(0.043, 0.039, 0.078, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  // Matrices
+  const aspect = canvas.width / canvas.height;
+  perspective(proj, Math.PI / 4, aspect, 0.1, 100);
+  identity(view);
+  translate(view, 0, 0, -zoom);
+  rotateX(view, pitch);
+  rotateY(view, yaw);
+  multiply(mvp, proj, view);
+
+  // Draw grid lines
+  gl.useProgram(lineProg);
+  const uMvpL = gl.getUniformLocation(lineProg, 'u_mvp');
+  const uColL = gl.getUniformLocation(lineProg, 'u_col');
+  const uAlphaL = gl.getUniformLocation(lineProg, 'u_alpha');
+  gl.uniformMatrix4fv(uMvpL, false, mvp);
+  gl.uniform3f(uColL, 0.18, 0.17, 0.28);
+  gl.uniform1f(uAlphaL, 0.25);
+  const aPosL = gl.getAttribLocation(lineProg, 'a_pos');
+  gl.bindBuffer(gl.ARRAY_BUFFER, gridBuf);
+  gl.enableVertexAttribArray(aPosL);
+  gl.vertexAttribPointer(aPosL, 3, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.LINES, 0, gridVerts.length / 3);
+
+  // Draw particles
+  gl.useProgram(particleProg);
+  const uMvp = gl.getUniformLocation(particleProg, 'u_mvp');
+  const uPointSize = gl.getUniformLocation(particleProg, 'u_pointSize');
+  const uBloom = gl.getUniformLocation(particleProg, 'u_bloom');
+  gl.uniformMatrix4fv(uMvp, false, mvp);
+  gl.uniform1f(uPointSize, canvas.height / 18);
+  gl.uniform1f(uBloom, parseFloat(els.bloom.value));
+
+  const aPos = gl.getAttribLocation(particleProg, 'a_pos');
+  const aCol = gl.getAttribLocation(particleProg, 'a_col');
+  const aSize = gl.getAttribLocation(particleProg, 'a_size');
+  const aAlpha = gl.getAttribLocation(particleProg, 'a_alpha');
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
+  gl.enableVertexAttribArray(aCol);
+  gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuf);
+  gl.enableVertexAttribArray(aSize);
+  gl.vertexAttribPointer(aSize, 1, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, alphaBuf);
+  gl.enableVertexAttribArray(aAlpha);
+  gl.vertexAttribPointer(aAlpha, 1, gl.FLOAT, false, 0, 0);
+
+  gl.drawArrays(gl.POINTS, 0, activeCount);
+
+  drawRadar();
+}
+
+// Init
+spawnParticles('riesling', 1.0);
+animate();
+</script>
+</body>
+</html>
