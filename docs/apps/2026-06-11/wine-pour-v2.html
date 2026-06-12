@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate">
+<title>Wine Pour & Swirl Dynamics</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#06070a;color:#c9d1d9;font-family:system-ui,-apple-system,sans-serif}
+
+/* Canvas fills the viewport */
+canvas#sim{display:block;width:100%;height:100%}
+
+/* ── MOBILE-FIRST DEFAULTS ── */
+#app{display:flex;flex-direction:column;width:100%;height:100%;position:relative}
+
+/* Header */
+#header{flex:0 0 auto;padding:0.55rem 0.9rem;background:rgba(6,7,10,0.85);backdrop-filter:blur(6px);border-bottom:1px solid #1a2028;display:flex;align-items:center;justify-content:space-between;z-index:5}
+#header h1{font-size:0.92rem;font-weight:600;color:#e86a56;letter-spacing:0.02em}
+#header .subtitle{font-size:0.72rem;color:#8b949e}
+
+/* Canvas area */
+#stage{flex:1 1 auto;position:relative;overflow:hidden}
+
+/* Bottom action bar (always visible on mobile) */
+#actions{flex:0 0 auto;display:flex;gap:0.4rem;padding:0.45rem 0.6rem;background:rgba(6,7,10,0.9);backdrop-filter:blur(6px);border-top:1px solid #1a2028;z-index:5;overflow-x:auto}
+.btn{background:linear-gradient(135deg,#e86a56,#c94f42);color:#fff;border:none;border-radius:8px;padding:0.45rem 0.9rem;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap;flex:1 1 auto;text-align:center}
+.btn.secondary{background:#1a2028;border:1px solid #2a3441;color:#c9d1d9}
+.btn:active{transform:scale(0.97)}
+.btn.on{background:#2ea043;color:#fff}
+
+/* Settings drawer - hidden by default, slides up */
+#drawer{position:absolute;left:0;right:0;bottom:0;background:rgba(14,18,28,0.96);backdrop-filter:blur(8px);border-top:1px solid #2a3441;border-radius:16px 16px 0 0;padding:0.7rem 1rem 1.2rem;transform:translateY(100%);transition:transform 0.25s ease-out;z-index:10;max-height:60vh;overflow-y:auto}
+#drawer.open{transform:translateY(0)}
+#drawer-handle{width:36px;height:4px;background:#3a4451;border-radius:2px;margin:0 auto 0.6rem}
+#drawer h2{font-size:0.9rem;color:#e86a56;margin-bottom:0.5rem}
+.row{margin:0.45rem 0;display:flex;align-items:center;gap:0.5rem}
+.row label{font-size:0.78rem;color:#8b949e;min-width:90px}
+.row input[type="range"]{flex:1;accent-color:#e86a56}
+.row select{flex:1;background:#0f1320;color:#c9d1d9;border:1px solid #2a3441;border-radius:6px;padding:0.3rem 0.5rem;font-size:0.82rem}
+.val{font-size:0.75rem;color:#c9d1d9;min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
+#overlay{position:absolute;inset:0;background:rgba(0,0,0,0.35);opacity:0;pointer-events:none;transition:opacity 0.2s;z-index:9}
+#overlay.show{opacity:1;pointer-events:auto}
+
+/* Readouts: compact horizontal strip above actions on mobile */
+#readouts{flex:0 0 auto;display:flex;gap:0.35rem;padding:0.35rem 0.5rem;justify-content:center;flex-wrap:wrap;background:rgba(6,7,10,0.7)}
+.badge{background:rgba(14,18,28,0.85);border:1px solid #2a3441;border-radius:8px;padding:0.3rem 0.55rem;font-size:0.68rem;color:#8b949e;text-align:center;min-width:68px}
+.badge strong{display:block;font-size:0.82rem;color:#c9d1d9}
+
+/* Disclaimer */
+.disclaimer{background:#2a1a10;border-bottom:1px solid #5a3a20;color:#e8b080;padding:0.5rem 0.8rem;text-align:center;font-size:0.72rem}
+
+/* ── DESKTOP ENHANCEMENTS (only!) ── */
+@media (min-width: 769px){
+  #app{flex-direction:row}
+  #header{position:absolute;top:0;left:0;right:0;z-index:5;background:rgba(6,7,10,0.7)}
+  #stage{flex:1}
+  #sidebar{position:absolute;top:48px;left:10px;width:260px;z-index:5}
+  #sidebar .panel{background:rgba(14,18,28,0.92);border:1px solid #2a3441;border-radius:12px;padding:0.9rem 1.1rem;backdrop-filter:blur(6px);margin-bottom:0.5rem}
+  #sidebar .panel h2{font-size:0.95rem;margin:0 0 0.6rem;color:#e86a56}
+  #readouts-desktop{position:absolute;top:48px;right:10px;display:flex;flex-direction:column;gap:0.35rem;z-index:5}
+  /* Hide mobile-only elements on desktop */
+  #actions,#readouts,#btn-settings{display:none !important}
+  #drawer{position:absolute;top:48px;left:10px;right:auto;bottom:auto;width:260px;border-radius:12px;transform:none;transition:none;max-height:none;overflow:visible;display:none}
+  #drawer.open{display:block}
+  #overlay{display:none !important}
+}
+@media (max-width: 768px){
+  #sidebar,#readouts-desktop{display:none !important}
+}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="app">
+  <div id="header">
+    <div><h1>Wine Pour & Swirl</h1><span class="subtitle">Interactive fluid dynamics</span></div>
+    <button id="btn-settings" class="btn secondary" style="flex:0 0 auto;padding:0.35rem 0.6rem;font-size:0.75rem">⚙ Settings</button>
+  </div>
+
+  <div id="stage">
+    <canvas id="sim"></canvas>
+  </div>
+
+  <!-- Desktop sidebar -->
+  <div id="sidebar">
+    <div class="panel">
+      <h2>Controls</h2>
+      <div class="row"><label>Glass Type</label><select id="glassSelect"><option value="bordeaux">Bordeaux</option><option value="burgundy">Burgundy</option><option value="flute">Flute</option><option value="iso">ISO</option></select></div>
+      <div class="row"><label>Fill %</label><input id="fillRange" type="range" min="15" max="85" value="60"><span class="val" id="fillVal">60%</span></div>
+      <div class="row"><label>Pour Rate</label><input id="pourRange" type="range" min="0" max="100" value="0"><span class="val" id="pourVal">Off</span></div>
+      <div class="row"><label>Swirl</label><input id="swirlRange" type="range" min="0" max="100" value="40"><span class="val" id="swirlVal">40%</span></div>
+      <div class="row"><label>Temp °C</label><input id="tempRange" type="range" min="4" max="30" value="18"><span class="val" id="tempVal">18°C</span></div>
+    </div>
+  </div>
+
+  <!-- Desktop readouts -->
+  <div id="readouts-desktop">
+    <div class="badge">Surface Area<br><strong id="dsaOut">0</strong> cm²</div>
+    <div class="badge">Dissolved O₂<br><strong id="ddoOut">0</strong> mg/L</div>
+    <div class="badge">Swirl RPM<br><strong id="drpmOut">0</strong></div>
+    <div class="badge">Leg Density<br><strong id="dlegOut">0</strong></div>
+  </div>
+
+  <!-- Mobile readouts -->
+  <div id="readouts">
+    <div class="badge">SA <strong id="saOut">0</strong></div>
+    <div class="badge">O₂ <strong id="doOut">0</strong></div>
+    <div class="badge">RPM <strong id="rpmOut">0</strong></div>
+    <div class="badge">Legs <strong id="legOut">0</strong></div>
+  </div>
+
+  <!-- Mobile action bar -->
+  <div id="actions">
+    <button id="btn-pour" class="btn">⬇️ Pour</button>
+    <button id="btn-swirl" class="btn secondary">🌀 Swirl</button>
+    <button id="btn-auto" class="btn secondary">Auto: Off</button>
+  </div>
+
+  <!-- Mobile slide-up drawer -->
+  <div id="overlay"></div>
+  <div id="drawer">
+    <div id="drawer-handle"></div>
+    <h2>Settings</h2>
+    <div class="row"><label>Glass Type</label><select id="glassSelectM"><option value="bordeaux">Bordeaux</option><option value="burgundy">Burgundy</option><option value="flute">Flute</option><option value="iso">ISO</option></select></div>
+    <div class="row"><label>Fill %</label><input id="fillRangeM" type="range" min="15" max="85" value="60"><span class="val" id="fillValM">60%</span></div>
+    <div class="row"><label>Pour Rate</label><input id="pourRangeM" type="range" min="0" max="100" value="0"><span class="val" id="pourValM">Off</span></div>
+    <div class="row"><label>Swirl</label><input id="swirlRangeM" type="range" min="0" max="100" value="40"><span class="val" id="swirlValM">40%</span></div>
+    <div class="row"><label>Temp °C</label><input id="tempRangeM" type="range" min="4" max="30" value="18"><span class="val" id="tempValM">18°C</span></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+let W, H, CX, CY, SCALE, DPR;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W+'px';
+  canvas.style.height = H+'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  CX = W/2;
+  CY = H*0.75;
+  SCALE = Math.min(W, H) / 900;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const CONFIG = { glass:'bordeaux', fillPct:60, pourRate:0, swirlIntensity:40, temperature:18, autoSwirl:false, gravity:0.25, surfaceTension:0.12, damping:0.96, viscosity:0.015 };
+
+const GLASS_PROFILES = {
+  bordeaux: [{y:0.00,r:0.18},{y:0.05,r:0.22},{y:0.10,r:0.28},{y:0.18,r:0.38},{y:0.28,r:0.48},{y:0.40,r:0.56},{y:0.52,r:0.60},{y:0.64,r:0.62},{y:0.76,r:0.60},{y:0.88,r:0.52},{y:0.95,r:0.42},{y:1.00,r:0.38}],
+  burgundy: [{y:0.00,r:0.20},{y:0.04,r:0.30},{y:0.08,r:0.42},{y:0.14,r:0.58},{y:0.24,r:0.78},{y:0.38,r:0.90},{y:0.54,r:0.92},{y:0.68,r:0.86},{y:0.80,r:0.72},{y:0.90,r:0.56},{y:0.96,r:0.44},{y:1.00,r:0.38}],
+  flute:    [{y:0.00,r:0.16},{y:0.05,r:0.18},{y:0.15,r:0.22},{y:0.35,r:0.26},{y:0.55,r:0.28},{y:0.72,r:0.28},{y:0.84,r:0.26},{y:0.93,r:0.22},{y:0.97,r:0.18},{y:1.00,r:0.16}],
+  iso:      [{y:0.00,r:0.20},{y:0.06,r:0.30},{y:0.14,r:0.42},{y:0.26,r:0.54},{y:0.42,r:0.62},{y:0.58,r:0.64},{y:0.72,r:0.60},{y:0.84,r:0.50},{y:0.93,r:0.38},{y:1.00,r:0.32}]
+};
+
+let nodes=[], particles=[], bubbles=[], legs=[];
+let glassHeight=500, glassWidthMax=240, swirlPhase=0, swirlAngularVel=0, targetAngularVel=0, glassAngle=0;
+let dissolveO2=2.5, surfaceArea=0, pourTimer=0, splashCooldown=0;
+let mouseX=0, mouseY=0, lastMouseX=0, mouseDragging=false;
+
+function glassR(yNorm){
+  const prof=GLASS_PROFILES[CONFIG.glass];
+  if(yNorm<=prof[0].y) return prof[0].r;
+  if(yNorm>=prof[prof.length-1].y) return prof[prof.length-1].r;
+  for(let i=0;i<prof.length-1;i++){
+    if(yNorm>=prof[i].y&&yNorm<=prof[i+1].y){
+      const t=(yNorm-prof[i].y)/(prof[i+1].y-prof[i].y);
+      return prof[i].r+t*(prof[i+1].r-prof[i].r);
+    }
+  }
+  return prof[prof.length-1].r;
+}
+
+function initLiquid(){
+  nodes=[];
+  const n=120;
+  for(let i=0;i<=n;i++) nodes.push({idx:i, xNorm:i/n, yOffset:0, vel:0, acc:0});
+}
+initLiquid();
+
+function computeTargetWaterline(){
+  const prof=GLASS_PROFILES[CONFIG.glass];
+  const targetArea=CONFIG.fillPct*0.01;
+  let totalArea=0;
+  const steps=200;
+  for(let i=0;i<steps;i++){
+    const y=i/steps;
+    totalArea+=Math.PI*Math.pow(glassR(y),2)*(1/steps);
+  }
+  let acc=0;
+  for(let i=0;i<steps;i++){
+    const y=i/steps;
+    acc+=Math.PI*Math.pow(glassR(y),2)*(1/steps);
+    if(acc>=targetArea*totalArea) return y;
+  }
+  return 0.5;
+}
+let targetWaterline=computeTargetWaterline();
+
+class SplashParticle {
+  constructor(x,y,vx,vy,size,life){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.size=size;this.life=life;this.maxLife=life;this.c=`rgba(${180+Math.random()*60|0},${40+Math.random()*30|0},${50+Math.random()*40|0},`;}
+  update(){this.vy+=0.15;this.x+=this.vx;this.y+=this.vy;this.life--;}
+  draw(ctx){const a=Math.max(0,this.life/this.maxLife);ctx.fillStyle=this.c+a.toFixed(2)+')';ctx.beginPath();ctx.arc(this.x,this.y,this.size*a,0,Math.PI*2);ctx.fill();}
+}
+class Bubble {
+  constructor(x,y){this.x=x+(Math.random()-0.5)*20;this.y=y;this.r=1+Math.random()*2.5;this.vy=-0.5-Math.random()*1.5;this.wob=Math.random()*Math.PI*2;this.life=120+Math.random()*60;this.maxLife=this.life;}
+  update(){this.wob+=0.1;this.y+=this.vy;this.x+=Math.sin(this.wob)*0.3;this.life--;}
+  draw(ctx){const a=Math.max(0,Math.min(1,this.life/this.maxLife));ctx.fillStyle=`rgba(220,235,255,${(a*0.55).toFixed(2)})`;ctx.beginPath();ctx.arc(this.x,this.y,this.r*a,0,Math.PI*2);ctx.fill();}
+}
+class WineLeg {
+  constructor(side,y0){this.side=side;this.yNorm=y0;this.vyNorm=0.0005+Math.random()*0.002;this.w=1.2+Math.random()*2.5;this.alpha=0.4+Math.random()*0.35;}
+  update(){this.yNorm+=this.vyNorm;this.vyNorm*=1.005;this.alpha-=0.001;}
+  active(){return this.alpha>0&&this.yNorm<1.0;}
+  draw(ctx){
+    const r=glassR(this.yNorm), r2=glassR(Math.min(1,this.yNorm+0.015));
+    const gx=CX+this.side*r*glassWidthMax*SCALE, gy=CY-this.yNorm*glassHeight*SCALE;
+    const gx2=CX+this.side*r2*glassWidthMax*SCALE, gy2=CY-(this.yNorm+0.015)*glassHeight*SCALE;
+    ctx.strokeStyle=`rgba(200,120,90,${this.alpha.toFixed(2)})`;ctx.lineWidth=this.w;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(gx,gy);ctx.lineTo(gx2,gy2);ctx.stroke();
+  }
+}
+
+function updateSurface(){
+  targetWaterline=computeTargetWaterline();
+  const n=nodes.length, k=CONFIG.surfaceTension, damp=CONFIG.damping, g=CONFIG.gravity;
+  const baseY=CY-targetWaterline*glassHeight*SCALE;
+  const rAtWL=glassR(targetWaterline);
+  const halfWidth=rAtWL*glassWidthMax*SCALE;
+  for(let i=0;i<n;i++){nodes[i].xScreen=CX-halfWidth+nodes[i].xNorm*2*halfWidth;}
+
+  let swirlInput=0;
+  if(CONFIG.autoSwirl){swirlPhase+=0.04+CONFIG.swirlIntensity*0.001;swirlInput=Math.sin(swirlPhase)*CONFIG.swirlIntensity*0.6;}
+  else if(mouseDragging) swirlInput=(mouseX-lastMouseX)*0.15;
+
+  targetAngularVel=targetAngularVel*0.92+swirlInput*0.08;
+  swirlAngularVel=swirlAngularVel*0.95+targetAngularVel*0.05;
+  glassAngle+=swirlAngularVel*0.02;
+  glassAngle*=0.98;
+
+  for(let i=0;i<n;i++){
+    const node=nodes[i], relX=(node.xNorm-0.5)*2;
+    const tilt=-Math.sin(glassAngle)*relX*g*18;
+    const cent=relX*Math.abs(swirlAngularVel)*0.35;
+    const rest=-node.yOffset*0.04;
+    node.acc=tilt+cent+rest;
+  }
+  for(let i=0;i<n;i++){
+    let f=0;
+    if(i>0){const d=nodes[i-1].yOffset-nodes[i].yOffset;f+=d*k;}
+    if(i<n-1){const d=nodes[i+1].yOffset-nodes[i].yOffset;f+=d*k;}
+    nodes[i].acc+=f;
+  }
+  for(let i=0;i<n;i++){
+    const node=nodes[i];
+    node.vel+=node.acc;
+    node.vel*=damp;
+    node.vel*=(1-CONFIG.viscosity*(1-(CONFIG.temperature-4)/26*0.4));
+    node.yOffset+=node.vel;
+    node.acc=0;
+  }
+  let mo=0;for(const nd of nodes)mo+=nd.yOffset;mo/=n;
+  for(const nd of nodes)nd.yOffset-=mo*0.02;
+  for(let i=0;i<n;i++){
+    const node=nodes[i];
+    const wt=-targetWaterline*glassHeight*SCALE+20, wb=(1-targetWaterline)*glassHeight*SCALE-20;
+    if(node.yOffset<wt)node.yOffset=wt;if(node.yOffset>wb)node.yOffset=wb;
+  }
+  const sm=nodes.map((node,i)=>i===0||i===nodes.length-1?node.yOffset:node.yOffset*0.5+(nodes[i-1].yOffset+nodes[i+1].yOffset)*0.25);
+  for(let i=1;i<n-1;i++)nodes[i].yOffset=sm[i];
+
+  if(splashCooldown<=0){
+    for(const i of [2,n-3]){
+      const v=Math.abs(nodes[i].vel);
+      if(v>2.5){
+        const sx=nodes[i].xScreen, sy=CY-targetWaterline*glassHeight*SCALE+nodes[i].yOffset;
+        for(let k=0;k<3;k++)particles.push(new SplashParticle(sx,sy,(Math.random()-0.5)*3,-Math.random()*3-1,1.5+Math.random()*2,40+Math.random()*30));
+        splashCooldown=4;break;
+      }
+    }
+  }else splashCooldown--;
+
+  if(CONFIG.pourRate>0){
+    pourTimer+=CONFIG.pourRate*0.0005;
+    if(pourTimer>1){pourTimer-=1;CONFIG.fillPct=Math.min(85,CONFIG.fillPct+0.15);syncFill();const sx=CX+(Math.random()-0.5)*10,sy=CY-glassHeight*SCALE+10;for(let k=0;k<4;k++)particles.push(new SplashParticle(sx,sy,(Math.random()-0.5)*2,Math.random()*3+1,2+Math.random()*2,30+Math.random()*20));}
+  }
+
+  let tke=0;for(let i=1;i<n-1;i++)tke+=Math.abs(nodes[i].vel);tke/=n;
+  const bc=tke*0.015+(CONFIG.pourRate>0?0.08:0)+(glassAngle>0.3?0.02:0);
+  if(Math.random()<bc&&bubbles.length<250){
+    const i=Math.floor(Math.random()*(n-2))+1;
+    bubbles.push(new Bubble(nodes[i].xScreen,CY-targetWaterline*glassHeight*SCALE+nodes[i].yOffset+4));
+  }
+
+  const tempK=CONFIG.temperature+273.15;
+  const satO2=14.6*(298.15/tempK)*Math.exp(-1300*(1/tempK-1/298.15));
+  let arcLen=0;
+  for(let i=1;i<n;i++){const dx=nodes[i].xScreen-nodes[i-1].xScreen,dy=nodes[i].yOffset-nodes[i-1].yOffset;arcLen+=Math.sqrt(dx*dx+dy*dy);}
+  surfaceArea=arcLen*0.03;
+  const af=Math.min(3,arcLen/(halfWidth*2));
+  dissolveO2+=(satO2-dissolveO2)*0.001*af*(1+tke*0.1);
+  if(dissolveO2<0)dissolveO2=0;
+
+  if(Math.abs(swirlAngularVel)>0.5&&legs.length<60){
+    if(Math.random()<0.15)legs.push(new WineLeg(-1,targetWaterline+Math.random()*0.05));
+    if(Math.random()<0.15)legs.push(new WineLeg(1,targetWaterline+Math.random()*0.05));
+  }
+}
+
+function drawGlass(){
+  const prof=GLASS_PROFILES[CONFIG.glass], h=glassHeight*SCALE, rs=glassWidthMax*SCALE;
+  ctx.beginPath();
+  for(let i=0;i<prof.length;i++){const px=CX+prof[i].r*rs,py=CY-prof[i].y*h;if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}
+  ctx.lineTo(CX-prof[prof.length-1].r*rs,CY-prof[prof.length-1].y*h);
+  for(let i=prof.length-1;i>=0;i--){const px=CX-prof[i].r*rs,py=CY-prof[i].y*h;ctx.lineTo(px,py);}
+  ctx.closePath();
+  ctx.fillStyle='rgba(8,10,14,0.65)';ctx.fill();
+  ctx.strokeStyle='rgba(120,140,170,0.45)';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.save();ctx.clip();
+  const grad=ctx.createLinearGradient(CX,CY-h,CX,CY);
+  grad.addColorStop(0,'rgba(20,8,12,0.9)');grad.addColorStop(0.35,'rgba(90,25,42,0.75)');grad.addColorStop(0.7,'rgba(180,90,60,0.55)');grad.addColorStop(1,'rgba(240,170,120,0.25)');
+  ctx.fillStyle=grad;ctx.fillRect(CX-rs*1.2,CY-h,rs*2.4,h*1.05);
+  ctx.restore();
+
+  ctx.beginPath();
+  for(let i=0;i<prof.length;i++){const px=CX+prof[i].r*rs,py=CY-prof[i].y*h;if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}
+  ctx.strokeStyle='rgba(180,200,220,0.35)';ctx.lineWidth=1.2;ctx.stroke();
+  ctx.beginPath();
+  for(let i=prof.length-1;i>=0;i--){const px=CX-prof[i].r*rs,py=CY-prof[i].y*h;if(i===prof.length-1)ctx.moveTo(px,py);else ctx.lineTo(px,py);}
+  ctx.strokeStyle='rgba(180,200,220,0.25)';ctx.lineWidth=1.2;ctx.stroke();
+}
+
+function drawWine(){
+  const prof=GLASS_PROFILES[CONFIG.glass], h=glassHeight*SCALE, rs=glassWidthMax*SCALE;
+  const tw=targetWaterline, wlY=CY-tw*h;
+  ctx.beginPath();
+  for(let i=0;i<nodes.length;i++){const nx=nodes[i].xScreen, ny=wlY+nodes[i].yOffset; if(i===0)ctx.moveTo(nx,ny);else ctx.lineTo(nx,ny);}
+  ctx.lineTo(CX+glassR(tw)*rs,CY);
+  for(let i=prof.length-1;i>=0;i--)if(prof[i].y<=tw){const px=CX+prof[i].r*rs,py=CY-prof[i].y*h;ctx.lineTo(px,py);}
+  ctx.closePath();
+  ctx.save();ctx.clip();
+  const wg=ctx.createRadialGradient(CX,CY-h*0.3,0,CX,CY,rs*1.1);
+  wg.addColorStop(0,'rgba(80,20,35,0.92)');wg.addColorStop(0.4,'rgba(140,40,55,0.88)');wg.addColorStop(0.75,'rgba(200,100,70,0.72)');wg.addColorStop(1,'rgba(240,180,140,0.35)');
+  ctx.fillStyle=wg;ctx.fillRect(CX-rs*1.2,CY-h,rs*2.4,h*1.1);
+  ctx.globalCompositeOperation='screen';
+  for(let i=0;i<12;i++){
+    const ly=CY-Math.random()*tw*h, lx=CX+(Math.random()-0.5)*rs*glassR(1-ly/CY/h)*1.6;
+    const lg=ctx.createRadialGradient(lx,ly,0,lx,ly,8+Math.random()*18);
+    lg.addColorStop(0,'rgba(255,220,180,0.18)');lg.addColorStop(1,'rgba(255,220,180,0)');
+    ctx.fillStyle=lg;ctx.beginPath();ctx.arc(lx,ly,8+Math.random()*18,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.beginPath();
+  for(let i=0;i<nodes.length;i++){const nx=nodes[i].xScreen, ny=wlY+nodes[i].yOffset;if(i===0)ctx.moveTo(nx,ny);else ctx.lineTo(nx,ny);}
+  ctx.strokeStyle='rgba(255,200,170,0.55)';ctx.lineWidth=1.8;ctx.stroke();
+  const meniscusR=halfWidth=glassR(tw)*rs;
+  ctx.beginPath();ctx.ellipse(CX,wlY,meniscusR,meniscusR*0.12,0,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,210,180,0.35)';ctx.fill();ctx.strokeStyle='rgba(255,220,190,0.5)';ctx.lineWidth=1;ctx.stroke();
+}
+
+function drawBackground(){
+  const g=ctx.createRadialGradient(CX,CY-H*0.3,0,CX,CY,H*0.8);
+  g.addColorStop(0,'rgba(25,18,30,0.4)');g.addColorStop(1,'rgba(6,7,10,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+}
+
+function drawReadouts(){
+  document.getElementById('saOut').textContent=document.getElementById('dsaOut').textContent=surfaceArea.toFixed(1);
+  document.getElementById('doOut').textContent=document.getElementById('ddoOut').textContent=dissolveO2.toFixed(1);
+  document.getElementById('rpmOut').textContent=document.getElementById('drpmOut').textContent=(Math.abs(swirlAngularVel)*60/Math.PI).toFixed(0);
+  document.getElementById('legOut').textContent=document.getElementById('dlegOut').textContent=legs.length;
+}
+
+function loop(){
+  updateSurface();
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+  drawGlass();
+  drawWine();
+  for(let i=particles.length-1;i>=0;i--){particles[i].update();particles[i].draw(ctx);if(particles[i].life<=0)particles.splice(i,1);}
+  for(let i=bubbles.length-1;i>=0;i--){bubbles[i].update();bubbles[i].draw(ctx);if(bubbles[i].life<=0)bubbles.splice(i,1);}
+  for(let i=legs.length-1;i>=0;i--){legs[i].update();legs[i].draw(ctx);if(!legs[i].active())legs.splice(i,1);}
+  drawReadouts();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ---- UI wiring ----
+function bind(id, cfgKey, fmt, isMobile){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.addEventListener('input',e=>{
+    CONFIG[cfgKey]=el.type==='select-one'?el.value:+el.value;
+    if(fmt){
+      const v=CONFIG[cfgKey];
+      document.getElementById(id.replace(isMobile?'RangeM':'Range',isMobile?'ValM':'Val')).textContent=fmt(v);
+    }
+    if(cfgKey==='glass')initLiquid();
+    if(isMobile)document.getElementById(id.replace('M','')).value=CONFIG[cfgKey];
+    else document.getElementById(id+'M').value=CONFIG[cfgKey];
+  });
+}
+function fmtPct(v){return Math.round(v)+'%';}
+function fmtPour(v){return v==0?'Off':Math.round(v)+'%';}
+function fmtSwirl(v){return Math.round(v)+'%';}
+function fmtTemp(v){return Math.round(v)+'°C';}
+
+bind('glassSelect','glass',null,false); bind('glassSelectM','glass',null,true);
+bind('fillRange','fillPct',fmtPct,false); bind('fillRangeM','fillPct',fmtPct,true);
+bind('pourRange','pourRate',fmtPour,false); bind('pourRangeM','pourRate',fmtPour,true);
+bind('swirlRange','swirlIntensity',fmtSwirl,false); bind('swirlRangeM','swirlIntensity',fmtSwirl,true);
+bind('tempRange','temperature',fmtTemp,false); bind('tempRangeM','temperature',fmtTemp,true);
+
+function syncFill(){document.getElementById('fillRange').value=document.getElementById('fillRangeM').value=Math.round(CONFIG.fillPct);document.getElementById('fillVal').textContent=document.getElementById('fillValM').textContent=fmtPct(CONFIG.fillPct);}
+
+// Buttons
+let pourInterval=null;
+document.getElementById('btn-pour').addEventListener('click',()=>{
+  if(pourInterval){clearInterval(pourInterval);pourInterval=null;document.getElementById('btn-pour').textContent='⬇️ Pour';CONFIG.pourRate=0;}
+  else{CONFIG.pourRate=80;document.getElementById('btn-pour').textContent='⏹ Stop';document.getElementById('pourRange').value=document.getElementById('pourRangeM').value=80;document.getElementById('pourVal').textContent=document.getElementById('pourValM').textContent='80%';pourInterval=setInterval(()=>{if(CONFIG.fillPct>=85){CONFIG.pourRate=0;document.getElementById('btn-pour').textContent='⬇️ Pour';clearInterval(pourInterval);pourInterval=null;}},500);}
+});
+document.getElementById('btn-swirl').addEventListener('click',()=>{CONFIG.swirlIntensity=Math.min(100,CONFIG.swirlIntensity+15);document.getElementById('swirlRange').value=document.getElementById('swirlRangeM').value=CONFIG.swirlIntensity;document.getElementById('swirlVal').textContent=document.getElementById('swirlValM').textContent=fmtSwirl(CONFIG.swirlIntensity);});
+const btnAuto=document.getElementById('btn-auto');
+btnAuto.addEventListener('click',()=>{CONFIG.autoSwirl=!CONFIG.autoSwirl;btnAuto.textContent=CONFIG.autoSwirl?'Auto: On':'Auto: Off';btnAuto.classList.toggle('on',CONFIG.autoSwirl);});
+
+// Mobile drawer
+const drawer=document.getElementById('drawer');
+const overlay=document.getElementById('overlay');
+const btnSettings=document.getElementById('btn-settings');
+function openDrawer(){drawer.classList.add('open');overlay.classList.add('show');}
+function closeDrawer(){drawer.classList.remove('open');overlay.classList.remove('show');}
+btnSettings.addEventListener('click',openDrawer);
+overlay.addEventListener('click',closeDrawer);
+document.getElementById('drawer-handle').addEventListener('click',closeDrawer);
+
+// Mouse/touch swirl interaction
+canvas.addEventListener('mousedown',e=>{mouseDragging=true;lastMouseX=mouseX=e.clientX;});
+window.addEventListener('mouseup',()=>{mouseDragging=false;lastMouseX=mouseX;});
+window.addEventListener('mousemove',e=>{lastMouseX=mouseX;mouseX=e.clientX;});
+canvas.addEventListener('touchstart',e=>{mouseDragging=true;lastMouseX=mouseX=e.touches[0].clientX;e.preventDefault();},{passive:false});
+canvas.addEventListener('touchend',()=>{mouseDragging=false;});
+canvas.addEventListener('touchmove',e=>{lastMouseX=mouseX;mouseX=e.touches[0].clientX;e.preventDefault();},{passive:false});
+
+// Keyboard shortcuts
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();document.getElementById('btn-pour').click();}
+  if(e.code==='KeyS'){document.getElementById('btn-swirl').click();}
+  if(e.code==='KeyA'){btnAuto.click();}
+});
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate">
+<title>Vineyard Terroir 3D Explorer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0b0f14;color:#c9d1d9;font-family:system-ui,-apple-system,sans-serif}
+#app{display:flex;flex-direction:column;width:100%;height:100%;position:relative}
+#header{flex:0 0 auto;padding:0.55rem 0.9rem;background:rgba(11,15,20,0.85);backdrop-filter:blur(6px);border-bottom:1px solid #1a2028;display:flex;align-items:center;justify-content:space-between;z-index:5}
+#header h1{font-size:0.92rem;font-weight:600;color:#58a6ff;letter-spacing:0.02em}
+#header .subtitle{font-size:0.72rem;color:#8b949e}
+#stage{flex:1 1 auto;position:relative;overflow:hidden;background:#0b0f14}
+#stage canvas{display:block;width:100%;height:100%}
+#actions{flex:0 0 auto;display:flex;gap:0.4rem;padding:0.45rem 0.6rem;background:rgba(11,15,20,0.9);border-top:1px solid #1a2028;z-index:5;overflow-x:auto}
+.btn{background:#1a2028;border:1px solid #2a3441;color:#c9d1d9;border-radius:8px;padding:0.45rem 0.9rem;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap;flex:1 1 auto;text-align:center}
+.btn.primary{background:linear-gradient(135deg,#58a6ff,#2a75d1);border:none;color:#fff}
+.btn:active{transform:scale(0.97)}
+.btn.on{background:#2ea043;color:#fff;border-color:#2ea043}
+#readouts{flex:0 0 auto;display:flex;gap:0.35rem;padding:0.35rem 0.5rem;justify-content:center;flex-wrap:wrap;background:rgba(11,15,20,0.7)}
+.badge{background:rgba(14,18,28,0.85);border:1px solid #2a3441;border-radius:8px;padding:0.3rem 0.55rem;font-size:0.68rem;color:#8b949e;text-align:center;min-width:68px}
+.badge strong{display:block;font-size:0.82rem;color:#c9d1d9}
+#overlay{position:absolute;inset:0;background:rgba(0,0,0,0.35);opacity:0;pointer-events:none;transition:opacity 0.2s;z-index:9}
+#overlay.show{opacity:1;pointer-events:auto}
+#drawer{position:absolute;left:0;right:0;bottom:0;background:rgba(14,18,28,0.96);backdrop-filter:blur(8px);border-top:1px solid #2a3441;border-radius:16px 16px 0 0;padding:0.7rem 1rem 1.2rem;transform:translateY(100%);transition:transform 0.25s ease-out;z-index:10;max-height:60vh;overflow-y:auto}
+#drawer.open{transform:translateY(0)}
+#drawer-handle{width:36px;height:4px;background:#3a4451;border-radius:2px;margin:0 auto 0.6rem}
+#drawer h2{font-size:0.9rem;color:#58a6ff;margin-bottom:0.5rem}
+.row{margin:0.45rem 0;display:flex;align-items:center;gap:0.5rem}
+.row label{font-size:0.78rem;color:#8b949e;min-width:90px}
+.row input[type="range"]{flex:1;accent-color:#58a6ff}
+.badge-toggle{display:inline-block;font-size:0.65rem;padding:0.15rem 0.45rem;border-radius:4px;background:#2a3441;color:#8b949e;margin-right:0.3rem;cursor:pointer;user-select:none;border:1px solid transparent}
+.badge-toggle.active{background:#58a6ff22;color:#58a6ff;border-color:#58a6ff44}
+.disclaimer{background:#1a1610;border-bottom:1px solid #3a3020;color:#c9a060;padding:0.5rem 0.8rem;text-align:center;font-size:0.72rem}
+@media (min-width: 769px){
+  #app{flex-direction:row}
+  #header{position:absolute;top:0;left:0;right:0;z-index:5;background:rgba(11,15,20,0.7)}
+  #stage{flex:1}
+  #sidebar{position:absolute;top:48px;left:10px;width:260px;z-index:5}
+  #sidebar .panel{background:rgba(14,18,28,0.92);border:1px solid #2a3441;border-radius:12px;padding:0.9rem 1.1rem;backdrop-filter:blur(6px);margin-bottom:0.5rem}
+  #sidebar .panel h2{font-size:0.95rem;margin:0 0 0.6rem;color:#58a6ff}
+  #readouts-desktop{position:absolute;top:48px;right:10px;display:flex;flex-direction:column;gap:0.35rem;z-index:5}
+  #actions,#readouts,#btn-settings{display:none !important}
+  #drawer{position:absolute;top:48px;left:10px;right:auto;bottom:auto;width:260px;border-radius:12px;transform:none;transition:none;max-height:none;overflow:visible;display:none}
+  #drawer.open{display:block}
+  #overlay{display:none !important}
+}
+@media (max-width: 768px){#sidebar,#readouts-desktop{display:none !important}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+<div class="disclaimer"><strong>Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<div id="app">
+  <div id="header">
+    <div><h1>Vineyard Terroir 3D</h1><span class="subtitle">Interactive terrain explorer</span></div>
+    <button id="btn-settings" class="btn" style="flex:0 0 auto;padding:0.35rem 0.6rem;font-size:0.75rem">Layers</button>
+  </div>
+  <div id="stage"></div>
+  <div id="sidebar">
+    <div class="panel">
+      <h2>Terroir Controls</h2>
+      <div class="row"><label>Season</label><input id="season" type="range" min="0" max="3" step="1" value="1"></div>
+      <div class="row"><label>Time</label><input id="time" type="range" min="0" max="24" step="0.1" value="12"></div>
+      <div class="row"><label>Row Spacing</label><input id="spacing" type="range" min="1.5" max="4" step="0.1" value="2.5"></div>
+      <div style="margin:0.5rem 0 0">
+        <span class="badge-toggle active" data-mode="0">Terrain</span>
+        <span class="badge-toggle" data-mode="1">Solar</span>
+        <span class="badge-toggle" data-mode="2">Frost</span>
+      </div>
+    </div>
+  </div>
+  <div id="readouts-desktop">
+    <div class="badge">Solar<br><strong id="solar-val">4.2</strong></div>
+    <div class="badge">Frost Risk<br><strong id="frost-val">Low</strong></div>
+  </div>
+  <div id="readouts">
+    <div class="badge">Solar <strong id="solarOut">4.2</strong></div>
+    <div class="badge">Frost <strong id="frostOut">Low</strong></div>
+  </div>
+  <div id="actions">
+    <button class="btn primary" id="btn-season">Summer</button>
+    <button class="btn" id="btn-time">Noon</button>
+    <button class="btn" id="btn-map">Terrain</button>
+  </div>
+  <div id="overlay"></div>
+  <div id="drawer">
+    <div id="drawer-handle"></div>
+    <h2>Heatmap Overlay</h2>
+    <div style="margin:0.3rem 0">
+      <span class="badge-toggle active" data-mode="0">Terrain</span>
+      <span class="badge-toggle" data-mode="1">Solar</span>
+      <span class="badge-toggle" data-mode="2">Frost</span>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  function initApp() {
+    var CFG = { season:1, time:12, rowSpacing:2.5, heatmapMode:0 };
+    var SEASONS = ['Spring','Summer','Autumn','Winter'];
+    var SEASON_COLORS = [0x7cb342, 0x33691e, 0xe67e22, 0x5d4037];
+    var container = document.getElementById('stage');
+
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color('#0b1020');
+    scene.fog = new THREE.Fog('#0b1020', 80, 300);
+
+    var camera = new THREE.PerspectiveCamera(50, container.clientWidth / Math.max(container.clientHeight,1), 0.1, 500);
+    camera.position.set(60, 45, 80);
+
+    var renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setSize(container.clientWidth, Math.max(container.clientHeight,1));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    var controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI/2 - 0.05;
+    controls.minDistance = 10;
+    controls.maxDistance = 180;
+    controls.target.set(0, 5, 0);
+
+    // Terrain
+    var geom = new THREE.PlaneGeometry(200, 200, 80, 80);
+    geom.rotateX(-Math.PI/2);
+    var pos = geom.attributes.position;
+    for(var i=0;i<pos.count;i++){
+      var x = pos.getX(i), z = pos.getZ(i);
+      var h = Math.max(0, Math.sin(x*0.05)*5 + Math.cos(z*0.04)*4 + Math.sin(x*0.01+z*0.01)*8);
+      pos.setY(i, h);
+    }
+    geom.computeVertexNormals();
+    var terrainMat = new THREE.MeshStandardMaterial({ color:'#3e5f22', roughness:0.9, metalness:0.1 });
+    var terrain = new THREE.Mesh(geom, terrainMat);
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+
+    // Posts
+    var postGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.5, 6);
+    var postMat = new THREE.MeshStandardMaterial({ color:'#5d4037', roughness:0.9 });
+    for(var r=0; r<16; r++){
+      var z = -70 + r*CFG.rowSpacing;
+      for(var p=0; p<40; p++){
+        var x = -70 + p*(140/40);
+        var h = Math.max(0, Math.sin(x*0.05)*5 + Math.cos(z*0.04)*4 + Math.sin(x*0.01+z*0.01)*8);
+        var post = new THREE.Mesh(postGeo, postMat);
+        post.position.set(x, h+1.25, z);
+        scene.add(post);
+      }
+    }
+
+    // Leaves
+    var leafGeo = new THREE.PlaneGeometry(0.5, 0.5);
+    var leafMat = new THREE.MeshStandardMaterial({ color: SEASON_COLORS[CFG.season], side: THREE.DoubleSide, transparent:true, opacity:0.9 });
+    var leafGroup = new THREE.Group();
+    for(var i=0;i<300;i++){
+      var leaf = new THREE.Mesh(leafGeo, leafMat);
+      leaf.position.set((Math.random()-0.5)*120, 2+Math.random()*2, (Math.random()-0.5)*120);
+      leaf.rotation.set(Math.random(), Math.random()*Math.PI*2, Math.random());
+      leafGroup.add(leaf);
+    }
+    scene.add(leafGroup);
+
+    // Lights
+    var ambient = new THREE.AmbientLight('#404060', 0.4);
+    scene.add(ambient);
+    var hemi = new THREE.HemisphereLight('#87CEEB', '#3e5f22', 0.5);
+    scene.add(hemi);
+    var sun = new THREE.DirectionalLight('#fff5e1', 1.2);
+    sun.position.set(60, 80, 40);
+    sun.castShadow = true;
+    scene.add(sun);
+
+    function setSunFromTime(hour) {
+      var angle = (hour - 6) / 12 * Math.PI;
+      if(hour < 5 || hour > 20) angle = -Math.PI/2;
+      var r = 100, y = Math.sin(angle)*r, x = Math.cos(angle)*r;
+      sun.position.set(x, Math.max(y, 5), 40);
+      if(hour < 5 || hour > 20){
+        scene.background.set('#0b1020'); scene.fog.color.set('#0b1020');
+        ambient.intensity = 0.1; sun.intensity = 0; hemi.intensity = 0.15;
+      } else {
+        scene.background.set('#87CEEB'); scene.fog.color.set('#87CEEB');
+        ambient.intensity = 0.4; sun.intensity = 1.2; hemi.intensity = 0.5;
+      }
+    }
+
+    function updateTelemetry() {
+      var h = CFG.time;
+      var solar = (h>6 && h<18) ? Math.sin((h-6)/12*Math.PI)*4.5 : 0;
+      var el1 = document.getElementById('solar-val'); if(el1) el1.textContent = solar.toFixed(1);
+      var el2 = document.getElementById('solarOut'); if(el2) el2.textContent = solar.toFixed(1);
+      var frostRisk = (CFG.season===1) ? 'None' : ((h<7||h>20)?'Moderate':'Low');
+      if(CFG.season!==1 && h<5) frostRisk = 'High';
+      var el3 = document.getElementById('frost-val'); if(el3) el3.textContent = frostRisk;
+      var el4 = document.getElementById('frostOut'); if(el4) el4.textContent = frostRisk;
+    }
+
+    // Bind events
+    document.getElementById('season').addEventListener('input', function(e){
+      CFG.season = +e.target.value;
+      leafMat.color.setHex(SEASON_COLORS[CFG.season]);
+    });
+    document.getElementById('time').addEventListener('input', function(e){
+      CFG.time = +e.target.value;
+      setSunFromTime(CFG.time);
+    });
+
+    var badges = document.querySelectorAll('#sidebar .badge-toggle');
+    badges.forEach(function(b){
+      b.addEventListener('click', function(){
+        badges.forEach(function(x){x.classList.remove('active');});
+        b.classList.add('active');
+        CFG.heatmapMode = +b.dataset.mode;
+      });
+    });
+
+    var dBadges = document.querySelectorAll('#drawer .badge-toggle');
+    dBadges.forEach(function(b){
+      b.addEventListener('click', function(){
+        dBadges.forEach(function(x){x.classList.remove('active');});
+        b.classList.add('active');
+        CFG.heatmapMode = +b.dataset.mode;
+      });
+    });
+
+    document.getElementById('btn-season').addEventListener('click', function(){
+      CFG.season = (CFG.season+1)%4;
+      this.textContent = SEASONS[CFG.season];
+      leafMat.color.setHex(SEASON_COLORS[CFG.season]);
+    });
+    document.getElementById('btn-time').addEventListener('click', function(){
+      var times = [{t:6,l:'Dawn'},{t:12,l:'Noon'},{t:18,l:'Dusk'},{t:22,l:'Night'}];
+      var next = 0;
+      for(var i=0;i<times.length;i++){ if(times[i].t > CFG.time){ next = i; break; } }
+      CFG.time = times[next].t;
+      this.textContent = times[next].l;
+      setSunFromTime(CFG.time);
+    });
+    var mapLabels = ['Terrain','Solar','Frost'];
+    document.getElementById('btn-map').addEventListener('click', function(){
+      CFG.heatmapMode = (CFG.heatmapMode+1)%3;
+      this.textContent = mapLabels[CFG.heatmapMode];
+    });
+
+    // Drawer
+    var drawer = document.getElementById('drawer');
+    var overlay = document.getElementById('overlay');
+    document.getElementById('btn-settings').addEventListener('click', function(){
+      drawer.classList.add('open'); overlay.classList.add('show');
+    });
+    overlay.addEventListener('click', function(){
+      drawer.classList.remove('open'); overlay.classList.remove('show');
+    });
+    document.getElementById('drawer-handle').addEventListener('click', function(){
+      drawer.classList.remove('open'); overlay.classList.remove('show');
+    });
+
+    window.addEventListener('resize', function(){
+      camera.aspect = container.clientWidth / Math.max(container.clientHeight,1);
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, Math.max(container.clientHeight,1));
+    });
+
+    setSunFromTime(CFG.time);
+    updateTelemetry();
+
+    function animate(){
+      requestAnimationFrame(animate);
+      controls.update();
+      updateTelemetry();
+      renderer.render(scene, camera);
+    }
+    animate();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    requestAnimationFrame(initApp);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Champagne Riddling & Yeast Sediment Simulator</title>
+<style>
+  :root{ --bg:#0e0b14; --panel:#1a1522; --border:#2e2438; --text:#e8e0d8; --muted:#9b8e9e; --accent:#d4a843; --accent2:#58a6ff; --warn-bg:#1a1610; --warn-border:#3a3020; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow:hidden; height:100%; }
+  #canvas-container{ position:fixed; inset:0; z-index:0; }
+  canvas{ display:block; width:100%; height:100%; }
+  #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; overflow-y:auto; }
+  .panel{ pointer-events:auto; background:linear-gradient(180deg,rgba(26,21,34,0.96),rgba(26,21,34,0.88)); border:1px solid var(--border); border-radius:14px; padding:1rem; width:300px; }
+  .panel h2{ font-size:1.05rem; color:var(--accent); margin:0 0 0.5rem; }
+  .panel h3{ font-size:0.82rem; color:var(--muted); margin:0.6rem 0 0.25rem; text-transform:uppercase; letter-spacing:0.06em; }
+  .control{ margin-bottom:0.6rem; }
+  .control label{ display:flex; justify-content:space-between; font-size:0.82rem; color:var(--muted); }
+  .control input[type="range"]{ width:100%; accent-color:var(--accent); cursor:pointer; }
+  .control .value{ font-variant-numeric:tabular-nums; }
+  .btn{ background:var(--accent); color:#1a1522; border:none; border-radius:6px; padding:0.45rem 0.8rem; font-weight:700; font-size:0.8rem; cursor:pointer; width:100%; margin-top:0.4rem; }
+  .btn:hover{ filter:brightness(1.15); }
+  .btn-secondary{ background:var(--border); color:var(--text); }
+  .stats{ display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; font-size:0.78rem; }
+  .stat{ background:rgba(255,255,255,0.04); padding:0.35rem 0.45rem; border-radius:6px; }
+  .stat .label{ color:var(--muted); font-size:0.7rem; }
+  .stat .num{ color:var(--accent2); font-weight:700; font-variant-numeric:tabular-nums; }
+  .legend{ display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.5rem; }
+  .chip{ font-size:0.7rem; padding:0.2rem 0.4rem; border-radius:4px; background:rgba(255,255,255,0.06); color:var(--muted); }
+
+  #top-left{ position:absolute; top:12px; left:12px; }
+  #bottom-right{ position:absolute; bottom:12px; right:12px; width:320px; }
+  #top-right{ position:absolute; top:12px; right:12px; }
+
+  @media (max-width:768px){
+    #ui-layer{ display:flex; flex-direction:column; gap:0.6rem; padding:0.6rem; }
+    #top-left,#top-right,#bottom-right{ position:relative !important; top:auto; left:auto; right:auto; bottom:auto; width:100%; }
+    .panel{ width:100% !important; }
+    body{ overflow-y:auto; }
+  }
+</style>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+</head>
+<body>
+<div id="canvas-container"><canvas id="sim"></canvas></div>
+<div id="ui-layer">
+  <div id="top-left" class="panel">
+    <h2>🍾 Riddling Simulator</h2>
+    <div class="stats">
+      <div class="stat"><div class="label">Bottles</div><div class="num" id="st-bottles">0</div></div>
+      <div class="stat"><div class="label">Avg Sediment</div><div class="num" id="st-avg">0%</div></div>
+      <div class="stat"><div class="label">Settled</div><div class="num" id="st-settled">0</div></div>
+      <div class="stat"><div class="label">Phase</div><div class="num" id="st-phase">-</div></div>
+    </div>
+    <div class="legend">
+      <span class="chip">🟤 Yeast lees</span>
+      <span class="chip">🍾 Bottle</span>
+      <span class="chip">🪵 Pupitre</span>
+    </div>
+  </div>
+
+  <div id="top-right" class="panel">
+    <h2>Controls</h2>
+    <div class="control">
+      <label>Riddling Speed <span class="value" id="val-speed">1.0×</span></label>
+      <input type="range" id="speed" min="0" max="5" step="0.1" value="1">
+    </div>
+    <div class="control">
+      <label>Yeast Load <span class="value" id="val-load">60%</span></label>
+      <input type="range" id="load" min="10" max="100" step="5" value="60">
+    </div>
+    <div class="control">
+      <label>Sediment Cohesion <span class="value" id="val-cohesion">0.6</span></label>
+      <input type="range" id="cohesion" min="0.1" max="1.0" step="0.05" value="0.6">
+    </div>
+    <div class="control">
+      <label>Particle Size <span class="value" id="val-size">2.2</span></label>
+      <input type="range" id="psize" min="1" max="4" step="0.2" value="2.2">
+    </div>
+    <button class="btn" id="btn-toggle">⏸ Pause</button>
+    <button class="btn btn-secondary" id="btn-reset">↺ Reset Rack</button>
+    <button class="btn btn-secondary" id="btn-add">+ Add Bottle</button>
+  </div>
+
+  <div id="bottom-right" class="panel">
+    <h2>📈 Sediment Sparklines</h2>
+    <canvas id="spark" width="300" height="140" style="width:100%;height:140px;border-radius:8px;background:rgba(0,0,0,0.25);"></canvas>
+    <div class="stats" style="margin-top:0.4rem;">
+      <div class="stat"><div class="label">Neck Concentration</div><div class="num" id="st-neck">0%</div></div>
+      <div class="stat"><div class="label">Riddling Days</div><div class="num" id="st-days">0</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========== CHAMPAGNE Riddling & Yeast Sediment Simulator ==========
+   Canvas 2D particle physics of yeast lees settling inside bottles
+   during manual (or gyro-palette) riddling. Bottles sit in a pupitre
+   rack. Each frame bottles nudge toward neck-down; sediment particles
+   roll to the lowest internal point under gravity + cohesion.   */
+
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+const sparkCanvas = document.getElementById('spark');
+const sctx = sparkCanvas.getContext('2d');
+
+let W, H, DPR;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.width = Math.floor(window.innerWidth * DPR);
+  H = canvas.height = Math.floor(window.innerHeight * DPR);
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Parameters
+const params = {
+  speed: 1,
+  load: 0.60,
+  cohesion: 0.6,
+  psize: 2.2,
+  rackCols: 4,
+  rackRows: 5,
+  cellW: 110,
+  cellH: 160,
+  bottleW: 36,
+  bottleH: 100,
+  neckW: 14,
+  neckH: 24,
+  gravity: 0.15,
+  friction: 0.92,
+  riddleRate: 0.008, // rad/frame at 1x
+  maxAngle: Math.PI*0.48,
+};
+
+// Bottles state
+let bottles = [];
+let simTime = 0; // frames
+let isRunning = true;
+let days = 0;
+
+// Sparkline history
+const MAX_HIST = 300;
+let history = { avgSediment:[], neckPct:[], settled:[] };
+
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+
+class Bottle {
+  constructor(col, row){
+    this.col = col;
+    this.row = row;
+    // Angle: 0 = vertical (upright), increases toward neck-down horizontal
+    this.angle = 0;
+    // Target angle based on position in rack (riddling progression)
+    // Pupitres tilt deeper in lower rows and left-to-right progression
+    this.targetAngle = (row/(params.rackRows-1||1)) * params.maxAngle * (0.7 + 0.3*(col/params.rackCols));
+    this.particles = [];
+    this.sparklines = [];
+    this.settled = false;
+    this.settleTimer = 0;
+    this.color = `hsl(${30 + Math.random()*20}, ${55+Math.random()*15}%, ${72+Math.random()*10}%)`;
+    this.generateParticles();
+  }
+  generateParticles(){
+    this.particles = [];
+    const count = Math.floor(params.load * 200); // max 200 particles per bottle
+    // Distribute initially near bottom of bottle interior
+    for(let i=0;i<count;i++){
+      const x = (Math.random()-0.5)*params.bottleW*0.7;
+      const y = params.bottleH*0.35 - Math.random()*params.bottleH*0.25;
+      this.particles.push({x, y, vx:0, vy:0, r: params.psize*(0.8+Math.random()*0.4), stuck:false});
+    }
+  }
+  getBounds(){
+    // Rack cell center in CSS px
+    const rackLeft = (window.innerWidth - params.rackCols*params.cellW)/2;
+    const rackTop = (window.innerHeight - params.rackRows*params.cellH)/2 + 40;
+    const cx = rackLeft + this.col*params.cellW + params.cellW/2;
+    const cy = rackTop + this.row*params.cellH + params.cellH/2 + 20;
+    return {cx, cy};
+  }
+  localToWorld(x,y,cx,cy){
+    const cos = Math.cos(this.angle);
+    const sin = Math.sin(this.angle);
+    return { x: cx + x*cos - y*sin, y: cy + x*sin + y*cos };
+  }
+  worldToLocal(wx,wy,cx,cy){
+    const dx = wx - cx, dy = wy - cy;
+    const cos = Math.cos(this.angle);
+    const sin = Math.sin(this.angle);
+    return { x: dx*cos + dy*sin, y: -dx*sin + dy*cos };
+  }
+}
+
+function initRack(){
+  bottles = [];
+  for(let r=0;r<params.rackRows;r++){
+    for(let c=0;c<params.rackCols;c++){
+      bottles.push(new Bottle(c,r));
+    }
+  }
+  simTime = 0;
+  days = 0;
+  history = { avgSediment:[], neckPct:[], settled:[] };
+}
+initRack();
+
+// Physics update
+function update(){
+  if(!isRunning) return;
+  simTime++;
+  if(simTime % 600 === 0) days++;
+
+  let totalSediment = 0;
+  let neckCount = 0;
+  let settledCount = 0;
+
+  for(const b of bottles){
+    // Riddling: slowly move angle toward target (or a bit beyond to simulate daily nudge)
+    const progress = Math.min(1, simTime*params.riddleRate*params.speed / (0.3 + b.targetAngle));
+    // Daily nudge: oscillate slightly as cellar master turns
+    const nudge = Math.sin(simTime*0.02*params.speed + b.col)*0.015*params.speed;
+    const desired = b.targetAngle * progress + nudge;
+    b.angle = lerp(b.angle, desired, 0.04*params.speed);
+    b.angle = clamp(b.angle, 0, params.maxAngle);
+
+    const {cx,cy} = b.getBounds();
+    const cos = Math.cos(b.angle);
+    const sin = Math.sin(b.angle);
+
+    // Particle physics inside bottle local space
+    // Bottle shape: rounded body + narrow neck
+    const bw2 = params.bottleW/2;
+    const neckHalf = params.neckW/2;
+    const bodyBottom = params.bottleH/2;
+    const neckTop = -params.bottleH/2;
+    const shoulderY = neckTop + params.neckH;
+
+    let inNeck = 0;
+    let settledP = 0;
+
+    for(const p of b.particles){
+      if(p.stuck) continue;
+      // Gravity in local coords: world gravity rotated by -angle
+      const gx = -params.gravity * sin;
+      const gy = params.gravity * cos;
+      p.vx += gx;
+      p.vy += gy;
+      p.vx *= params.friction;
+      p.vy *= params.friction;
+      p.x += p.vx * params.speed;
+      p.y += p.vy * params.speed;
+
+      // Boundary: body is rounded rect, neck is narrow rect on top
+      // Top of bottle = negative y in local (neck points up initially)
+      // After rotation, neck becomes right-side in world, but local coords stay same.
+
+      // Clamp inside neck/body composite
+      let limitX;
+      if(p.y < shoulderY){
+        // In neck region
+        limitX = neckHalf - p.r;
+        if(p.y < neckTop + p.r) p.y = neckTop + p.r;
+      }else{
+        // In body: rounded bottom
+        const bodyY = p.y - shoulderY;
+        const maxBodyW = bw2*(1 - 0.25*Math.max(0, (p.y - bodyBottom)/params.bottleH));
+        limitX = Math.max(neckHalf, maxBodyW) - p.r;
+        if(p.y > bodyBottom - p.r){
+          // rounded bottom cap
+          const dy = p.y - (bodyBottom - bw2);
+          const dx = Math.sqrt(Math.max(0, bw2*bw2 - dy*dy));
+          limitX = dx - p.r;
+        }
+      }
+      if(p.x < -limitX){ p.x = -limitX; p.vx *= -0.3; }
+      if(p.x > limitX){ p.x = limitX; p.vx *= -0.3; }
+      if(p.y > bodyBottom - p.r){
+        const dy = p.y - (bodyBottom - bw2);
+        if(Math.abs(p.x) < bw2*0.8){
+           // flat bottom zone
+           if(p.y > bodyBottom - p.r){ p.y = bodyBottom - p.r; p.vy *= -0.3; }
+        }else{
+           // corner rounding
+           const dx = Math.abs(p.x) - bw2*0.8;
+           const cornerR = bw2*0.2;
+           const dist = Math.sqrt(dx*dx + (p.y-(bodyBottom-p.r))*(p.y-(bodyBottom-p.r)));
+           if(dist > cornerR){
+             const nx = dx/dist, ny = (p.y-(bodyBottom-p.r))/dist;
+             p.x = (bw2*0.8 + nx*cornerR) * Math.sign(p.x);
+             p.y = bodyBottom - p.r + ny*cornerR;
+             p.vx *= -0.3; p.vy *= -0.3;
+           }
+        }
+      }
+
+      // Cohesion aggregation: if near bottom-most region and slow, stick
+      const nearBottom = p.y > bodyBottom - params.bottleH*0.25;
+      const nearNeck = p.y < shoulderY;
+      const slow = Math.abs(p.vx)+Math.abs(p.vy) < 0.4;
+      if(nearBottom && slow && Math.random() < params.cohesion*0.02) p.stuck = true;
+
+      if(nearNeck) inNeck++;
+      if(p.stuck || (nearBottom && slow)) settledP++;
+    }
+
+    const neckPct = b.particles.length ? Math.round(100*inNeck/b.particles.length) : 0;
+    const settledPct = b.particles.length ? Math.round(100*settledP/b.particles.length) : 0;
+    totalSediment += settledPct;
+    neckCount += neckPct;
+    if(settledPct > 85) settledCount++;
+
+    // Per-bottle sparkline history (just store neck% for now)
+    b.sparklines.push(neckPct);
+    if(b.sparklines.length > MAX_HIST) b.sparklines.shift();
+  }
+
+  // Global history
+  const avgSed = bottles.length ? Math.round(totalSediment / bottles.length) : 0;
+  const avgNeck = bottles.length ? Math.round(neckCount / bottles.length) : 0;
+  history.avgSediment.push(avgSed);
+  history.neckPct.push(avgNeck);
+  history.settled.push(settledCount);
+  for(const k in history){ if(history[k].length > MAX_HIST) history[k].shift(); }
+
+  // DOM stats
+  document.getElementById('st-bottles').textContent = bottles.length;
+  document.getElementById('st-avg').textContent = avgSed + '%';
+  document.getElementById('st-settled').textContent = settledCount + '/' + bottles.length;
+  document.getElementById('st-neck').textContent = avgNeck + '%';
+  document.getElementById('st-days').textContent = days;
+  let phase = 'Upright';
+  if(days > 1 && days < 5) phase = 'Tilting';
+  else if(days >= 5 && days < 12) phase = 'Riddling';
+  else if(days >= 12) phase = 'Settling';
+  if(settledCount === bottles.length && bottles.length > 0) phase = 'Ready for Dégorgement';
+  document.getElementById('st-phase').textContent = phase;
+}
+
+// Drawing
+function drawBottle(b){
+  const {cx,cy} = b.getBounds();
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(b.angle);
+
+  const bw = params.bottleW;
+  const bh = params.bottleH;
+  const nw = params.neckW;
+  const nh = params.neckH;
+  const rr = bw*0.18; // corner radius
+
+  // Glass path
+  ctx.beginPath();
+  ctx.moveTo(-bw/2+rr, bh/2);
+  ctx.lineTo(bw/2-rr, bh/2);
+  ctx.quadraticCurveTo(bw/2, bh/2, bw/2, bh/2-rr);
+  ctx.lineTo(bw/2, -bh/2+nh);
+  ctx.lineTo(nw/2, -bh/2+nh);
+  ctx.lineTo(nw/2, -bh/2);
+  ctx.lineTo(-nw/2, -bh/2);
+  ctx.lineTo(-nw/2, -bh/2+nh);
+  ctx.lineTo(-bw/2, -bh/2+nh);
+  ctx.lineTo(-bw/2, bh/2-rr);
+  ctx.quadraticCurveTo(-bw/2, bh/2, -bw/2+rr, bh/2);
+  ctx.closePath();
+
+  // Glass fill
+  ctx.fillStyle = 'rgba(220,210,180,0.06)';
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(220,210,180,0.35)';
+  ctx.stroke();
+
+  // Sediment particles
+  for(const p of b.particles){
+    const alpha = p.stuck ? 0.95 : 0.65;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(160,120,50,${alpha})`;
+    ctx.fill();
+  }
+
+  // Highlight
+  ctx.beginPath();
+  ctx.moveTo(-bw/2+4, bh/2-8);
+  ctx.lineTo(-bw/2+4, -bh/2+nh+8);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawPupitre(){
+  const cols = params.rackCols;
+  const rows = params.rackRows;
+  const cellW = params.cellW;
+  const cellH = params.cellH;
+  const rackW = cols*cellW;
+  const rackH = rows*cellH;
+  const left = (window.innerWidth - rackW)/2;
+  const top = (window.innerHeight - rackH)/2 + 40;
+
+  ctx.save();
+  // Backboard / frame
+  ctx.strokeStyle = 'rgba(160,130,90,0.35)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(left-10, top-10, rackW+20, rackH+20);
+
+  // Holes / slots
+  for(let r=0;r<=rows;r++){
+    ctx.beginPath();
+    ctx.moveTo(left, top + r*cellH);
+    ctx.lineTo(left+rackW, top + r*cellH);
+    ctx.strokeStyle = 'rgba(160,130,90,0.18)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  for(let c=0;c<=cols;c++){
+    ctx.beginPath();
+    ctx.moveTo(left + c*cellW, top);
+    ctx.lineTo(left + c*cellW, top+rackH);
+    ctx.stroke();
+  }
+
+  // Rack legs
+  ctx.strokeStyle = 'rgba(160,130,90,0.25)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(left+rackW/2-20, top+rackH+10);
+  ctx.lineTo(left+rackW/2-40, top+rackH+140);
+  ctx.moveTo(left+rackW/2+20, top+rackH+10);
+  ctx.lineTo(left+rackW/2+40, top+rackH+140);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawSparklines(){
+  const w = sparkCanvas.width;
+  const h = sparkCanvas.height;
+  sctx.clearRect(0,0,w,h);
+  // Background grid
+  sctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  sctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    const y = h - (i/4)*(h-20) - 10;
+    sctx.beginPath(); sctx.moveTo(0,y); sctx.lineTo(w,y); sctx.stroke();
+  }
+  const drawLine = (data, color, yMax=100) => {
+    if(data.length < 2) return;
+    sctx.beginPath();
+    sctx.strokeStyle = color;
+    sctx.lineWidth = 2;
+    for(let i=0;i<data.length;i++){
+      const x = (i/(MAX_HIST-1))*w;
+      const y = h - 10 - (data[i]/yMax)*(h-20);
+      if(i===0) sctx.moveTo(x,y); else sctx.lineTo(x,y);
+    }
+    sctx.stroke();
+  };
+  drawLine(history.avgSediment, 'rgba(212,168,67,0.9)');
+  drawLine(history.neckPct, 'rgba(88,166,255,0.8)');
+  // settled count on secondary scale
+  drawLine(history.settled, 'rgba(139,110,160,0.7)', bottles.length||1);
+  // Legend
+  sctx.fillStyle = 'rgba(212,168,67,0.9)'; sctx.fillRect(8,8,10,3);
+  sctx.fillStyle = '#9b8e9e'; sctx.font = '10px system-ui'; sctx.fillText('Sediment settled', 22, 12);
+  sctx.fillStyle = 'rgba(88,166,255,0.8)'; sctx.fillRect(8,18,10,3);
+  sctx.fillText('Neck concentration', 22, 22);
+}
+
+function draw(){
+  ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+
+  // Ambient background vignette
+  const grd = ctx.createRadialGradient(window.innerWidth/2, window.innerHeight/2, 40, window.innerWidth/2, window.innerHeight/2, Math.max(window.innerWidth, window.innerHeight));
+  grd.addColorStop(0, 'rgba(30,24,40,0.4)');
+  grd.addColorStop(1, 'rgba(14,11,20,0.0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+
+  drawPupitre();
+  for(const b of bottles) drawBottle(b);
+  drawSparklines();
+}
+
+// Main loop
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+loop();
+
+// Controls wiring
+function bind(id, param, fmt=v=>v){
+  const el = document.getElementById(id);
+  const disp = document.getElementById('val-'+id);
+  el.addEventListener('input', ()=>{
+    const v = parseFloat(el.value);
+    params[param] = v;
+    disp.textContent = fmt(v);
+    if(param==='load' || param==='psize'){
+      for(const b of bottles) b.generateParticles();
+    }
+  });
+}
+bind('speed','speed', v=>v.toFixed(1)+'×');
+bind('load','load', v=>Math.round(v)+'%');
+bind('cohesion','cohesion', v=>v.toFixed(2));
+bind('psize','psize', v=>v.toFixed(1));
+
+document.getElementById('btn-toggle').addEventListener('click', ()=>{
+  isRunning = !isRunning;
+  document.getElementById('btn-toggle').textContent = isRunning ? '⏸ Pause' : '▶ Resume';
+});
+document.getElementById('btn-reset').addEventListener('click', ()=>{ initRack(); });
+document.getElementById('btn-add').addEventListener('click', ()=>{
+  if(bottles.length < 24){
+    const idx = bottles.length;
+    const c = idx % params.rackCols;
+    const r = Math.floor(idx / params.rackCols);
+    if(r < params.rackRows) bottles.push(new Bottle(c,r));
+  }
+});
+
+// Click bottle to manually nudge angle (interactive)
+canvas.addEventListener('pointerdown', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  for(const b of bottles){
+    const {cx,cy} = b.getBounds();
+    const dx = x - cx, dy = y - cy;
+    if(Math.sqrt(dx*dx + dy*dy) < 50){
+      b.angle = Math.min(b.angle + 0.08, params.maxAngle);
+    }
+  }
+});
+</script>
+</body>
+</html>
