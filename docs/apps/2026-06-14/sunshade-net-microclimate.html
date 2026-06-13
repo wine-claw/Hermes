@@ -326,7 +326,7 @@ function drawNet(){
   const cols=Math.floor((right-left)/(mesh*5+8));
   for(let i=0;i<=cols;i++){
     const x=left+i*(right-left)/cols+wave*(i%2?1:-1);
-    ctx.moveTo(x,topY); ctx.lineTo(x+w*0.02,botY);
+    ctx.moveTo(x,topY); ctx.lineTo(x+W*0.02,botY);
   }
   const rows=Math.floor((botY-topY)/(mesh*6+10));
   for(let j=0;j<=rows;j++){
