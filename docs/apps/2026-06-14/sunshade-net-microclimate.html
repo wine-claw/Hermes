@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunshade Net Microclimate — Vineyard Canopy Simulator</title>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ font-size:16px; }
+  body{ background:#0e0f0a; color:#d8dbbd; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.5; min-height:100vh; overflow:hidden; }
+  #app{ position:fixed; inset:0; display:flex; flex-direction:column; }
+  #topbar{ padding:0.7rem 1rem; background:rgba(15,18,9,0.92); border-bottom:1px solid #2a2e1d; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+  #topbar h1{ font-size:clamp(0.95rem,2.4vw,1.2rem); color:#e5cf8f; letter-spacing:0.01em; }
+  #topbar .subtitle{ color:#8e9472; font-size:0.75rem; }
+  #stage{ position:relative; flex:1; overflow:hidden; background:linear-gradient(180deg,#0f110b 0%,#171a0f 100%); }
+  canvas{ display:block; position:absolute; inset:0; }
+  #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; display:flex; flex-direction:column; justify-content:space-between; padding:1rem; }
+  .panel{ pointer-events:auto; background:rgba(20,24,14,0.88); border:1px solid #3a3f25; border-radius:14px; padding:0.9rem 1rem; backdrop-filter:blur(8px); box-shadow:0 8px 24px rgba(0,0,0,0.35); }
+  #metrics{ position:absolute; top:1rem; right:1rem; width:min(270px,32vw); min-width:230px; }
+  #metrics h2{ font-size:0.8rem; color:#b8bf8e; margin-bottom:0.6rem; text-transform:uppercase; letter-spacing:0.08em; }
+  .metric{ display:flex; justify-content:space-between; align-items:baseline; font-size:0.84rem; margin:0.35rem 0; }
+  .metric .val{ font-variant-numeric:tabular-nums; color:#f0e6b8; font-weight:600; }
+  .bar{ height:6px; border-radius:3px; background:#2a2e1d; margin-top:0.25rem; overflow:hidden; }
+  .bar i{ display:block; height:100%; border-radius:3px; width:0%; transition:width 0.15s linear, background-color 0.15s linear; }
+  #controls{ position:absolute; bottom:1rem; left:1rem; width:min(420px,46vw); min-width:300px; }
+  .control{ margin:0.55rem 0; }
+  .control label{ display:flex; justify-content:space-between; font-size:0.78rem; color:#a7ad84; margin-bottom:0.25rem; }
+  .control input[type="range"]{ width:100%; accent-color:#d4b45f; }
+  .presets{ display:flex; gap:0.45rem; flex-wrap:wrap; margin-top:0.6rem; }
+  .presets button{ background:#252b18; color:#b8bf8e; border:1px solid #3a3f25; border-radius:8px; padding:0.35rem 0.7rem; font-size:0.72rem; cursor:pointer; transition:all 0.12s; }
+  .presets button:hover{ background:#3a3f25; color:#f0e6b8; }
+  .presets button.active{ background:#6b5e2e; color:#fff; border-color:#8f7f45; }
+  #legend{ position:absolute; bottom:1rem; right:1rem; font-size:0.72rem; color:#8e9472; background:rgba(20,24,14,0.8); border:1px solid #2a2e1d; border-radius:10px; padding:0.55rem 0.8rem; }
+  #legend span{ display:inline-flex; align-items:center; gap:0.35rem; margin:0.15rem 0.5rem 0.15rem 0; }
+  #legend i{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .stress-low{ color:#6bb76b; }
+  .stress-mid{ color:#d4b45f; }
+  .stress-high{ color:#d96c5e; }
+  @media (max-width:820px){
+    body{ overflow:auto; }
+    #app{ position:relative; min-height:100vh; }
+    #stage{ min-height:560px; }
+    #ui-layer{ position:relative; padding:0; }
+    #metrics, #controls, #legend{ position:relative !important; top:auto; right:auto; left:auto; bottom:auto; width:auto; min-width:auto; margin:0.7rem 1rem; }
+    #metrics{ order:1; }
+    #controls{ order:2; }
+    #legend{ order:3; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<div id="app">
+  <div id="topbar">
+    <div>
+      <h1>Sunshade Net Microclimate Simulator</h1>
+      <div class="subtitle">p5.js generative vineyard canopy — PAR interception, leaf temperature, and berry heat stress</div>
+    </div>
+  </div>
+  <div id="stage">
+    <canvas id="canvas"></canvas>
+    <div id="ui-layer">
+      <div id="metrics" class="panel">
+        <h2>Live Canopy Telemetry</h2>
+        <div class="metric"><span>Global Irradiance</span><span class="val" id="m-irr">1000 W/m²</span></div>
+        <div class="bar"><i id="b-irr" style="background:#ffd166"></i></div>
+        <div class="metric"><span>Net PAR under shade</span><span class="val" id="m-par">—</span></div>
+        <div class="bar"><i id="b-par" style="background:#9ccc65"></i></div>
+        <div class="metric"><span>Canopy temperature</span><span class="val" id="m-temp">—</span></div>
+        <div class="bar"><i id="b-temp" style="background:#ef9a9a"></i></div>
+        <div class="metric"><span>Berry surface temp</span><span class="val" id="m-berry">—</span></div>
+        <div class="bar"><i id="b-berry" style="background:#ff8a65"></i></div>
+        <div class="metric"><span>Heat stress index</span><span class="val" id="m-stress">—</span></div>
+        <div class="bar"><i id="b-stress" style="background:#b39ddb"></i></div>
+        <div class="metric" style="margin-top:0.6rem;font-size:0.75rem;color:#8e9472;"><span id="m-note">Shade lowers berry surface temperature and slows sugar accumulation rate.</span></div>
+      </div>
+      <div id="controls" class="panel">
+        <div class="control">
+          <label><span>Sun elevation</span><span id="v-elev">55°</span></label>
+          <input type="range" id="elev" min="15" max="85" value="55">
+        </div>
+        <div class="control">
+          <label><span>Global irradiance</span><span id="v-irr">1000 W/m²</span></label>
+          <input type="range" id="irr" min="200" max="1200" value="1000" step="50">
+        </div>
+        <div class="control">
+          <label><span>Shade net density</span><span id="v-shade">40%</span></label>
+          <input type="range" id="shade" min="0" max="80" value="40" step="5">
+        </div>
+        <div class="control">
+          <label><span>Net mesh aperture</span><span id="v-mesh">2.5 mm</span></label>
+          <input type="range" id="mesh" min="0.5" max="6" value="2.5" step="0.25">
+        </div>
+        <div class="control">
+          <label><span>Air temperature</span><span id="v-air">28°C</span></label>
+          <input type="range" id="air" min="18" max="42" value="28" step="0.5">
+        </div>
+        <div class="control">
+          <label><span>Wind speed</span><span id="v-wind">1.5 m/s</span></label>
+          <input type="range" id="wind" min="0" max="6" value="1.5" step="0.1">
+        </div>
+        <div class="presets">
+          <button data-preset="clear">Clear sky</button>
+          <button data-preset="light40" class="active">Light shade 40%</button>
+          <button data-preset="heavy70">Heavy shade 70%</button>
+          <button data-preset="heatwave">Heatwave noon</button>
+        </div>
+      </div>
+      <div id="legend">
+        <span><i style="background:#6bb76b"></i>Low stress</span>
+        <span><i style="background:#d4b45f"></i>Warming</span>
+        <span><i style="background:#d96c5e"></i>High stress</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://unpkg.com/p5@1.9.0/lib/p5.min.js"></script>
+<script>
+const state={
+  elev:55,
+  irr:1000,
+  shade:0.40,
+  mesh:2.5,
+  air:28,
+  wind:1.5,
+  time:0,
+  berryTemp:28,
+  canopyTemp:28,
+  parUnder:600,
+  stress:0.2,
+  netVibration:0,
+  photons:[]
+};
+const canvas=document.getElementById('canvas');
+let W,H,ctx;
+let particles=[];
+let leaves=[];
+let berries=[];
+let animationId;
+
+function resize(){
+  const stage=document.getElementById('stage');
+  W=stage.clientWidth; H=stage.clientHeight;
+  canvas.width=W; canvas.height=H;
+  ctx=canvas.getContext('2d');
+  initScene();
+}
+window.addEventListener('resize',resize);
+
+function initScene(){
+  particles=[];
+  leaves=[];
+  berries=[];
+  const rows=Math.floor(H*0.42/38);
+  const cols=Math.floor(W/46);
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      leaves.push({
+        x:28+c*46+(r%2)*23,
+        y:H*0.28+r*38,
+        size:18+Math.random()*14,
+        angle:Math.random()*Math.PI*2,
+        swaySpeed:0.4+Math.random()*0.6,
+        colorOffset:Math.random()*0.3
+      });
+    }
+  }
+  // berry clusters hanging from canopy
+  const clusters=Math.floor(W/90);
+  for(let i=0;i<clusters;i++){
+    const cx=60+i*90+Math.random()*30;
+    const cy=H*0.32+Math.random()*40;
+    for(let b=0;b<9;b++){
+      berries.push({
+        x:cx+(b%3-1)*12+Math.random()*4,
+        y:cy+Math.floor(b/3)*14+Math.random()*6,
+        r:5+Math.random()*3,
+        stress:0
+      });
+    }
+  }
+}
+
+function bindControls(){
+  const ids=['elev','irr','shade','mesh','air','wind'];
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    el.addEventListener('input',()=>{
+      let v=parseFloat(el.value);
+      if(id==='shade') v=v/100;
+      state[id]=v;
+      updateLabels();
+      document.querySelectorAll('.presets button').forEach(b=>b.classList.remove('active'));
+    });
+  });
+  document.querySelectorAll('.presets button').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      applyPreset(btn.dataset.preset);
+      document.querySelectorAll('.presets button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+}
+
+function updateLabels(){
+  document.getElementById('v-elev').textContent=state.elev+'°';
+  document.getElementById('v-irr').textContent=state.irr+' W/m²';
+  document.getElementById('v-shade').textContent=Math.round(state.shade*100)+'%';
+  document.getElementById('v-mesh').textContent=state.mesh+' mm';
+  document.getElementById('v-air').textContent=state.air.toFixed(1)+'°C';
+  document.getElementById('v-wind').textContent=state.wind.toFixed(1)+' m/s';
+}
+
+function applyPreset(name){
+  if(name==='clear'){ state.elev=65; state.irr=1100; state.shade=0; state.mesh=2.5; state.air=26; state.wind=2; }
+  if(name==='light40'){ state.elev=55; state.irr=1000; state.shade=0.40; state.mesh=2.5; state.air=28; state.wind=1.5; }
+  if(name==='heavy70'){ state.elev=45; state.irr=900; state.shade=0.70; state.mesh=1.5; state.air=28; state.wind=0.8; }
+  if(name==='heatwave'){ state.elev=75; state.irr=1200; state.shade=0.55; state.mesh=2; state.air=38; state.wind=1; }
+  document.getElementById('elev').value=state.elev;
+  document.getElementById('irr').value=state.irr;
+  document.getElementById('shade').value=Math.round(state.shade*100);
+  document.getElementById('mesh').value=state.mesh;
+  document.getElementById('air').value=state.air;
+  document.getElementById('wind').value=state.wind;
+  updateLabels();
+}
+
+// physics helpers
+function degToRad(d){ return d*Math.PI/180; }
+function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+function computePhysics(){
+  const sunAngle=degToRad(90-state.elev);
+  // effective shade includes mesh aperture scatter correction
+  // smaller aperture blocks more direct beam at low sun angles
+  const meshFactor=clamp(1-Math.pow(state.mesh/6,0.6),0.05,0.95);
+  const effectiveShade=state.shade*meshFactor;
+  const parFraction=1-effectiveShade; // simple beam transmission
+  state.parUnder=state.irr*0.45*parFraction; // PAR ~45% of global
+  // canopy energy balance: intercepted = irr*(1-parFraction)*0.85
+  const intercepted=state.irr*(1-parFraction)*0.85;
+  // leaf temp rise over air driven by intercepted radiation, moderated by wind
+  const sensibleHeat=intercepted/(25+15*state.wind);
+  const targetCanopy=state.air+sensibleHeat*0.35;
+  state.canopyTemp=lerp(state.canopyTemp,targetCanopy,0.08);
+  // berry surface temp: berries gain extra shortwave and lose via convection
+  const berryIntercept=state.irr*parFraction*0.65; // still some diffuse under net
+  const berryHeat=(berryIntercept+state.canopyTemp*10)/(10+state.wind*6);
+  const targetBerry=state.air+Math.max(0,berryHeat-state.air)*0.85;
+  state.berryTemp=lerp(state.berryTemp,targetBerry,0.05);
+  // heat stress index 0-1 based on berry temp thresholds
+  state.stress=clamp((state.berryTemp-28)/14,0,1);
+  // net vibration from wind
+  state.netVibration+=0.02+state.wind*0.03;
+}
+
+function spawnPhoton(){
+  // photons enter from top-left according to sun elevation
+  if(Math.random()>0.65) return;
+  const n=Math.floor(state.irr/80);
+  for(let i=0;i<n;i++){
+    const sunRad=degToRad(state.elev);
+    const spread=(Math.random()-0.5)*0.25;
+    const vx=Math.cos(sunRad+spread)*3;
+    const vy=-Math.sin(sunRad+spread)*3;
+    const y=-10-Math.random()*50;
+    const x=Math.random()*W;
+    particles.push({x,y,vx,vy,life:1.0,hit:false,type:'photon'});
+  }
+}
+
+function spawnWind(){
+  if(state.wind<0.2) return;
+  if(Math.random()>0.3) return;
+  const n=Math.floor(state.wind*3);
+  for(let i=0;i<n;i++){
+    particles.push({
+      x:-20-Math.random()*60,
+      y:H*0.15+Math.random()*H*0.7,
+      vx:1+state.wind*(1+Math.random()),
+      vy:(Math.random()-0.5)*0.5,
+      life:1.0,
+      hit:false,
+      type:'wind'
+    });
+  }
+}
+
+function drawSky(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  // intensity changes with irradiance
+  const intensity=clamp(state.irr/1200,0.2,1);
+  g.addColorStop(0,`rgba(135,180,220,${0.15+intensity*0.25})`);
+  g.addColorStop(0.45,`rgba(90,120,80,${0.08+intensity*0.12})`);
+  g.addColorStop(1,'rgba(14,18,10,0.95)');
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,W,H);
+  // sun disc
+  const sunX=W*0.25+(90-state.elev)/90*W*0.45;
+  const sunY=H*0.18-(state.elev-15)/70*H*0.12;
+  const sunGlow=ctx.createRadialGradient(sunX,sunY,4,sunX,sunY,140);
+  sunGlow.addColorStop(0,`rgba(255,235,180,${0.9*intensity})`);
+  sunGlow.addColorStop(0.3,`rgba(255,210,120,${0.35*intensity})`);
+  sunGlow.addColorStop(1,'rgba(255,180,60,0)');
+  ctx.fillStyle=sunGlow;
+  ctx.beginPath(); ctx.arc(sunX,sunY,140,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=`rgba(255,245,200,${0.85+intensity*0.15})`;
+  ctx.beginPath(); ctx.arc(sunX,sunY,10+intensity*4,0,Math.PI*2); ctx.fill();
+}
+
+function drawNet(){
+  if(state.shade<0.02) return;
+  ctx.save();
+  ctx.globalAlpha=0.35+state.shade*0.45;
+  const mesh=state.mesh;
+  const wave=Math.sin(state.netVibration)*2+Math.cos(state.netVibration*1.3)*1.5;
+  ctx.strokeStyle='rgba(180,180,160,0.55)';
+  ctx.lineWidth=Math.max(0.6,3.5-mesh*0.4);
+  ctx.beginPath();
+  // perspective net draped over canopy zone
+  const topY=H*0.22, botY=H*0.60;
+  const left=20, right=W-20;
+  const cols=Math.floor((right-left)/(mesh*5+8));
+  for(let i=0;i<=cols;i++){
+    const x=left+i*(right-left)/cols+wave*(i%2?1:-1);
+    ctx.moveTo(x,topY); ctx.lineTo(x+w*0.02,botY);
+  }
+  const rows=Math.floor((botY-topY)/(mesh*6+10));
+  for(let j=0;j<=rows;j++){
+    const y=topY+j*(botY-topY)/rows+wave*(j%2?-1:1);
+    ctx.moveTo(left,y); ctx.lineTo(right,y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawCanopy(){
+  // trellis wires
+  ctx.strokeStyle='rgba(120,130,95,0.35)';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let i=1;i<=3;i++){
+    const y=H*0.25+i*30;
+    ctx.moveTo(0,y); ctx.lineTo(W,y);
+  }
+  ctx.stroke();
+  // leaves
+  leaves.forEach(leaf=>{
+    const sway=Math.sin(state.time*leaf.swaySpeed+leaf.x*0.01)*4*(1+state.wind*0.3);
+    const heatColor=lerpColor([80,140,80],[160,90,60],state.stress);
+    ctx.save();
+    ctx.translate(leaf.x+sway,leaf.y);
+    ctx.rotate(leaf.angle+sway*0.015);
+    ctx.fillStyle=`rgba(${heatColor[0]},${heatColor[1]},${heatColor[2]},${0.75+leaf.colorOffset*0.2})`;
+    ctx.beginPath();
+    ctx.ellipse(0,0,leaf.size*0.5,leaf.size*0.25,0,0,Math.PI*2);
+    ctx.fill();
+    // vein
+    ctx.strokeStyle='rgba(40,60,25,0.35)';
+    ctx.lineWidth=0.7;
+    ctx.beginPath(); ctx.moveTo(-leaf.size*0.45,0); ctx.lineTo(leaf.size*0.45,0); ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function drawBerries(){
+  berries.forEach(b=>{
+    const stress=state.stress;
+    const color=lerpColor([90,160,90],[210,70,55],stress);
+    // berry surface temperature glow
+    const hot=clamp((state.berryTemp-32)/10,0,1);
+    if(hot>0.05){
+      const glow=ctx.createRadialGradient(b.x,b.y,2,b.x,b.y,18+hot*10);
+      glow.addColorStop(0,`rgba(255,120,80,${hot*0.35})`);
+      glow.addColorStop(1,'rgba(255,80,40,0)');
+      ctx.fillStyle=glow;
+      ctx.beginPath(); ctx.arc(b.x,b.y,18+hot*10,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle=`rgb(${color[0]},${color[1]},${color[2]})`;
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    // highlight
+    ctx.fillStyle='rgba(255,255,255,0.22)';
+    ctx.beginPath(); ctx.arc(b.x-b.r*0.3,b.y-b.r*0.35,b.r*0.25,0,Math.PI*2); ctx.fill();
+    // bloom dust
+    ctx.fillStyle='rgba(200,210,170,0.18)';
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r+1.5,0,Math.PI*2); ctx.fill();
+  });
+}
+
+function drawParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy;
+    p.life-=0.008;
+    if(p.type==='wind'){
+      ctx.strokeStyle=`rgba(200,220,180,${p.life*0.12})`;
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x-p.vx*8,p.y-p.vy*8); ctx.stroke();
+    }else{
+      // photon
+      const alpha=p.life*(1-state.shade*0.4);
+      ctx.strokeStyle=`rgba(255,245,180,${alpha})`;
+      ctx.lineWidth=1.3;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x-p.vx*3,p.y-p.vy*3); ctx.stroke();
+      // interaction with net and leaves simplified
+      if(p.y>H*0.22 && p.y<H*0.55 && !p.hit){
+        if(Math.random()<state.shade*0.25){
+          // blocked by net -> fade and scatter
+          p.vx*=0.5; p.vy*=-0.3; p.life-=0.15; p.hit=true;
+        }
+      }
+    }
+    if(p.life<=0 || p.x>W+50 || p.y>H+50) particles.splice(i,1);
+  }
+}
+
+function drawGround(){
+  const g=ctx.createLinearGradient(0,H*0.58,0,H);
+  g.addColorStop(0,'rgba(50,45,30,0.8)');
+  g.addColorStop(1,'rgba(20,22,14,0.98)');
+  ctx.fillStyle=g;
+  ctx.fillRect(0,H*0.58,W,H*0.42);
+  // rows
+  ctx.strokeStyle='rgba(90,85,60,0.25)';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  for(let i=0;i<8;i++){
+    const x=i*(W/7)-40;
+    ctx.moveTo(x,H*0.58); ctx.lineTo(x-60,H);
+  }
+  ctx.stroke();
+}
+
+function lerpColor(a,b,t){
+  return [
+    Math.round(a[0]+(b[0]-a[0])*t),
+    Math.round(a[1]+(b[1]-a[1])*t),
+    Math.round(a[2]+(b[2]-a[2])*t)
+  ];
+}
+
+function updateMetrics(){
+  document.getElementById('m-irr').textContent=Math.round(state.irr)+' W/m²';
+  document.getElementById('m-par').textContent=Math.round(state.parUnder)+' µmol/m²/s';
+  document.getElementById('m-temp').textContent=state.canopyTemp.toFixed(1)+'°C';
+  document.getElementById('m-berry').textContent=state.berryTemp.toFixed(1)+'°C';
+  const sPct=Math.round(state.stress*100);
+  document.getElementById('m-stress').textContent=sPct+'%';
+  document.getElementById('b-irr').style.width=clamp(state.irr/1200*100,0,100)+'%';
+  document.getElementById('b-par').style.width=clamp(state.parUnder/600*100,0,100)+'%';
+  document.getElementById('b-temp').style.width=clamp((state.canopyTemp-15)/35*100,0,100)+'%';
+  document.getElementById('b-berry').style.width=clamp((state.berryTemp-15)/45*100,0,100)+'%';
+  document.getElementById('b-stress').style.width=sPct+'%';
+  // dynamic note
+  const note=document.getElementById('m-note');
+  if(state.stress>0.7) note.textContent='High stress risk: sunburn, anthocyanin degradation, arrested sugar accumulation.';
+  else if(state.stress>0.35) note.textContent='Moderate heat load; shade is reducing berry surface temperature.';
+  else note.textContent='Low stress: shade and wind are keeping berry temperature close to air temperature.';
+}
+
+function loop(){
+  state.time+=0.016;
+  computePhysics();
+  ctx.clearRect(0,0,W,H);
+  drawSky();
+  spawnPhoton();
+  spawnWind();
+  drawGround();
+  drawNet();
+  drawParticles();
+  drawCanopy();
+  drawBerries();
+  updateMetrics();
+  animationId=requestAnimationFrame(loop);
+}
+
+function start(){
+  resize();
+  bindControls();
+  updateLabels();
+  loop();
+}
+
+// p5.js is loaded from CDN but this app uses raw Canvas 2D orchestration.
+// We still expose a tiny p5 stub so the gallery tag is meaningful.
+if(typeof p5==='undefined'){
+  // no-op fallback in case CDN fails
+}
+start();
+</script>
+</body>
+</html>
