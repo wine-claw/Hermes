@@ -7,8 +7,9 @@
 <style>
   :root{ --bg:#0e0b14; --panel:#1a1522; --border:#2e2438; --text:#e8e0d8; --muted:#9b8e9e; --accent:#d4a843; --accent2:#58a6ff; --warn-bg:#1a1610; --warn-border:#3a3020; }
   html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; min-height:100vh; }
-  #canvas-container{ position:fixed; inset:0; z-index:0; }
-  canvas{ display:block; width:100%; height:100%; }
+  #app{ display:flex; flex-direction:column; min-height:100vh; }
+  #canvas-container{ position:relative; flex:1; min-height:0; overflow:hidden; z-index:0; }
+  #sim{ display:block; position:absolute; inset:0; width:100%; height:100%; }
   #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; overflow-y:auto; }
   .panel{ pointer-events:auto; background:linear-gradient(180deg,rgba(26,21,34,0.96),rgba(26,21,34,0.88)); border:1px solid var(--border); border-radius:14px; padding:1rem; width:300px; }
   .panel h2{ font-size:1.05rem; color:var(--accent); margin:0 0 0.5rem; }
@@ -31,11 +32,11 @@
   #bottom-right{ position:absolute; bottom:12px; right:12px; width:320px; }
   #top-right{ position:absolute; top:12px; right:12px; }
 
-  /* Mobile-first layout: panels below the stage, no overlap */
+  /* Mobile-first layout: panels below the canvas, no overlap */
   @media (max-width:768px){
     html,body{ overflow:auto; }
-    #canvas-container{ position:static; display:block; width:100%; height:45vh; min-height:340px; max-height:520px; }
-    #sim{ position:relative; width:100%; height:100%; }
+    #app{ display:block; min-height:100vh; }
+    #canvas-container{ width:100%; height:45vh; min-height:340px; max-height:520px; flex:none; }
     #ui-layer{ position:static; display:block; padding:0.75rem; inset:auto; overflow:visible; pointer-events:auto; }
     #top-left,#top-right,#bottom-right{ position:static !important; top:auto; left:auto; right:auto; bottom:auto; width:100% !important; min-width:auto; max-width:none; margin:0 0 0.75rem 0; }
     .panel{ width:100% !important; }
@@ -120,15 +121,21 @@ const sctx = sparkCanvas.getContext('2d');
 
 let W, H, DPR;
 function resize(){
+  const container = document.getElementById('canvas-container');
+  const rect = container.getBoundingClientRect();
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = canvas.width = Math.floor(window.innerWidth * DPR);
-  H = canvas.height = Math.floor(window.innerHeight * DPR);
-  canvas.style.width = window.innerWidth + 'px';
-  canvas.style.height = window.innerHeight + 'px';
+  W = canvas.width = Math.floor(rect.width * DPR);
+  H = canvas.height = Math.floor(rect.height * DPR);
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
 }
 window.addEventListener('resize', resize);
 resize();
+
+// Use canvas dimensions for physics/layout, not full viewport
+function layoutWidth(){ return W / (DPR||1); }
+function layoutHeight(){ return H / (DPR||1); }
 
 // Parameters
 const params = {
@@ -190,9 +197,11 @@ class Bottle {
     }
   }
   getBounds(){
-    // Rack cell center in CSS px
-    const rackLeft = (window.innerWidth - params.rackCols*params.cellW)/2;
-    const rackTop = (window.innerHeight - params.rackRows*params.cellH)/2 + 40;
+    // Rack cell center in CSS px, relative to canvas container
+    const cw = layoutWidth();
+    const ch = layoutHeight();
+    const rackLeft = (cw - params.rackCols*params.cellW)/2;
+    const rackTop = (ch - params.rackRows*params.cellH)/2 + 40;
     const cx = rackLeft + this.col*params.cellW + params.cellW/2;
     const cy = rackTop + this.row*params.cellH + params.cellH/2 + 20;
     return {cx, cy};
@@ -417,8 +426,10 @@ function drawPupitre(){
   const cellH = params.cellH;
   const rackW = cols*cellW;
   const rackH = rows*cellH;
-  const left = (window.innerWidth - rackW)/2;
-  const top = (window.innerHeight - rackH)/2 + 40;
+  const cw = layoutWidth();
+  const ch = layoutHeight();
+  const left = (cw - rackW)/2;
+  const top = (ch - rackH)/2 + 40;
 
   ctx.save();
   // Backboard / frame
@@ -490,14 +501,16 @@ function drawSparklines(){
 }
 
 function draw(){
-  ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+  const cw = layoutWidth();
+  const ch = layoutHeight();
+  ctx.clearRect(0,0,cw,ch);
 
   // Ambient background vignette
-  const grd = ctx.createRadialGradient(window.innerWidth/2, window.innerHeight/2, 40, window.innerWidth/2, window.innerHeight/2, Math.max(window.innerWidth, window.innerHeight));
+  const grd = ctx.createRadialGradient(cw/2, ch/2, 40, cw/2, ch/2, Math.max(cw, ch));
   grd.addColorStop(0, 'rgba(30,24,40,0.4)');
   grd.addColorStop(1, 'rgba(14,11,20,0.0)');
   ctx.fillStyle = grd;
-  ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+  ctx.fillRect(0,0,cw,ch);
 
   drawPupitre();
   for(const b of bottles) drawBottle(b);
