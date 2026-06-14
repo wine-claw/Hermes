@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Brettanomyces bruxellensis — Population Dynamics & Sensory Thresholds</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root{
+  --bg:#0b0f13; --surface:#121820; --panel:#18202a; --border:#263342;
+  --text:#d6dce4; --muted:#8fa3b8; --accent:#e5a044; --accent2:#7ecce6; --accent3:#c88ec8;
+  --good:#7cd38a; --warn:#f0c166; --danger:#e87272; --brett:#d2a070;
+  --warn-bg:#2a1a10; --warn-border:#5a3a20; --warn-text:#e8b080;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;overflow-x:hidden}
+.disclaimer{background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);padding:0.75rem 1rem;text-align:center;font-size:0.85rem;font-family:system-ui,sans-serif;position:sticky;top:0;z-index:100}
+.disclaimer strong{font-weight:600}
+header{text-align:center;padding:1.6rem 1rem 1rem;border-bottom:1px solid var(--border)}
+header h1{font-size:clamp(1.35rem,4.5vw,2rem);background:linear-gradient(90deg,var(--brett),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
+header p{color:var(--muted);margin-top:0.35rem;font-size:0.92rem}
+
+.app-container{display:flex;gap:1rem;padding:1rem;max-width:1400px;margin:0 auto}
+.sidebar{width:320px;flex-shrink:0;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1rem;position:sticky;top:60px;height:calc(100vh - 76px);overflow-y:auto}
+.sidebar h2{font-size:1.05rem;margin-bottom:0.85rem;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:0.45rem}
+.control-group{margin-bottom:1rem}
+.control-group label{display:block;font-size:0.8rem;color:var(--muted);margin-bottom:0.35rem}
+.control-group .val{display:inline-block;float:right;font-size:0.8rem;color:var(--text);font-weight:600;min-width:4rem;text-align:right}
+.control-group input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+.control-group .desc{font-size:0.72rem;color:var(--muted);margin-top:0.25rem;line-height:1.35}
+
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:0.55rem;margin-top:1rem}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.6rem 0.45rem;text-align:center}
+.metric-card .num{font-size:1.05rem;font-weight:700;color:var(--accent2);font-variant-numeric:tabular-nums}
+.metric-card .lbl{font-size:0.68rem;color:var(--muted);margin-top:0.15rem}
+
+.status-box{margin-top:1rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0.8rem}
+.status-box h3{font-size:0.85rem;color:var(--brett);margin-bottom:0.4rem}
+.status-box .status{font-size:0.95rem;font-weight:700}
+.status-box .note{font-size:0.76rem;color:var(--muted);margin-top:0.35rem;line-height:1.4}
+
+.viz-area{flex:1;min-width:0;display:flex;flex-direction:column;gap:1rem}
+.chart-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:0.8rem}
+.chart-box h3{font-size:0.95rem;color:var(--accent2);margin-bottom:0.5rem;border-bottom:1px solid var(--border);padding-bottom:0.35rem}
+.chart-box svg{display:block;width:100%;height:auto}
+
+#curve-chart{height:360px}
+#heatmap-chart{height:180px}
+#phase-chart{height:220px}
+
+.phase-row{display:flex;gap:0.6rem;align-items:center;font-size:0.82rem;margin:0.35rem 0}
+.phase-dot{width:11px;height:11px;border-radius:50%}
+.phase-label{flex:1;color:var(--muted)}
+.phase-val{font-weight:700;font-variant-numeric:tabular-nums}
+
+.legend{display:flex;flex-wrap:wrap;gap:0.7rem;margin-top:0.5rem;font-size:0.75rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:0.35rem}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+
+.tooltip{position:absolute;background:rgba(11,15,19,0.96);border:1px solid var(--border);border-radius:8px;padding:0.55rem 0.75rem;color:var(--text);font-size:0.8rem;pointer-events:none;opacity:0;transition:opacity .15s;z-index:50;box-shadow:0 4px 14px rgba(0,0,0,0.45);max-width:260px;line-height:1.4}
+
+@media(max-width:900px){
+  .app-container{flex-direction:column;padding:0.75rem}
+  .sidebar{width:100%;position:relative;top:auto;height:auto;overflow:visible}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<header>
+  <h1>Brettanomyces bruxellensis</h1>
+  <p>Interactive population dynamics &amp; volatile phenol sensory-threshold simulator</p>
+</header>
+
+<div class="app-container">
+<div class="sidebar">
+  <h2>Culture Conditions</h2>
+
+  <div class="control-group">
+    <label>Initial Cells / mL <span class="val" id="v-inoc">10</span></label>
+    <input type="range" id="s-inoc" min="1" max="1000" value="10" step="1">
+    <div class="desc">Starting Brettanomyces population (cells/mL). Wines are rarely sterile below 1 cell/mL.</div>
+  </div>
+  <div class="control-group">
+    <label>Temperature <span class="val" id="v-temp">20 °C</span></label>
+    <input type="range" id="s-temp" min="8" max="32" value="20" step="0.5">
+    <div class="desc">Brett grows slowly below 12 °C; optimum ~25 °C; ethanol tolerance rises with adaptation.</div>
+  </div>
+  <div class="control-group">
+    <label>pH <span class="val" id="v-ph">3.50</span></label>
+    <input type="range" id="s-ph" min="2.8" max="4.2" value="3.5" step="0.05">
+    <div class="desc">Lower pH suppresses growth; most wine pH 3.2–3.8. Threshold shown on chart.</div>
+  </div>
+  <div class="control-group">
+    <label>Ethanol % v/v <span class="val" id="v-eth">13.0%</span></label>
+    <input type="range" id="s-eth" min="8" max="16" value="13" step="0.1">
+    <div class="desc">Ethanol is inhibitory above ~10%; highly ethanol-tolerant Brett strains persist in fortified wines.</div>
+  </div>
+  <div class="control-group">
+    <label>Dissolved O₂ (mg/L) <span class="val" id="v-oxy">0.3</span></label>
+    <input type="range" id="s-oxy" min="0" max="3" value="0.3" step="0.05">
+    <div class="desc">Brett is a Crabtree-negative oxidative yeast; trace O₂ accelerates growth and 4-EG/4-EP production.</div>
+  </div>
+  <div class="control-group">
+    <label>SO₂ (Free, mg/L) <span class="val" id="v-so2">25</span></label>
+    <input type="range" id="s-so2" min="0" max="80" value="25" step="1">
+    <div class="desc">Molecular SO₂ is the active antimicrobial form. pH controls how much free SO₂ is molecular.</div>
+  </div>
+  <div class="control-group">
+    <label>Simulation Days <span class="val" id="v-days">60</span></label>
+    <input type="range" id="s-days" min="7" max="180" value="60" step="1">
+  </div>
+  <div class="control-group">
+    <label>Speed <span class="val" id="v-speed">1×</span></label>
+    <input type="range" id="s-speed" min="0" max="5" value="1" step="1">
+    <div class="desc">0 = pause; 1–5 = days/second. Drag any slider to restart from day 0.</div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric-card"><div class="num" id="m-day">0</div><div class="lbl">Day</div></div>
+    <div class="metric-card"><div class="num" id="m-cells">—</div><div class="lbl">Cells/mL</div></div>
+    <div class="metric-card"><div class="num" id="m-4ep">—</div><div class="lbl">4-EP µg/L</div></div>
+    <div class="metric-card"><div class="num" id="m-4eg">—</div><div class="lbl">4-EG µg/L</div></div>
+  </div>
+
+  <div class="status-box">
+    <h3>Sensory Risk</h3>
+    <div class="status" id="risk-text">Low</div>
+    <div class="note" id="risk-note">Brett population is below the 10⁴ cells/mL warning threshold.</div>
+  </div>
+</div>
+
+<div class="viz-area">
+  <div class="chart-box" id="curve-chart">
+    <h3>Population Growth &amp; Volatile Phenols Over Time</h3>
+    <svg id="curve-svg"></svg>
+    <div class="legend">
+      <span><i style="background:var(--brett)"></i>Brett cells/mL</span>
+      <span><i style="background:var(--accent3)"></i>4-EP (µg/L)</span>
+      <span><i style="background:var(--accent2)"></i>4-EG (µg/L)</span>
+      <span><i style="background:var(--danger);opacity:0.35"></i>Sensorial danger zone (4-EP &gt; 400 µg/L)</span>
+    </div>
+  </div>
+
+  <div class="chart-box" id="phase-chart">
+    <h3>Growth Phase Status</h3>
+    <div id="phase-rows"></div>
+  </div>
+
+  <div class="chart-box" id="heatmap-chart">
+    <h3>Volatile Phenol Production Heatmap by Day</h3>
+    <svg id="heatmap-svg"></svg>
+  </div>
+</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function(){
+  const tooltip = d3.select('#tooltip');
+  function tipShow(e, html){
+    tooltip.style('opacity',1).html(html)
+      .style('left', Math.min(e.pageX + 12, window.innerWidth - 280) + 'px')
+      .style('top', (e.pageY - 12) + 'px');
+  }
+  function tipHide(){ tooltip.style('opacity',0); }
+
+  // State
+  const state = {
+    inoc: 10, temp: 20, pH: 3.5, eth: 13, oxy: 0.3, so2: 25,
+    days: 60, speed: 1, t: 0, running: true
+  };
+
+  // Slider binding
+  const sliders = [
+    ['s-inoc','inoc', v=>+v],
+    ['s-temp','temp', v=>+v],
+    ['s-ph','pH', v=>+v],
+    ['s-eth','eth', v=>+v],
+    ['s-oxy','oxy', v=>+v],
+    ['s-so2','so2', v=>+v],
+    ['s-days','days', v=>+v],
+    ['s-speed','speed', v=>+v]
+  ];
+  const labels = {
+    inoc: v=>v+' cells/mL', temp: v=>v+' °C', pH: v=>v.toFixed(2),
+    eth: v=>v.toFixed(1)+'%', oxy: v=>v.toFixed(2)+' mg/L', so2: v=>v+' mg/L',
+    days: v=>v, speed: v=>v+'×'
+  };
+  sliders.forEach(([id,key,parse])=>{
+    const el = document.getElementById(id);
+    el.addEventListener('input', ()=>{
+      state[key] = parse(el.value);
+      document.getElementById('v-'+key).textContent = labels[key](state[key]);
+      if(key !== 'speed') state.t = 0;
+      if(key === 'speed' && state.speed === 0) state.running = false;
+      else if(key === 'speed' && state.speed > 0) state.running = true;
+      updateSim();
+    });
+  });
+
+  // Growth model
+  function molecularSO2(free, pH){
+    // pKa ~1.81 at wine pH; fraction = 1 / (1 + 10^(pH - pKa))
+    const pKa = 1.81;
+    return free / (1 + Math.pow(10, pH - pKa));
+  }
+
+  function maxGrowthRate(temp, eth, pH){
+    // Base logistic rate scaled by temperature (Q10 ~ 1.8), ethanol inhibition, pH inhibition
+    const Tref = 25;
+    const Tfactor = Math.pow(1.8, (temp - Tref) / 10);
+    // Ethanol inhibition: sigmoid around 12%
+    const Efactor = 1 / (1 + Math.exp(3.5 * (eth - 11.5)));
+    // pH inhibition below 3.2
+    const pHfactor = 1 / (1 + Math.exp(-5 * (pH - 3.0)));
+    return 0.35 * Tfactor * Efactor * pHfactor; // /day at 25°C, pH 3.5, 12% EtOH ≈ 0.35
+  }
+
+  function carryingCapacity(temp, eth, pH, oxy){
+    // O₂ strongly controls Brett aerobic yield; base K ~ 2×10⁷ cells/mL in wine
+    const baseK = 2.5e7;
+    const Ofactor = 0.15 + 0.85 * (oxy / (oxy + 0.15));
+    const Tfactor = 0.4 + 0.6 * Math.max(0, Math.min(1, (temp - 8) / 17));
+    const Efactor = Math.max(0.1, 1 - 0.12 * (eth - 10));
+    return baseK * Ofactor * Tfactor * Efactor;
+  }
+
+  function simulate(endDay){
+    const dt = 0.25;
+    const steps = Math.ceil(endDay / dt);
+    const series = [];
+    let N = state.inoc;
+    let EP = 0, EG = 0;
+    const r = maxGrowthRate(state.temp, state.eth, state.pH);
+    const K = carryingCapacity(state.temp, state.eth, state.pH, state.oxy);
+    const molSO2 = molecularSO2(state.so2, state.pH);
+    // Inhibition from molecular SO2: 50% growth suppression around 0.5 mg/L molecular SO2
+    const so2Inhib = Math.max(0, 1 - (molSO2 / (0.5 + molSO2)));
+    // Brett 4-EP / 4-EG production rates (µg/L per cell per day) increase with O₂
+    const prodEP = 2.2e-6 * (0.5 + 2.5 * (state.oxy / (state.oxy + 0.25)));
+    const prodEG = 0.55e-6 * (0.5 + 2.2 * (state.oxy / (state.oxy + 0.25)));
+    const yieldEP = 0.45;
+    const yieldEG = 0.45;
+
+    for(let i=0; i<=steps; i++){
+      const day = i * dt;
+      // Logistic growth with SO2 inhibition; stochastic noise scaled by population
+      const dN = r * N * (1 - N/K) * so2Inhib * dt;
+      const noise = 1 + (Math.random() - 0.5) * 0.04;
+      N = Math.max(0.1, N + dN * noise);
+
+      // Volatile phenol production proportional to active biomass and yields
+      const addEP = N * prodEP * yieldEP * dt;
+      const addEG = N * prodEG * yieldEG * dt;
+      EP += addEP;
+      EG += addEG;
+
+      // Minor losses to SO2 binding / adsorption
+      EP *= (1 - 0.005 * dt);
+      EG *= (1 - 0.005 * dt);
+
+      if(i % 4 === 0){
+        series.push({
+          day: Math.round(day),
+          N: N, EP: EP, EG: EG,
+          r: r, K: K, so2Inhib: so2Inhib
+        });
+      }
+    }
+    return series;
+  }
+
+  // Chart setup
+  const curveSvg = d3.select('#curve-svg')
+    .attr('viewBox', '0 0 900 360')
+    .style('width','100%')
+    .style('height','100%');
+  const margin = {top:20, right:35, bottom:45, left:70};
+  const W = 900 - margin.left - margin.right;
+  const H = 360 - margin.top - margin.bottom;
+  const g = curveSvg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().range([0, W]);
+  const yN = d3.scaleLog().range([H, 0]).clamp(true);
+  const yP = d3.scaleLinear().range([H, 0]);
+
+  const areaEP = d3.area().x(d=>x(d.day)).y0(H).y1(d=>yP(d.EP)).curve(d3.curveMonotoneX);
+  const lineN = d3.line().x(d=>x(d.day)).y(d=>yN(d.N)).curve(d3.curveMonotoneX);
+  const lineEP = d3.line().x(d=>x(d.day)).y(d=>yP(d.EP)).curve(d3.curveMonotoneX);
+  const lineEG = d3.line().x(d=>x(d.day)).y(d=>yP(d.EG)).curve(d3.curveMonotoneX);
+
+  g.append('rect')
+    .attr('x',0).attr('y',0).attr('width',W).attr('height',H)
+    .attr('fill','rgba(255,255,255,0.02)');
+
+  const dangerBand = g.append('rect')
+    .attr('fill','var(--danger)').attr('opacity',0.18);
+  const pathAreaEP = g.append('path').attr('fill','var(--accent3)').attr('opacity',0.12);
+  const pathN = g.append('path').attr('fill','none').attr('stroke','var(--brett)').attr('stroke-width',2.5);
+  const pathEP = g.append('path').attr('fill','none').attr('stroke','var(--accent3)').attr('stroke-width',2);
+  const pathEG = g.append('path').attr('fill','none').attr('stroke','var(--accent2)').attr('stroke-width',2);
+
+  const gx = g.append('g').attr('class','axis');
+  const gyN = g.append('g').attr('class','axis');
+  const gyP = g.append('g').attr('class','axis');
+  g.append('text').attr('x',W/2).attr('y',H+38).attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size','12').text('Days');
+  g.append('text').attr('transform','rotate(-90)').attr('x',-H/2).attr('y',-48).attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size','12').text('Cells/mL (log)');
+  g.append('text').attr('transform','rotate(-90)').attr('x',-H/2).attr('y',W+52).attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size','12').text('4-EP / 4-EG (µg/L)');
+
+  const currentLine = g.append('line')
+    .attr('stroke','#fff').attr('stroke-width',1).attr('stroke-dasharray','4,4').attr('opacity',0.7).attr('y1',0).attr('y2',H);
+  const currentDotN = g.append('circle').attr('r',4).attr('fill','var(--brett)').attr('stroke','#fff').attr('stroke-width',1.5);
+  const currentDotP = g.append('circle').attr('r',4).attr('fill','var(--accent3)').attr('stroke','#fff').attr('stroke-width',1.5);
+
+  function formatCells(n){
+    if(n >= 1e6) return (n/1e6).toFixed(2) + '×10⁶';
+    if(n >= 1000) return (n/1000).toFixed(1) + '×10³';
+    return Math.round(n).toString();
+  }
+
+  // Heatmap
+  const heatSvg = d3.select('#heatmap-svg')
+    .attr('viewBox','0 0 900 180')
+    .style('width','100%')
+    .style('height','100%');
+  const hmW = 900 - 30 - 20;
+  const hmH = 180 - 35 - 25;
+  const hmG = heatSvg.append('g').attr('transform','translate(30,25)');
+  const hx = d3.scaleLinear().range([0, hmW]);
+  const hy = d3.scaleBand().range([0, hmH]).paddingInner(0.05);
+  const hColor = d3.scaleSequential(d3.interpolateInferno).domain([0, 1500]).clamp(true);
+  const hColorEG = d3.scaleSequential(d3.interpolateViridis).domain([0, 400]).clamp(true);
+
+  // Phase rows
+  const phaseRows = document.getElementById('phase-rows');
+
+  let fullSeries = simulate(state.days);
+  let lastSeries = fullSeries;
+
+  function render(series, currentDay){
+    const last = series[series.length-1] || series[0];
+    const Nmax = Math.max(1, last.K * 1.2);
+    const Pmax = Math.max(600, last.EP * 1.2);
+    x.domain([0, state.days]);
+    yN.domain([1, Nmax]);
+    yP.domain([0, Pmax]);
+
+    const xAxis = d3.axisBottom(x).ticks(8).tickSize(-H).tickPadding(8);
+    const yNAxis = d3.axisLeft(yN).ticks(5, '~s').tickSize(-W).tickPadding(6);
+    const yPAxis = d3.axisRight(yP).ticks(6).tickSize(-W).tickPadding(6);
+
+    gx.attr('transform', `translate(0,${H})`).call(xAxis).selectAll('line').attr('stroke','rgba(255,255,255,0.06)');
+    gx.selectAll('text').attr('fill','var(--muted)').attr('font-size','11');
+    gx.select('.domain').remove();
+
+    gyN.call(yNAxis).selectAll('line').attr('stroke','rgba(255,255,255,0.06)');
+    gyN.selectAll('text').attr('fill','var(--muted)').attr('font-size','11');
+    gyN.select('.domain').remove();
+
+    gyP.attr('transform', `translate(${W},0)`).call(yPAxis).selectAll('line').attr('stroke','rgba(255,255,255,0.06)');
+    gyP.selectAll('text').attr('fill','var(--muted)').attr('font-size','11');
+    gyP.select('.domain').remove();
+
+    // Danger band: EP > 400
+    const y400 = yP(400);
+    dangerBand.attr('x',0).attr('y', y400).attr('width', W).attr('height', H - y400);
+
+    pathAreaEP.datum(series).attr('d', areaEP);
+    pathN.datum(series).attr('d', lineN);
+    pathEP.datum(series).attr('d', lineEP);
+    pathEG.datum(series).attr('d', lineEG);
+
+    // Current position
+    const idx = Math.max(0, d3.bisectLeft(series.map(d=>d.day), currentDay) - 1);
+    const pt = series[Math.min(idx, series.length-1)];
+    const cx = x(pt.day);
+    currentLine.attr('x1', cx).attr('x2', cx);
+    currentDotN.attr('cx', cx).attr('cy', yN(pt.N));
+    currentDotP.attr('cx', cx).attr('cy', yP(pt.EP));
+
+    // Metrics
+    document.getElementById('m-day').textContent = Math.round(currentDay);
+    document.getElementById('m-cells').textContent = formatCells(pt.N);
+    document.getElementById('m-4ep').textContent = Math.round(pt.EP);
+    document.getElementById('m-4eg').textContent = Math.round(pt.EG);
+
+    // Risk
+    const riskEl = document.getElementById('risk-text');
+    const noteEl = document.getElementById('risk-note');
+    if(pt.N >= 1e6 || pt.EP >= 400){
+      riskEl.textContent = 'High — sensorial fault likely';
+      riskEl.style.color = 'var(--danger)';
+      noteEl.textContent = 'Brett cells exceed 10⁶ /mL or 4-EP passes the ~400 µg/L sensory threshold. Cleaning, SO₂, filtration or thermal treatment needed.';
+    } else if(pt.N >= 1e4 || pt.EP >= 150){
+      riskEl.textContent = 'Elevated — monitor closely';
+      riskEl.style.color = 'var(--warn)';
+      noteEl.textContent = 'Population > 10⁴ cells/mL is the early warning zone. Check free SO₂ and eliminate oxygen ingress.';
+    } else {
+      riskEl.textContent = 'Low';
+      riskEl.style.color = 'var(--good)';
+      noteEl.textContent = 'Brett population is below the 10⁴ cells/mL warning threshold.';
+    }
+
+    // Heatmap
+    const buckets = 30;
+    const step = state.days / buckets;
+    const heatData = [];
+    for(let i=0;i<buckets;i++){
+      const d = i * step;
+      const idx2 = Math.max(0, Math.min(series.length-1, Math.round(d / step / 4)));
+      heatData.push({day:d, EP: series[idx2]?.EP || 0, EG: series[idx2]?.EG || 0, idx:i});
+    }
+    hx.domain([0, state.days]);
+    hy.domain(['4-EP','4-EG']);
+
+    hmG.selectAll('rect.hm-ep').data(heatData, d=>d.idx)
+      .join('rect').attr('class','hm-ep')
+      .attr('x', d=>hx(d.day)).attr('y', hy('4-EP')).attr('width', hmW/buckets - 1).attr('height', hy.bandwidth())
+      .attr('fill', d=>hColor(d.EP))
+      .on('mousemove', (e,d)=> tipShow(e, `Day ${Math.round(d.day)}<br>4-EP: ${Math.round(d.EP)} µg/L`))
+      .on('mouseleave', tipHide);
+    hmG.selectAll('rect.hm-eg').data(heatData, d=>d.idx)
+      .join('rect').attr('class','hm-eg')
+      .attr('x', d=>hx(d.day)).attr('y', hy('4-EG')).attr('width', hmW/buckets - 1).attr('height', hy.bandwidth())
+      .attr('fill', d=>hColorEG(d.EG))
+      .on('mousemove', (e,d)=> tipShow(e, `Day ${Math.round(d.day)}<br>4-EG: ${Math.round(d.EG)} µg/L`))
+      .on('mouseleave', tipHide);
+
+    const hAxis = d3.axisBottom(hx).ticks(8);
+    hmG.selectAll('.haxis').data([1]).join('g').attr('class','haxis').attr('transform',`translate(0,${hmH})`).call(hAxis).selectAll('text').attr('fill','var(--muted)').attr('font-size','11');
+    hmG.selectAll('.haxis line, .haxis path').attr('stroke','var(--border)');
+
+    // Phase status
+    const phaseInfo = [
+      {name:'Lag / Quiescent', color:'#7ecce6', active: pt.N < 100, val: '≤ 10² cells/mL'},
+      {name:'Exponential Growth', color:'#f0c166', active: pt.N >= 100 && pt.N < 1e5, val: formatCells(pt.N)},
+      {name:'Stationary / High-Risk', color:'#e87272', active: pt.N >= 1e5, val: formatCells(pt.N)},
+      {name:'4-EP Sensory Threshold (≈400 µg/L)', color:'var(--accent3)', active: pt.EP >= 400, val: Math.round(pt.EP)+' µg/L'},
+      {name:'4-EG Sensory Threshold (≈600 µg/L)', color:'var(--accent2)', active: pt.EG >= 600, val: Math.round(pt.EG)+' µg/L'}
+    ];
+    phaseRows.innerHTML = phaseInfo.map(p=>`
+      <div class="phase-row">
+        <div class="phase-dot" style="background:${p.color};opacity:${p.active?1:0.35}"></div>
+        <div class="phase-label" style="opacity:${p.active?1:0.55}">${p.name}</div>
+        <div class="phase-val" style="color:${p.active?p.color:'var(--muted)'}">${p.val}</div>
+      </div>`).join('');
+  }
+
+  let lastFrame = performance.now();
+  function loop(now){
+    const dtSec = (now - lastFrame) / 1000;
+    lastFrame = now;
+    if(state.running && state.speed > 0){
+      state.t += state.speed * dtSec;
+      if(state.t > state.days) state.t = 0;
+    }
+    // Regenerate series every frame? expensive; only when sliders change or every 60 frames
+    if(Math.floor(state.t*10) !== Math.floor((state.t - state.speed*dtSec)*10)){
+      // avoid recompute every frame unless needed; full series stays valid for given parameters
+    }
+    render(fullSeries, state.t);
+    requestAnimationFrame(loop);
+  }
+
+  function updateSim(){
+    fullSeries = simulate(state.days);
+    lastSeries = fullSeries;
+  }
+
+  // Hover overlay for curve chart
+  const overlay = curveSvg.append('rect')
+    .attr('x', margin.left).attr('y', margin.top).attr('width', W).attr('height', H)
+    .attr('fill','transparent')
+    .on('mousemove', function(e){
+      const [mx] = d3.pointer(e, g.node());
+      const day = Math.max(0, Math.min(state.days, x.invert(mx)));
+      const idx = d3.bisectLeft(fullSeries.map(d=>d.day), day);
+      const pt = fullSeries[Math.min(idx, fullSeries.length-1)] || fullSeries[fullSeries.length-1];
+      tipShow(e, `<strong>Day ${Math.round(pt.day)}</strong><br>Brett: ${formatCells(pt.N)} cells/mL<br>4-EP: ${Math.round(pt.EP)} µg/L<br>4-EG: ${Math.round(pt.EG)} µg/L<br>r=${(pt.r*100).toFixed(1)}%/day  K=${formatCells(pt.K)}`);
+    })
+    .on('mouseleave', tipHide);
+
+  updateSim();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
