@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vineyard Evapotranspiration Energy Balance</title>
+<style>
+:root{
+  --bg:#0d120b;
+  --panel:#162015;
+  --panel-2:#1f2a1b;
+  --border:#2f3f28;
+  --text:#dbead4;
+  --muted:#8fa884;
+  --accent:#7ed06a;
+  --accent-2:#f0c05a;
+  --accent-3:#6ecfcf;
+  --danger:#e06c6c;
+  --warn:#d99a4f;
+  --font: "Menlo", ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font); overflow:hidden; }
+
+.disclaimer { background:#162015; border-bottom:1px solid #3a4a30; color:#c9d8b8; padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui, sans-serif; position:sticky; top:0; z-index:100; }
+.disclaimer strong { font-weight:600; }
+
+#layout { display:flex; height:calc(100vh - 44px); }
+#canvas-wrap { position:relative; flex:1; min-width:0; }
+canvas { display:block; width:100%; height:100%; }
+#overlay { position:absolute; inset:0; pointer-events:none; }
+.panel { position:absolute; pointer-events:auto; background:rgba(22,32,21,0.92); border:1px solid var(--border); border-radius:12px; padding:0.9rem; backdrop-filter:blur(4px); }
+.panel h2 { font-size:0.9rem; color:var(--accent); margin-bottom:0.55rem; letter-spacing:0.04em; text-transform:uppercase; }
+.control { margin-bottom:0.75rem; }
+.control label { display:flex; justify-content:space-between; font-size:0.78rem; color:var(--muted); margin-bottom:0.25rem; }
+.control input[type=range] { width:100%; accent-color:var(--accent); }
+.control .value { color:var(--text); }
+
+#controls { top:12px; left:12px; width:255px; }
+#telemetry { top:12px; right:12px; width:235px; }
+#legend { bottom:12px; left:12px; width:255px; }
+#badge { bottom:12px; right:12px; }
+
+.metric { display:flex; justify-content:space-between; font-size:0.78rem; margin:0.32rem 0; }
+.metric .num { font-weight:700; color:var(--text); }
+.metric .unit { color:var(--muted); }
+.divider { height:1px; background:var(--border); margin:0.5rem 0; }
+.sparkline { width:100%; height:38px; margin-top:0.2rem; }
+
+.status { display:inline-block; padding:0.2rem 0.6rem; border-radius:20px; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; }
+.status.low  { background:#264035; color:#6ecfcf; }
+.status.mild { background:#3a4528; color:#f0c05a; }
+.status.high { background:#4a2525; color:#e06c6c; }
+
+.energy-bar { display:flex; height:10px; border-radius:5px; overflow:hidden; margin-top:0.4rem; }
+.energy-bar div { height:100%; transition:width .2s; }
+
+.k { width:10px; height:10px; display:inline-block; border-radius:2px; margin-right:6px; }
+
+#time-of-day { position:absolute; top:12px; left:50%; transform:translateX(-50%); background:rgba(13,18,11,0.8); border:1px solid var(--border); border-radius:20px; padding:0.35rem 0.9rem; font-size:0.78rem; color:var(--muted); }
+#toggle-panels { display:none; }
+
+@media (max-width: 768px) {
+  html, body { overflow-y:auto; }
+  #layout { flex-direction:column; height:auto; min-height:calc(100vh - 44px); }
+  #canvas-wrap { height:55vh; flex:none; }
+  #overlay { position:relative; inset:auto; pointer-events:auto; display:flex; flex-direction:column; gap:0.6rem; padding:0.6rem; }
+  .panel { position:relative !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; width:100% !important; }
+  #toggle-panels { display:block; align-self:flex-end; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:0.4rem 0.8rem; font-size:0.75rem; margin-bottom:0.4rem; }
+  #overlay.collapsed .panel { display:none; }
+}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<div id="layout">
+  <div id="canvas-wrap">
+    <canvas id="sim"></canvas>
+    <div id="overlay">
+      <button id="toggle-panels">☰ Controls</button>
+      <div class="panel" id="controls">
+        <h2>Vineyard Controls</h2>
+        <div class="control">
+          <label>Solar radiation <span class="value" id="val-Rn">500</span> W/m²</label>
+          <input type="range" id="Rn" min="0" max="900" value="500">
+        </div>
+        <div class="control">
+          <label>Air temperature <span class="value" id="val-Ta">28</span> °C</label>
+          <input type="range" id="Ta" min="10" max="45" value="28">
+        </div>
+        <div class="control">
+          <label>Relative humidity <span class="value" id="val-RH">45</span> %</label>
+          <input type="range" id="RH" min="10" max="95" value="45">
+        </div>
+        <div class="control">
+          <label>Wind speed <span class="value" id="val-u">3.0</span> m/s</label>
+          <input type="range" id="u" min="0.1" max="12" step="0.1" value="3.0">
+        </div>
+        <div class="control">
+          <label>Soil water fraction <span class="value" id="val-theta">0.22</span> m³/m³</label>
+          <input type="range" id="theta" min="0.05" max="0.45" step="0.01" value="0.22">
+        </div>
+        <div class="control">
+          <label>Leaf area index <span class="value" id="val-LAI">2.5</span> m²/m²</label>
+          <input type="range" id="LAI" min="0.5" max="6" step="0.1" value="2.5">
+        </div>
+        <div class="control">
+          <label>Row spacing <span class="value" id="val-rowSpacing">2.5</span> m</label>
+          <input type="range" id="rowSpacing" min="1.5" max="4.5" step="0.1" value="2.5">
+        </div>
+        <div class="control">
+          <label>Ground cover fraction <span class="value" id="val-fc">0.35</span></label>
+          <input type="range" id="fc" min="0" max="1" step="0.01" value="0.35">
+        </div>
+      </div>
+
+      <div class="panel" id="telemetry">
+        <h2>Energy &amp; Water Fluxes</h2>
+        <div class="metric"><span>Net radiation</span><span><span class="num" id="netRad">—</span> <span class="unit">W/m²</span></span></div>
+        <div class="metric"><span>Latent heat (ET)</span><span><span class="num" id="latent">—</span> <span class="unit">W/m²</span></span></div>
+        <div class="metric"><span>Sensible heat</span><span><span class="num" id="sensible">—</span> <span class="unit">W/m²</span></span></div>
+        <div class="metric"><span>Soil heat flux</span><span><span class="num" id="soilHeat">—</span> <span class="unit">W/m²</span></span></div>
+        <div class="divider"></div>
+        <div class="metric"><span>ET rate</span><span><span class="num" id="ETmm">—</span> <span class="unit">mm/h</span></span></div>
+        <div class="metric"><span>Vine transpiration</span><span><span class="num" id="Tmm">—</span> <span class="unit">mm/h</span></span></div>
+        <div class="metric"><span>Soil evaporation</span><span><span class="num" id="Emm">—</span> <span class="unit">mm/h</span></span></div>
+        <div class="metric"><span>Crop coefficient Kc</span><span><span class="num" id="Kc">—</span></span></div>
+        <div class="metric"><span>Leaf Ψ</span><span><span class="num" id="leafPsi">—</span> <span class="unit">MPa</span></span></div>
+        <div class="metric"><span>Water stress</span><span id="stressBadge" class="status low">Low</span></div>
+        <div class="divider"></div>
+        <div style="font-size:0.7rem; color:var(--muted);">Energy partition</div>
+        <div class="energy-bar"><div id="bar-latent" style="background:#6ecfcf; width:33%"></div><div id="bar-sensible" style="background:#f0c05a; width:33%"></div><div id="bar-soil" style="background:#b88a5a; width:34%"></div></div>
+        <div style="font-size:0.65rem; color:var(--muted); margin-top:0.25rem;">Latent · Sensible · Soil</div>
+        <canvas id="etChart" class="sparkline"></canvas>
+      </div>
+
+      <div class="panel" id="legend">
+        <h2>Visualization</h2>
+        <div style="font-size:0.72rem; line-height:1.5; color:var(--text);">
+          <span class="k" style="background:#fff7d1"></span> Solar photons<br>
+          <span class="k" style="background:#6ecfcf"></span> Transpiration water vapor<br>
+          <span class="k" style="background:#7ed06a"></span> Sensible heat eddies<br>
+          <span class="k" style="background:#b88a5a"></span> Soil heat flux<br>
+          <span class="k" style="background:#a0c4ff"></span> Ground cover / grass<br>
+          <span class="k" style="background:#2a4a25"></span> Canopy shade
+        </div>
+        <div style="font-size:0.68rem; color:var(--muted); margin-top:0.5rem; line-height:1.4;">
+          Modeled as a single-layer FAO-56 style surface energy balance with Penman-Monteith transpiration and soil resistance.
+        </div>
+      </div>
+
+      <div class="panel" id="badge">
+        <div style="font-size:0.75rem; color:var(--muted);">Reference ET₀</div>
+        <div style="font-size:1.25rem; color:var(--accent-2); font-weight:700;"><span id="ET0">—</span> mm/d</div>
+        <div style="font-size:0.7rem; color:var(--muted); margin-top:0.2rem;">FAO-56 grass</div>
+      </div>
+
+      <div id="time-of-day">12:00 • Midday</div>
+    </div>
+  </div>
+</div>
+<script>
+/* ---------- Physics model ----------
+ * Single-layer vineyard surface energy balance + Penman-Monteith ET.
+ * Variables per unit ground area.
+ * ---------- */
+const GAMMA = 0.067; // psychrometric constant [kPa/°C] at ~100 kPa
+const CP = 1.013e-3; // specific heat air [MJ kg-1 °C-1]
+const LAMBDA = 2.45; // latent heat vaporization [MJ/kg]
+const EPS = 0.622;
+const SIGMA = 5.67e-8; // W m-2 K-4
+
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+const etCanvas = document.getElementById('etChart');
+const etCtx = etCanvas.getContext('2d');
+
+let W, H;
+let lastT = performance.now();
+let history = []; // ET mm/h history for sparkline
+
+const state = {
+  Rn: 500, Ta: 28, RH: 45, u: 3.0,
+  theta: 0.22, LAI: 2.5, rowSpacing: 2.5, fc: 0.35,
+  time: 0
+};
+
+const inputs = ['Rn','Ta','RH','u','theta','LAI','rowSpacing','fc'];
+inputs.forEach(id => {
+  const el = document.getElementById(id);
+  const disp = document.getElementById('val-'+id);
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    state[id] = v;
+    disp.textContent = (id === 'theta' || id === 'fc') ? v.toFixed(2) : v.toString();
+    updateModel();
+  });
+});
+
+document.getElementById('toggle-panels').addEventListener('click', () => {
+  document.getElementById('overlay').classList.toggle('collapsed');
+});
+
+function satVP(T){ return 0.6108 * Math.exp(17.27 * T / (T + 237.3)); } // kPa
+function slopeSat(T){ return 4098 * satVP(T) / Math.pow(T + 237.3, 2); } // kPa/°C
+function es(T) { return satVP(T); }
+function ea(T, RH){ return es(T) * RH / 100; }
+
+function compute() {
+  const {Rn, Ta, RH, u, theta, LAI, fc} = state;
+
+  const s = slopeSat(Ta);
+  const e_s = es(Ta);
+  const e_a = ea(Ta, RH);
+  const vpd = Math.max(0, e_s - e_a); // kPa
+  const rho = 1.225; // kg/m3
+
+  // Aerodynamic resistance for grass reference (FAO-56) ~0.12m height
+  const ra_ref = 208 / Math.max(0.1, u); // s/m
+
+  // Crop aerodynamic resistance (vine canopy ~0.5m roughness)
+  // Simplified: ra_c = 100 / u
+  const ra_c = 120 / Math.max(0.1, u);
+
+  // Canopy resistance (Jarvis-style)
+  // rs_min per leaf area ~100 s/m. Bulk rs = rs_min / LAI * f(VPD, theta)
+  const rs_min_leaf = 100; // s/m
+  let vpd_factor = 1 + 0.2 * Math.max(0, vpd - 1.5); // stomatal closure above 1.5 kPa
+  let theta_factor = 1;
+  if(theta < 0.15) theta_factor = 1 + 3 * (0.15 - theta) / 0.15;
+  const rs_c = Math.max(20, (rs_min_leaf / Math.max(0.2, LAI)) * vpd_factor * theta_factor);
+
+  // Soil surface resistance depends on theta
+  // Campbell-Diaz type: r_soil = r_soil_sat * (theta_sat / theta)^2.5
+  const theta_sat = 0.45;
+  const r_soil_sat = 50;
+  const r_soil = r_soil_sat * Math.pow(theta_sat / Math.max(0.05, theta), 2.5);
+
+  // Partition net radiation to canopy vs soil using ground cover fc and LAI
+  // Canopy intercepted fraction ~1 - exp(-k*LAI) with k=0.7
+  const k_beer = 0.7;
+  const f_intercept = Math.min(0.97, 1 - Math.exp(-k_beer * LAI));
+  const Rn_canopy = Rn * f_intercept;
+  const Rn_soil   = Rn * (1 - f_intercept) * 0.85; // some reflection/transmission
+
+  // Soil heat flux G ~ 0.1 Rn for full canopy, ~0.4 Rn bare soil
+  const G_frac = 0.1 + 0.3 * (1 - fc);
+  const G = Rn * G_frac;
+  const Rn_available = Rn - G;
+
+  // Penman-Monteith for canopy transpiration per ground area
+  // ET_c = [s(Rn_canopy-G_canopy) + rho*cp*vpd/ra_c] / [s + gamma*(1+rs_c/ra_c)]
+  const denom_c = s + GAMMA * (1 + rs_c / ra_c);
+  const ET_c_MJ = (s * (Rn_canopy - G*0.3) + rho * CP * vpd * 86400 / ra_c) / denom_c; // MJ/m2/d (because Rn in W is MJ? Wait)
+
+  // Correct units: Rn is W/m2. To use in Penman with MJ, convert: 1 W/m2 = 0.0864 MJ/m2/d.
+  const rad_MJ = Rn * 0.0864;
+  const radC_MJ = Rn_canopy * 0.0864;
+  const radS_MJ = Rn_soil * 0.0864;
+  const G_MJ = G * 0.0864;
+
+  // Convert wind/vpd term: rho*cp*vpd/ra in MJ m-2 day-1
+  const windTerm_c = rho * CP * vpd / ra_c * 86400 / 1e6; // MJ/m2/d
+  const ET_c = (s * (radC_MJ - G_MJ*0.3) + windTerm_c) / denom_c; // mm/d equivalent (1 mm = 1 kg/m2, energy ~2.45 MJ/kg)
+  const T_mm_d = Math.max(0, ET_c); // mm/day
+
+  // Soil evaporation
+  const denom_s = s + GAMMA * (1 + r_soil / ra_ref);
+  const windTerm_s = rho * CP * vpd / ra_ref * 86400 / 1e6;
+  const ET_s = (s * (radS_MJ - G_MJ*0.7) + windTerm_s) / denom_s;
+  const E_mm_d = Math.max(0, ET_s * (1 - fc));
+
+  const ET_total_mm_d = T_mm_d + E_mm_d;
+  const ET_total_mm_h = ET_total_mm_d / 24;
+
+  // Convert ET back to latent heat flux W/m2
+  const LE = ET_total_mm_h * LAMBDA * 1e6 / 3600; // W/m2
+
+  // Sensible heat H from residual energy balance
+  const H = Math.max(-200, Rn - G - LE);
+
+  // Reference ET0 (FAO-56 grass)
+  const denom0 = s + GAMMA * (1 + 70 / ra_ref);
+  const ET0_mm_d = (s * (rad_MJ - 0.08*rad_MJ) + windTerm_s) / denom0;
+
+  // Leaf water potential (simplified): Psi_leaf = Psi_soil - E * (r_soil + r_plant)
+  // Soil water potential MPa: power-law
+  const psi_sat = -0.01; // MPa
+  const b = 4.3;
+  const psi_soil = psi_sat * Math.pow(theta_sat / theta, b);
+  // Hydraulic resistance per LAI: higher LAI = lower resistance
+  const R_plant = 50 / Math.max(0.5, LAI); // MPa s m-2 per mm/h? crude
+  const leafPsi = psi_soil - (ET_total_mm_h * R_plant * 1e-6);
+
+  // Crop coefficient
+  const Kc = ET0_mm_d > 0 ? ET_total_mm_d / ET0_mm_d : 0;
+
+  return {
+    Rn, G, H, LE,
+    ET_total_mm_d, ET_total_mm_h, T_mm_d, E_mm_d,
+    ET0_mm_d, Kc, leafPsi, vpd, f_intercept
+  };
+}
+
+let flux = compute();
+function updateModel(){
+  flux = compute();
+  history.push(flux.ET_total_mm_h);
+  if(history.length > 60) history.shift();
+}
+
+// Particle systems
+const photons = [], vapors = [], heatEddies = [], soilHeat = [];
+
+function resize(){
+  const r = Math.min(window.devicePixelRatio || 1, 2);
+  const wrap = document.getElementById('canvas-wrap');
+  W = wrap.clientWidth;
+  H = wrap.clientHeight;
+  canvas.width = W * r;
+  canvas.height = H * r;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+
+  const etWrap = document.getElementById('etChart');
+  const rw = etWrap.parentElement.clientWidth - 20;
+  etCanvas.width = rw * 2;
+  etCanvas.height = 76;
+  etCanvas.style.width = rw + 'px';
+  etCanvas.style.height = '38px';
+  etCtx.setTransform(2, 0, 0, 2, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const vine = {
+  rows: [],
+  posts: [],
+  leaves: [],
+  groundY: 0,
+  build(){
+    this.groundY = H * 0.76;
+    const nRows = Math.max(1, Math.floor(W / (state.rowSpacing * 55)));
+    this.rows = [];
+    for(let i=0;i<nRows;i++){
+      const x = W * 0.12 + (W * 0.76 / Math.max(1, nRows-1)) * i;
+      this.rows.push(x);
+    }
+    // leaves
+    this.leaves = [];
+    for(let x of this.rows){
+      for(let j=0;j<state.LAI*22;j++){
+        const lx = x + (Math.random()-0.5)*90;
+        const ly = this.groundY - 30 - Math.random()*110;
+        const s = 6 + Math.random()*10;
+        this.leaves.push({x:lx, y:ly, s, phase:Math.random()*Math.PI*2});
+      }
+    }
+  }
+};
+
+function initParticles(){
+  vine.build();
+}
+initParticles();
+
+function spawnParticles(dt){
+  const {LE, H, G, Rn, f_intercept} = flux;
+
+  // solar photons from top
+  const photonRate = Rn * 0.02 * dt; // scale for visibility
+  const nPhotons = Math.min(20, Math.floor(photonRate * 0.5));
+  for(let i=0;i<nPhotons;i++){
+    photons.push({
+      x: Math.random()*W,
+      y: -10,
+      vx: (Math.random()-0.5)*0.5,
+      vy: 2 + Math.random()*2,
+      life: 1.0,
+      size: 1.5 + Math.random()
+    });
+  }
+
+  // transpiration vapor from canopy
+  const vaporRate = LE * 0.05 * dt;
+  const nVapor = Math.min(40, Math.floor(vaporRate));
+  for(let i=0;i<nVapor;i++){
+    if(!vine.leaves.length) break;
+    const leaf = vine.leaves[Math.floor(Math.random()*vine.leaves.length)];
+    vapors.push({
+      x: leaf.x + (Math.random()-0.5)*12,
+      y: leaf.y,
+      vx: (Math.random()-0.5)*0.6 + state.u*0.15,
+      vy: -0.5 - Math.random()*1.2,
+      life: 1.0,
+      size: 2 + Math.random()*3
+    });
+  }
+
+  // sensible heat eddies rising
+  const heatRate = Math.max(0, H) * 0.03 * dt;
+  const nHeat = Math.min(25, Math.floor(heatRate));
+  for(let i=0;i<nHeat;i++){
+    heatEddies.push({
+      x: Math.random()*W,
+      y: vine.groundY - 10 - Math.random()*70,
+      vx: (Math.random()-0.5)*0.8 + state.u*0.2,
+      vy: -0.4 - Math.random()*0.8,
+      life: 1.0,
+      size: 4 + Math.random()*8,
+      rot: Math.random()*Math.PI*2,
+      rotSpeed: (Math.random()-0.5)*0.1
+    });
+  }
+
+  // soil heat arrows downward
+  const soilRate = Math.abs(G) * 0.02 * dt;
+  const nSoil = Math.min(15, Math.floor(soilRate));
+  for(let i=0;i<nSoil;i++){
+    soilHeat.push({
+      x: Math.random()*W,
+      y: vine.groundY + 5 + Math.random()*30,
+      vx: 0,
+      vy: 0.5 + Math.random()*0.5,
+      life: 1.0,
+      size: 2 + Math.random()*2
+    });
+  }
+}
+
+function updateParticles(dt){
+  function step(arr, fade, driftFac=1){
+    for(let i=arr.length-1;i>=0;i--){
+      const p = arr[i];
+      p.x += p.vx * driftFac;
+      p.y += p.vy;
+      p.life -= fade;
+      if(p.rot !== undefined) p.rot += p.rotSpeed;
+      if(p.life <= 0 || p.y < -30 || p.y > H+30 || p.x < -30 || p.x > W+30) arr.splice(i,1);
+    }
+  }
+  step(photons, 0.6*dt, 1);
+  step(vapors, 0.35*dt, 1 + state.u*0.08);
+  step(heatEddies, 0.25*dt, 1 + state.u*0.06);
+  step(soilHeat, 0.4*dt, 1);
+}
+
+function drawSky(){
+  const grad = ctx.createLinearGradient(0, 0, 0, vine.groundY);
+  // Sky color depends on Rn (sunny vs overcast)
+  const sunny = Math.min(1, state.Rn / 800);
+  const top = `rgb(${20+sunny*50}, ${25+sunny*60}, ${35+sunny*25})`;
+  const bottom = `rgb(${40+sunny*60}, ${45+sunny*70}, ${30+sunny*25})`;
+  grad.addColorStop(0, top);
+  grad.addColorStop(1, bottom);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, vine.groundY);
+
+  // sun
+  const sunY = H * 0.12 + (1-sunny)*H*0.15;
+  const sunGrad = ctx.createRadialGradient(W*0.82, sunY, 2, W*0.82, sunY, 55+sunny*25);
+  sunGrad.addColorStop(0, `rgba(255, 245, 200, ${0.8+sunny*0.2})`);
+  sunGrad.addColorStop(1, 'rgba(255, 245, 200, 0)');
+  ctx.fillStyle = sunGrad;
+  ctx.beginPath();
+  ctx.arc(W*0.82, sunY, 55+sunny*25, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawTerrain(){
+  // soil
+  const gy = vine.groundY;
+  const grad = ctx.createLinearGradient(0, gy, 0, H);
+  grad.addColorStop(0, '#2a3a23');
+  grad.addColorStop(1, '#151d11');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, gy, W, H-gy);
+
+  // ground cover / grass
+  const fc = state.fc;
+  ctx.fillStyle = `rgba(120, 160, 90, ${0.15 + fc*0.55})`;
+  ctx.fillRect(0, gy, W, H-gy);
+
+  // row shadows under canopy
+  for(let x of vine.rows){
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(x, gy, 60, 14, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawVines(){
+  const gy = vine.groundY;
+  for(let x of vine.rows){
+    // posts
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(x-3, gy-140, 6, 140);
+    // trellis wires
+    ctx.strokeStyle = '#8a8a8a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x-70, gy-95);
+    ctx.lineTo(x+70, gy-95);
+    ctx.moveTo(x-75, gy-55);
+    ctx.lineTo(x+75, gy-55);
+    ctx.stroke();
+
+    // cordon
+    ctx.strokeStyle = '#4a3a2a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x-55, gy-70);
+    ctx.lineTo(x+55, gy-70);
+    ctx.stroke();
+  }
+
+  // leaves as translucent clusters
+  const t = state.time;
+  for(let i=0;i<vine.leaves.length;i++){
+    const l = vine.leaves[i];
+    // slight wind sway
+    const sway = Math.sin(t*2 + l.phase) * (2 + state.u*0.5);
+    const alpha = 0.55 + Math.sin(t + l.phase)*0.15;
+    ctx.fillStyle = `rgba(70, 150, 55, ${alpha})`;
+    ctx.beginPath();
+    ctx.ellipse(l.x + sway, l.y, l.s, l.s*0.6, l.phase, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(100, 190, 75, ${alpha*0.5})`;
+    ctx.beginPath();
+    ctx.ellipse(l.x + sway + 4, l.y - 3, l.s*0.5, l.s*0.3, l.phase, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // bunches of grapes
+  for(let x of vine.rows){
+    for(let k=0;k<5;k++){
+      const bx = x + (Math.random()-0.5)*80;
+      const by = gy - 50 - Math.random()*35;
+      // deterministic-ish via k
+      const seed = Math.sin(x*0.1 + k*1.7)*1000;
+      const bxx = x + (seed%70) - 35;
+      const byy = gy - 55 - Math.abs(seed%30);
+      ctx.fillStyle = `rgba(${90+seed%60}, ${40+seed%40}, ${90+seed%50}, 0.85)`;
+      ctx.beginPath();
+      ctx.ellipse(bxx, byy, 7, 11, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(${80+seed%50}, ${30+seed%30}, ${80+seed%40}, 0.6)`;
+      ctx.beginPath();
+      ctx.ellipse(bxx-4, byy+6, 5, 8, -0.3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(bxx+4, byy+7, 5, 8, 0.3, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawParticles(){
+  // photons
+  ctx.globalCompositeOperation = 'screen';
+  for(const p of photons){
+    ctx.fillStyle = `rgba(255, 247, 209, ${p.life*0.7})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // vapors
+  for(const p of vapors){
+    ctx.fillStyle = `rgba(110, 207, 207, ${p.life*0.35})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // heat eddies
+  for(const p of heatEddies){
+    ctx.strokeStyle = `rgba(240, 192, 90, ${p.life*0.55})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const r = p.size;
+    for(let a=0;a<Math.PI*2;a+=0.8){
+      const px = p.x + Math.cos(a + p.rot) * r;
+      const py = p.y + Math.sin(a + p.rot) * r * 0.6;
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  // soil heat
+  ctx.globalCompositeOperation = 'source-over';
+  for(const p of soilHeat){
+    ctx.fillStyle = `rgba(184, 138, 90, ${p.life*0.5})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawHUD(){
+  // small wind arrow top-left-ish
+  const wx = W - 60, wy = 60;
+  ctx.strokeStyle = 'rgba(190,210,185,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(wx, wy, 20, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(wx, wy);
+  ctx.lineTo(wx + Math.cos(0)*18, wy + Math.sin(0)*18);
+  ctx.stroke();
+  ctx.fillStyle = 'var(--muted)';
+  ctx.font = '12px ui-monospace, monospace';
+  ctx.fillText('Wind ' + state.u.toFixed(1) + ' m/s', wx-35, wy+34);
+}
+
+function updateDOM(){
+  const f = flux;
+  document.getElementById('netRad').textContent = f.Rn.toFixed(0);
+  document.getElementById('latent').textContent = f.LE.toFixed(0);
+  document.getElementById('sensible').textContent = f.H.toFixed(0);
+  document.getElementById('soilHeat').textContent = f.G.toFixed(0);
+  document.getElementById('ETmm').textContent = f.ET_total_mm_h.toFixed(3);
+  document.getElementById('Tmm').textContent = (f.T_mm_d/24).toFixed(3);
+  document.getElementById('Emm').textContent = (f.E_mm_d/24).toFixed(3);
+  document.getElementById('Kc').textContent = f.Kc.toFixed(2);
+  document.getElementById('leafPsi').textContent = f.leafPsi.toFixed(2);
+  document.getElementById('ET0').textContent = f.ET0_mm_d.toFixed(2);
+
+  const total = f.Rn || 1;
+  document.getElementById('bar-latent').style.width = (100 * Math.max(0,f.LE)/total).toFixed(1) + '%';
+  document.getElementById('bar-sensible').style.width = (100 * Math.max(0,f.H)/total).toFixed(1) + '%';
+  document.getElementById('bar-soil').style.width = (100 * Math.max(0,f.G)/total).toFixed(1) + '%';
+
+  const badge = document.getElementById('stressBadge');
+  if(f.leafPsi > -1.2) { badge.textContent='Low'; badge.className='status low'; }
+  else if(f.leafPsi > -1.8) { badge.textContent='Mild'; badge.className='status mild'; }
+  else { badge.textContent='High'; badge.className='status high'; }
+}
+
+function drawSparkline(){
+  const w = etCanvas.width / 2;
+  const h = etCanvas.height / 2;
+  etCtx.clearRect(0, 0, w, h);
+  etCtx.strokeStyle = '#6ecfcf';
+  etCtx.lineWidth = 1.5;
+  etCtx.beginPath();
+  if(history.length > 1){
+    const max = Math.max(0.05, ...history);
+    const min = 0;
+    for(let i=0;i<history.length;i++){
+      const x = i * (w / (history.length - 1));
+      const y = h - (history[i] - min) / (max - min) * (h - 6);
+      if(i===0) etCtx.moveTo(x, y);
+      else etCtx.lineTo(x, y);
+    }
+    etCtx.stroke();
+    etCtx.fillStyle = 'rgba(110,207,207,0.15)';
+    etCtx.lineTo(w, h);
+    etCtx.lineTo(0, h);
+    etCtx.fill();
+  }
+  etCtx.fillStyle = '#8fa884';
+  etCtx.font = '10px ui-monospace, monospace';
+  etCtx.fillText('ET rate mm/h', 6, 12);
+}
+
+function loop(now){
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  state.time += dt;
+
+  if(Math.floor(state.time*2) % 10 === 0) updateModel();
+
+  spawnParticles(dt);
+  updateParticles(dt);
+
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  drawTerrain();
+  drawVines();
+  drawParticles();
+  drawHUD();
+  updateDOM();
+  drawSparkline();
+
+  requestAnimationFrame(loop);
+}
+
+// Initial history fill
+for(let i=0;i<30;i++) history.push(flux.ET_total_mm_h);
+
+// Rebuild vine geometry when row spacing changes
+let lastRowSpacing = state.rowSpacing;
+setInterval(() => {
+  if(Math.abs(state.rowSpacing - lastRowSpacing) > 0.01){
+    lastRowSpacing = state.rowSpacing;
+    vine.build();
+  }
+}, 200);
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
