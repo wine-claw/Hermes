@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Decanting Dynamics — Oxygen & Wine Evolution Simulator</title>
+<style>
+  :root{
+    --bg:#0f0808; --surface:#1a1012; --surface2:#241418; --border:#3a2025;
+    --text:#e8d5d0; --muted:#8a6a70; --accent:#c9a060; --accent2:#a02838;
+    --wine:#4a0e1a; --o2:#4a9eff; --tannin:#b87333; --aroma:#ffd700;
+    --green:#6bcb77; --red:#e84855;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html{font-size:16px;}
+  body{
+    background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;
+  }
+
+  /* Disclaimer */
+  .disclaimer{
+    background:#1a1610;border-bottom:1px solid #3a3020;color:#c9a060;
+    padding:0.75rem 1rem;text-align:center;font-size:0.85rem;
+    position:sticky;top:0;z-index:100;
+  }
+  .disclaimer strong{font-weight:600;}
+
+  /* Header */
+  header{text-align:center;padding:2rem 1rem 1rem;}
+  header h1{
+    font-size:clamp(1.5rem,5vw,2.4rem);font-weight:800;
+    background:linear-gradient(135deg,var(--accent),var(--accent2),var(--accent));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  }
+  header p{color:var(--muted);font-size:0.92rem;margin-top:0.3rem;}
+
+  /* Container */
+  .container{max-width:1080px;margin:0 auto;padding:0.5rem 1rem 2rem;}
+
+  /* SVG Scene */
+  .viz-section{
+    background:linear-gradient(180deg,var(--surface),var(--surface2));
+    border:1px solid var(--border);border-radius:16px;padding:0.5rem;
+    margin-bottom:1rem;overflow:hidden;position:relative;
+  }
+  #scene{width:100%;height:auto;display:block;}
+
+  /* Grid layout */
+  .main-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;}
+  @media(max-width:768px){.main-grid{grid-template-columns:1fr;}}
+
+  /* Panels */
+  .panel{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:1.1rem;
+  }
+  .panel h2{
+    font-size:0.85rem;text-transform:uppercase;letter-spacing:0.08em;
+    color:var(--accent);margin-bottom:0.8rem;font-weight:700;
+  }
+
+  /* Controls */
+  .control-group{margin-bottom:0.8rem;}
+  .control-group label{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-size:0.85rem;color:var(--text);margin-bottom:0.3rem;
+  }
+  .control-group label span{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:6px;border-radius:3px;
+    background:var(--surface2);outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+    background:var(--accent);border:2px solid var(--bg);cursor:pointer;
+    transition:transform .15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
+  input[type=range]::-moz-range-thumb{
+    width:18px;height:18px;border-radius:50%;background:var(--accent);
+    border:2px solid var(--bg);cursor:pointer;
+  }
+
+  /* Presets */
+  .preset-row{display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.8rem;}
+  .preset-btn{
+    background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    padding:0.35rem 0.6rem;border-radius:8px;font-size:0.78rem;cursor:pointer;
+    transition:all .15s;
+  }
+  .preset-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .preset-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600;}
+
+  /* Action buttons */
+  .action-row{display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;}
+  .btn{
+    flex:1;min-width:80px;padding:0.6rem;border-radius:10px;border:none;
+    font-size:0.85rem;font-weight:600;cursor:pointer;transition:all .15s;
+  }
+  .btn-pour{background:linear-gradient(135deg,var(--accent2),#8a1830);color:#fff;}
+  .btn-pour:hover{filter:brightness(1.15);}
+  .btn-pour:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-play{background:var(--surface2);border:1px solid var(--border);color:var(--accent);}
+  .btn-play:hover{border-color:var(--accent);}
+  .btn-play:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-reset{background:var(--surface2);border:1px solid var(--border);color:var(--muted);}
+  .btn-reset:hover{color:var(--text);border-color:var(--muted);}
+
+  /* Metrics */
+  .metric-card{
+    background:var(--surface2);border-radius:10px;padding:0.7rem 0.8rem;
+    margin-bottom:0.6rem;border:1px solid var(--border);
+  }
+  .metric-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.3rem;}
+  .metric-label{font-size:0.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;}
+  .metric-value{font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);}
+  .metric-unit{font-size:0.7rem;color:var(--muted);margin-left:0.15rem;}
+  .metric-bar{height:5px;background:var(--bg);border-radius:3px;overflow:hidden;}
+  .metric-fill{height:100%;border-radius:3px;transition:width .3s ease;}
+  .fill-o2{background:linear-gradient(90deg,#2a6eff,#4a9eff);}
+  .fill-tannin{background:linear-gradient(90deg,#8b4513,#b87333);}
+  .fill-aroma{background:linear-gradient(90deg,#cc9900,#ffd700);}
+  .fill-astringency{background:linear-gradient(90deg,var(--accent2),#e84855);}
+  .fill-color{background:linear-gradient(90deg,#4a0e1a,#7a2030,#a04030);}
+
+  .peak-info{
+    margin-top:0.4rem;padding:0.6rem 0.8rem;border-radius:10px;
+    background:var(--surface2);border:1px solid var(--border);
+    font-size:0.82rem;text-align:center;
+  }
+  .peak-info .peak-label{color:var(--muted);font-size:0.74rem;text-transform:uppercase;letter-spacing:0.04em;}
+  .peak-info .peak-val{color:var(--accent);font-weight:700;font-size:1.0rem;margin-top:0.15rem;}
+  .peak-status{font-size:0.78rem;margin-top:0.3rem;}
+  .peak-status.pre-peak{color:var(--o2);}
+  .peak-status.in-peak{color:var(--green);font-weight:600;}
+  .peak-status.post-peak{color:var(--red);}
+
+  /* Timeline */
+  .timeline-section{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:1rem;margin-bottom:1rem;
+  }
+  .timeline-track{
+    position:relative;height:32px;background:var(--surface2);border-radius:16px;
+    cursor:pointer;overflow:hidden;border:1px solid var(--border);
+  }
+  .peak-band{
+    position:absolute;top:0;height:100%;background:rgba(107,203,119,0.18);
+    border-left:2px solid rgba(107,203,119,0.4);border-right:2px solid rgba(107,203,119,0.4);
+    transition:left .3s,width .3s;
+  }
+  .timeline-progress{
+    position:absolute;top:0;left:0;height:100%;
+    background:linear-gradient(90deg,var(--accent2),var(--accent));
+    border-radius:16px 0 0 16px;transition:width .1s;
+  }
+  .timeline-handle{
+    position:absolute;top:50%;width:20px;height:20px;border-radius:50%;
+    background:var(--accent);border:3px solid var(--bg);transform:translate(-50%,-50%);
+    cursor:grab;transition:left .1s;box-shadow:0 2px 8px rgba(0,0,0,0.5);z-index:5;
+  }
+  .timeline-handle.in-peak{background:var(--green);border-color:var(--bg);}
+  .timeline-handle:active{cursor:grabbing;transform:translate(-50%,-50%) scale(1.15);}
+  .timeline-labels{
+    display:flex;justify-content:space-between;margin-top:0.4rem;
+    font-size:0.72rem;color:var(--muted);
+  }
+
+  /* Info cards */
+  .info-section{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:1.1rem;min-height:120px;
+  }
+  .info-card{opacity:0;transform:translateY(10px);}
+  .info-card.visible{opacity:1;transform:translateY(0);transition:opacity .4s,transform .4s;}
+  .info-card .stage-title{
+    font-size:1.0rem;font-weight:700;color:var(--accent);margin-bottom:0.4rem;
+    display:flex;align-items:center;gap:0.5rem;
+  }
+  .info-card .stage-badge{
+    font-size:0.68rem;padding:0.15rem 0.5rem;border-radius:6px;
+    background:var(--surface2);color:var(--muted);font-weight:600;
+  }
+  .info-card .stage-text{font-size:0.88rem;color:var(--text);line-height:1.55;}
+  .info-card .stage-fact{
+    margin-top:0.5rem;font-size:0.8rem;color:var(--muted);
+    padding-left:0.8rem;border-left:2px solid var(--border);
+  }
+
+  /* SVG element styles */
+  .glass-fill{fill:rgba(180,200,210,0.06);stroke:rgba(200,210,220,0.25);stroke-width:1.5;}
+  .glass-outline{fill:none;stroke:rgba(200,210,220,0.35);stroke-width:1.5;}
+  .glass-highlight{fill:rgba(255,255,255,0.05);}
+  .table-surface{stroke:rgba(120,80,60,0.4);stroke-width:2;fill:rgba(60,40,30,0.15);}
+
+  /* Footer */
+  footer{text-align:center;padding:1.5rem 1rem;color:var(--muted);font-size:0.78rem;}
+  .touch-hint{font-size:0.78rem;color:var(--muted);text-align:center;margin-top:0.5rem;}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<header>
+  <h1>Decanting Dynamics</h1>
+  <p>Oxygen &amp; Wine Evolution Simulator — Watch your wine transform as it breathes</p>
+</header>
+
+<div class="container">
+
+  <!-- SVG Scene -->
+  <div class="viz-section">
+    <svg id="scene" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <!-- Background gradient -->
+        <radialGradient id="bg-grad" cx="50%" cy="40%" r="70%">
+          <stop offset="0%" stop-color="#1a1218"/>
+          <stop offset="100%" stop-color="#0a0606"/>
+        </radialGradient>
+        <!-- Wine gradient for bottle -->
+        <linearGradient id="bottle-wine-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop id="bw-stop1" offset="0%" stop-color="#5a0e1a"/>
+          <stop id="bw-stop2" offset="100%" stop-color="#2a060e"/>
+        </linearGradient>
+        <!-- Wine gradient for decanter -->
+        <linearGradient id="decanter-wine-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop id="dw-stop1" offset="0%" stop-color="#5a1018"/>
+          <stop id="dw-stop2" offset="100%" stop-color="#2e060e"/>
+        </linearGradient>
+        <!-- Bottle glass gradient -->
+        <linearGradient id="bottle-glass-grad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="rgba(40,60,30,0.15)"/>
+          <stop offset="30%" stop-color="rgba(80,100,60,0.08)"/>
+          <stop offset="70%" stop-color="rgba(40,60,30,0.12)"/>
+          <stop offset="100%" stop-color="rgba(20,40,20,0.2)"/>
+        </linearGradient>
+        <!-- Decanter glass gradient -->
+        <linearGradient id="decanter-glass-grad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="rgba(120,140,150,0.04)"/>
+          <stop offset="40%" stop-color="rgba(180,200,210,0.08)"/>
+          <stop offset="60%" stop-color="rgba(180,200,210,0.06)"/>
+          <stop offset="100%" stop-color="rgba(80,100,110,0.03)"/>
+        </linearGradient>
+        <!-- Clip paths -->
+        <clipPath id="bottle-clip"><path id="bottle-clip-path" d=""/></clipPath>
+        <clipPath id="decanter-clip"><path id="decanter-clip-path" d=""/></clipPath>
+        <!-- Glow filter -->
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Background -->
+      <rect x="0" y="0" width="800" height="500" fill="url(#bg-grad)"/>
+
+      <!-- Ambient dust motes -->
+      <g id="dust-motes" opacity="0.3"></g>
+
+      <!-- Table surface -->
+      <line class="table-surface" x1="50" y1="440" x2="750" y2="440"/>
+      <line class="table-surface" x1="50" y1="442" x2="750" y2="442" opacity="0.3"/>
+
+      <!-- Bottle group (rotates on pour) -->
+      <g id="bottle-group" style="transform-origin:130px 390px;">
+        <!-- Bottle glass fill -->
+        <path id="bottle-glass" class="glass-fill" d="" fill="url(#bottle-glass-grad)"/>
+        <!-- Wine inside bottle -->
+        <g clip-path="url(#bottle-clip)">
+          <rect id="bottle-wine" x="100" y="200" width="60" height="190" fill="url(#bottle-wine-grad)" rx="2"/>
+        </g>
+        <!-- Bottle outline -->
+        <path id="bottle-outline" class="glass-outline" d=""/>
+        <!-- Bottle highlight -->
+        <path id="bottle-highlight" class="glass-highlight" d="" opacity="0.6"/>
+      </g>
+
+      <!-- Pour stream (hidden initially) -->
+      <path id="pour-stream" d="" stroke="url(#decanter-wine-grad)" stroke-width="6" fill="none"
+            opacity="0" stroke-linecap="round" filter="url(#glow)"/>
+
+      <!-- Decanter group -->
+      <g id="decanter-group">
+        <!-- Decanter glass fill -->
+        <path id="decanter-glass" class="glass-fill" d="" fill="url(#decanter-glass-grad)"/>
+        <!-- Wine inside decanter -->
+        <g clip-path="url(#decanter-clip)">
+          <rect id="decanter-wine" x="430" y="430" width="180" height="0" fill="url(#decanter-wine-grad)" rx="2"/>
+          <!-- Wine surface shimmer -->
+          <ellipse id="wine-surface-shimmer" cx="520" cy="430" rx="50" ry="3"
+                   fill="rgba(200,150,160,0.15)" opacity="0"/>
+        </g>
+        <!-- Decanter outline -->
+        <path id="decanter-outline" class="glass-outline" d=""/>
+        <!-- Decanter highlight -->
+        <path id="decanter-highlight" class="glass-highlight" d="" opacity="0.5"/>
+      </g>
+
+      <!-- O2 molecules -->
+      <g id="o2-group" opacity="0"></g>
+
+      <!-- Tannin molecules -->
+      <g id="tannin-group" opacity="0"></g>
+
+      <!-- Aroma particles -->
+      <g id="aroma-group" opacity="0"></g>
+
+      <!-- Time display -->
+      <text x="400" y="30" text-anchor="middle" fill="var(--accent)" font-size="16"
+            font-family="monospace" font-weight="700" id="time-display">Ready to Pour</text>
+      <text x="400" y="48" text-anchor="middle" fill="var(--muted)" font-size="11"
+            font-family="system-ui" id="status-display">Click "Pour Wine" to begin</text>
+    </svg>
+  </div>
+
+  <p class="touch-hint">Adjust wine age, temperature, and decanter shape — then pour and watch oxygen transform your wine</p>
+
+  <!-- Controls + Metrics -->
+  <div class="main-grid">
+
+    <!-- Controls -->
+    <div class="panel controls-panel">
+      <h2>◆ Wine &amp; Conditions</h2>
+
+      <div class="preset-row">
+        <button class="preset-btn active" data-preset="young-cab">Young Cabernet</button>
+        <button class="preset-btn" data-preset="pinot">Medium Pinot</button>
+        <button class="preset-btn" data-preset="old-bordeaux">Old Bordeaux</button>
+        <button class="preset-btn" data-preset="beaujolais">Young Gamay</button>
+      </div>
+
+      <div class="control-group">
+        <label>Wine Age <span id="age-val">3 yr</span></label>
+        <input type="range" id="wine-age" min="1" max="20" value="3" step="1">
+      </div>
+
+      <div class="control-group">
+        <label>Temperature <span id="temp-val">18°C</span></label>
+        <input type="range" id="temperature" min="12" max="24" value="18" step="1">
+      </div>
+
+      <div class="control-group">
+        <label>Decanter Width <span id="width-val">Standard</span></label>
+        <input type="range" id="decanter-width" min="1" max="5" value="3" step="1">
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-pour" id="pour-btn">🍷 Pour Wine</button>
+        <button class="btn btn-play" id="play-btn" disabled>▶ Play</button>
+        <button class="btn btn-reset" id="reset-btn">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="panel metrics-panel">
+      <h2>◆ Live Metrics</h2>
+
+      <div class="metric-card">
+        <div class="metric-head">
+          <span class="metric-label">Dissolved O₂</span>
+          <span><span class="metric-value" id="o2-val">0.5</span><span class="metric-unit">mg/L</span></span>
+        </div>
+        <div class="metric-bar"><div class="metric-fill fill-o2" id="o2-bar" style="width:6%"></div></div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-head">
+          <span class="metric-label">Tannin Polymerization</span>
+          <span><span class="metric-value" id="tannin-val">0</span><span class="metric-unit">%</span></span>
+        </div>
+        <div class="metric-bar"><div class="metric-fill fill-tannin" id="tannin-bar" style="width:0%"></div></div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-head">
+          <span class="metric-label">Aroma Release</span>
+          <span><span class="metric-value" id="aroma-val">0</span><span class="metric-unit">%</span></span>
+        </div>
+        <div class="metric-bar"><div class="metric-fill fill-aroma" id="aroma-bar" style="width:0%"></div></div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-head">
+          <span class="metric-label">Astringency</span>
+          <span><span class="metric-value" id="astringency-val">8.0</span><span class="metric-unit">/10</span></span>
+        </div>
+        <div class="metric-bar"><div class="metric-fill fill-astringency" id="astringency-bar" style="width:80%"></div></div>
+      </div>
+
+      <div class="peak-info">
+        <div class="peak-label">Peak Drinking Window</div>
+        <div class="peak-val" id="peak-val">1h 30m – 2h 00m</div>
+        <div class="peak-status pre-peak" id="peak-status">Wine has not been poured yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="timeline-section">
+    <div class="timeline-track" id="timeline-track">
+      <div class="peak-band" id="peak-band" style="left:25%;width:12.5%;"></div>
+      <div class="timeline-progress" id="timeline-progress" style="width:0%;"></div>
+      <div class="timeline-handle" id="timeline-handle" style="left:0%;"></div>
+    </div>
+    <div class="timeline-labels">
+      <span>0h</span><span>1h</span><span>2h</span><span>3h</span><span>4h</span>
+    </div>
+  </div>
+
+  <!-- Info section -->
+  <div class="info-section">
+    <div class="info-card" id="info-card">
+      <div class="stage-title">
+        <span id="stage-icon">◆</span>
+        <span id="stage-title-text">Awaiting Pour</span>
+        <span class="stage-badge" id="stage-badge">— —</span>
+      </div>
+      <div class="stage-text" id="stage-text">Press "Pour Wine" to begin the simulation. The wine will flow from bottle to decanter, and oxygen will start working its magic.</div>
+      <div class="stage-fact" id="stage-fact">Decanting can increase a wine's surface area by up to 50×, dramatically accelerating oxygen exchange.</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Built by Hermes Agent · Decanting Dynamics · Interactive GSAP SVG Simulation</footer>
+
+<script>
+(function(){
+'use strict';
+
+var SVG_NS='http://www.w3.org/2000/svg';
+var DECANTER_CX=520;
+var BOTTLE_CX=130;
+var MAX_TIME=4; // hours
+
+// ========== STATE ==========
+var state={
+  time:0, playing:false, poured:false,
+  wineAge:3, temperature:18, decanterWidth:3,
+  preset:'young-cab',
+  dissolvedO2:0.5, tanninPoly:0, aromaRelease:0,
+  astringency:8.0, colorShift:0,
+  peakStart:1.5, peakEnd:2.0,
+  initialTanninLevel:8.0
+};
+
+// ========== PRESETS ==========
+var PRESETS={
+  'young-cab':{age:2,label:'Young Cabernet',tanninLevel:9.0,peakCenter:1.8,peakWidth:0.5},
+  'pinot':{age:4,label:'Medium Pinot',tanninLevel:5.0,peakCenter:1.0,peakWidth:0.4},
+  'old-bordeaux':{age:15,label:'Old Bordeaux',tanninLevel:7.0,peakCenter:0.5,peakWidth:0.2},
+  'beaujolais':{age:1,label:'Young Gamay',tanninLevel:4.0,peakCenter:0.4,peakWidth:0.25}
+};
+
+// ========== PHYSICS ==========
+function o2Saturation(temp){
+  // Henry's law: kH for O2 at 20C ≈ 1.3e-3 mol/(L·atm)
+  // van't Hoff: kH(T) = kH(T0) * exp(C*(1/T0 - 1/T)), C≈1700K for O2
+  var T0=293.15, T=273.15+temp, kH20=1.3e-3, C=1700;
+  var kH=kH20*Math.exp(C*(1/T0-1/T));
+  var pO2=0.2095; // atm
+  return kH*pO2*32*1000; // mg/L (mol/L * atm * g/mol * mg/g)
+}
+
+function surfaceAreaFactor(width){
+  // width 1-5 → 0.4 to 2.2
+  return 0.4+(width-1)*0.45;
+}
+
+function massTransferCoeff(temp,width){
+  var tempFactor=Math.exp(0.035*(temp-20));
+  var areaFactor=surfaceAreaFactor(width);
+  return 0.18*tempFactor*areaFactor; // per hour
+}
+
+function updatePhysics(dt){
+  if(!state.poured)return;
+  state.time+=dt;
+  if(state.time>MAX_TIME)state.time=MAX_TIME;
+
+  // Dissolved O2: first-order approach to saturation
+  var sat=o2Saturation(state.temperature);
+  var kLa=massTransferCoeff(state.temperature,state.decanterWidth);
+  state.dissolvedO2+=kLa*(sat-state.dissolvedO2)*dt;
+  state.dissolvedO2=Math.max(0.5,Math.min(sat*0.95,state.dissolvedO2));
+
+  // Tannin polymerization: depends on O2 availability and temperature
+  var o2Frac=state.dissolvedO2/sat;
+  var tempFactor=Math.exp(0.025*(state.temperature-20));
+  var ageFactor=Math.max(0.3,1.0-state.wineAge*0.03);
+  var baseRate=0.10*ageFactor;
+  state.tanninPoly+=baseRate*o2Frac*tempFactor*dt;
+  state.tanninPoly=Math.min(0.85,state.tanninPoly);
+
+  // Aroma release: exponential approach
+  var aromaK=0.25*surfaceAreaFactor(state.decanterWidth)*Math.exp(0.04*(state.temperature-20));
+  state.aromaRelease=1-Math.exp(-aromaK*state.time);
+
+  // Astringency: decreases with polymerization
+  var baseAstr=state.initialTanninLevel;
+  state.astringency=Math.max(1.0,baseAstr*(1-state.tanninPoly*0.65));
+
+  // Color shift: mostly in first 2h
+  state.colorShift=Math.min(1,state.time/2.5);
+
+  // Peak window
+  var p=PRESETS[state.preset];
+  state.peakStart=Math.max(0,p.peakCenter-p.peakWidth/2);
+  state.peakEnd=p.peakCenter+p.peakWidth/2;
+}
+
+// ========== COLOR ==========
+function hexToRgb(h){return{r:parseInt(h.slice(1,3),16),g:parseInt(h.slice(3,5),16),b:parseInt(h.slice(5,7),16)};}
+function rgbToHex(r,g,b){return'#'+((1<<24)+(Math.round(r)<<16)+(Math.round(g)<<8)+Math.round(b)).toString(16).slice(1);}
+function lerpColor(c1,c2,t){var a=hexToRgb(c1),b=hexToRgb(c2);return rgbToHex(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t);}
+
+function updateWineColor(){
+  var t=state.colorShift;
+  var ageT=Math.min(1,state.wineAge/15);
+  // Young wine: purple-red → brighter red as it opens
+  // Old wine: garnet → brick-orange
+  var youngTop=lerpColor('#4a0e1a','#6a1828',t*(1-ageT));
+  var oldTop=lerpColor('#5a1015','#8a3020',t*ageT);
+  var topColor=lerpColor(youngTop,oldTop,ageT);
+  var youngBot=lerpColor('#2a060e','#3a0a14',t*(1-ageT));
+  var oldBot=lerpColor('#2e060e','#5a1812',t*ageT);
+  var botColor=lerpColor(youngBot,oldBot,ageT);
+  document.getElementById('dw-stop1').setAttribute('stop-color',topColor);
+  document.getElementById('dw-stop2').setAttribute('stop-color',botColor);
+}
+
+// ========== SVG PATHS ==========
+function bottlePath(){
+  var cx=BOTTLE_CX, top=120, neckBottom=165, shoulderY=185, bodyBottom=388;
+  var neckHalf=10, bodyHalf=25;
+  return 'M '+(cx-neckHalf)+','+top+
+    ' L '+(cx-neckHalf)+','+neckBottom+
+    ' L '+(cx-bodyHalf)+','+shoulderY+
+    ' L '+(cx-bodyHalf)+','+(bodyBottom-12)+
+    ' Q '+(cx-bodyHalf)+','+bodyBottom+' '+(cx-bodyHalf+5)+','+bodyBottom+
+    ' L '+(cx+bodyHalf-5)+','+bodyBottom+
+    ' Q '+(cx+bodyHalf)+','+bodyBottom+' '+(cx+bodyHalf)+','+(bodyBottom-12)+
+    ' L '+(cx+bodyHalf)+','+shoulderY+
+    ' L '+(cx+neckHalf)+','+neckBottom+
+    ' L '+(cx+neckHalf)+','+top+' Z';
+}
+
+function decanterPath(){
+  var cx=DECANTER_CX, top=170, neckBottom=210, bowlTopY=240, bottom=430;
+  var neckHalf=11;
+  var halfW=28+state.decanterWidth*12; // 40 to 88
+  return 'M '+(cx-neckHalf)+','+top+
+    ' L '+(cx-neckHalf)+','+neckBottom+
+    ' L '+(cx-neckHalf-6)+','+(neckBottom+10)+
+    ' Q '+(cx-halfW)+','+(bowlTopY+15)+' '+(cx-halfW)+','+(bowlTopY+55)+
+    ' L '+(cx-halfW)+','+(bottom-12)+
+    ' Q '+(cx-halfW)+','+bottom+' '+(cx-halfW+8)+','+bottom+
+    ' L '+(cx+halfW-8)+','+bottom+
+    ' Q '+(cx+halfW)+','+bottom+' '+(cx+halfW)+','+(bottom-12)+
+    ' L '+(cx+halfW)+','+(bowlTopY+55)+
+    ' Q '+(cx+halfW)+','+(bowlTopY+15)+' '+(cx+neckHalf+6)+','+(neckBottom+10)+
+    ' L '+(cx+neckHalf)+','+neckBottom+
+    ' L '+(cx+neckHalf)+','+top+' Z';
+}
+
+function decanterHighlightPath(){
+  var cx=DECANTER_CX, halfW=28+state.decanterWidth*12;
+  return 'M '+(cx-halfW+8)+',270 Q '+(cx-halfW+5)+',350 '+(cx-halfW+12)+',415';
+}
+
+function updateDecanterShape(){
+  var path=decanterPath();
+  document.getElementById('decanter-glass').setAttribute('d',path);
+  document.getElementById('decanter-outline').setAttribute('d',path);
+  document.getElementById('decanter-clip-path').setAttribute('d',path);
+  document.getElementById('decanter-highlight').setAttribute('d',decanterHighlightPath());
+}
+
+// ========== SVG HELPER ==========
+function svgEl(tag,attrs){
+  var el=document.createElementNS(SVG_NS,tag);
+  for(var k in attrs)el.setAttribute(k,attrs[k]);
+  return el;
+}
+
+// ========== MOLECULES ==========
+var o2Molecules=[];
+var O2_COUNT=18;
+
+function initO2Molecules(){
+  var group=document.getElementById('o2-group');
+  group.innerHTML='';
+  o2Molecules=[];
+  var halfW=28+state.decanterWidth*12;
+  for(var i=0;i<O2_COUNT;i++){
+    var g=svgEl('g',{opacity:0});
+    var x=DECANTER_CX-halfW+10+Math.random()*(halfW*2-20);
+    var c=svgEl('circle',{cx:x,cy:130,r:6,fill:'#4a9eff',opacity:0.7,filter:'url(#glow)'});
+    var t=svgEl('text',{x:x,y:134,'text-anchor':'middle',fill:'#aaeeff','font-size':6,'font-family':'monospace'});
+    t.textContent='O₂';
+    g.appendChild(c);
+    g.appendChild(t);
+    group.appendChild(g);
+    o2Molecules.push({el:g,x:x,baseY:130,delay:Math.random()*4,duration:3+Math.random()*2,active:false});
+  }
+}
+
+function updateO2Molecules(){
+  if(!state.poured)return;
+  var halfW=28+state.decanterWidth*12;
+  var sat=o2Saturation(state.temperature);
+  var o2Frac=state.dissolvedO2/sat;
+  var activeCount=Math.round(O2_COUNT*o2Frac*surfaceAreaFactor(state.decanterWidth)/2.2);
+  activeCount=Math.min(O2_COUNT,Math.max(0,activeCount));
+
+  var now=performance.now()/1000;
+  for(var i=0;i<o2Molecules.length;i++){
+    var m=o2Molecules[i];
+    if(i<activeCount){
+      if(!m.active){
+        m.active=true;
+        gsap.to(m.el,{opacity:1,duration:0.5,delay:m.delay*0.3});
+        animateO2(m);
+      }
+    }else{
+      if(m.active){
+        m.active=false;
+        gsap.to(m.el,{opacity:0,duration:0.5});
+      }
+    }
+  }
+}
+
+function animateO2(m){
+  if(!m.active)return;
+  var surfaceY=320; // wine surface in decanter
+  var halfW=28+state.decanterWidth*12;
+  m.x=DECANTER_CX-halfW+10+Math.random()*(halfW*2-20);
+  m.el.querySelector('circle').setAttribute('cx',m.x);
+  m.el.querySelector('text').setAttribute('x',m.x);
+  gsap.timeline({onComplete:function(){if(m.active)animateO2(m);}})
+    .fromTo(m.el,
+      {attr:{transform:'translate(0, 0)'},opacity:0.8},
+      {attr:{transform:'translate(0, '+(surfaceY-130)+'px)'},opacity:0.9,duration:2.5,ease:'power1.in'})
+    .to(m.el,{opacity:0,duration:0.8,ease:'power2.out',
+      attr:{transform:'translate(0, '+(surfaceY-110)+'px)'}});
+}
+
+// Tannin
+var tanninMonomers=[];
+var tanninBonds=[];
+var TAMNIN_POSITIONS=[
+  {x:490,y:355},{x:510,y:345},{x:535,y:360},
+  {x:520,y:385},{x:495,y:395},{x:545,y:380},
+  {x:505,y:372},{x:530,y:400}
+];
+var BOND_CONNECTIONS=[
+  [0,1],[1,2],[2,5],[3,4],[3,6],[5,7]
+];
+
+function initTanninMolecules(){
+  var group=document.getElementById('tannin-group');
+  group.innerHTML='';
+  tanninMonomers=[];
+  tanninBonds=[];
+
+  // Create bonds first (behind monomers)
+  for(var i=0;i<BOND_CONNECTIONS.length;i++){
+    var a=TAMNIN_POSITIONS[BOND_CONNECTIONS[i][0]];
+    var b=TAMNIN_POSITIONS[BOND_CONNECTIONS[i][1]];
+    var len=Math.sqrt((b.x-a.x)*(b.x-a.x)+(b.y-a.y)*(b.y-a.y));
+    var line=svgEl('line',{
+      x1:a.x,y1:a.y,x2:b.x,y2:b.y,
+      stroke:'#b87333','stroke-width':2,opacity:0,
+      'stroke-linecap':'round','stroke-dasharray':len,'stroke-dashoffset':len
+    });
+    group.appendChild(line);
+    tanninBonds.push({el:line,revealed:false,length:len});
+  }
+
+  // Create monomers
+  for(var j=0;j<TAMNIN_POSITIONS.length;j++){
+    var p=TAMNIN_POSITIONS[j];
+    var c=svgEl('circle',{cx:p.x,cy:p.y,r:5,fill:'#b87333',opacity:0.8,filter:'url(#glow)'});
+    group.appendChild(c);
+    tanninMonomers.push({el:c,x:p.x,y:p.y,origX:p.x,origY:p.y});
+  }
+}
+
+function updateTanninBonds(){
+  if(!state.poured)return;
+  var revealCount=Math.floor(state.tanninPoly/0.85*BOND_CONNECTIONS.length);
+  for(var i=0;i<tanninBonds.length;i++){
+    var b=tanninBonds[i];
+    if(i<revealCount && !b.revealed){
+      b.revealed=true;
+      gsap.to(b.el,{opacity:0.6,duration:0.6,ease:'power2.out'});
+      gsap.to(b.el,{attr:{'stroke-dashoffset':0},duration:0.8,ease:'power2.out'});
+      // Pull monomers slightly together
+      var conn=BOND_CONNECTIONS[i];
+      var ma=tanninMonomers[conn[0]], mb=tanninMonomers[conn[1]];
+      var dx=mb.x-ma.x, dy=mb.y-ma.y;
+      var dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist>0){
+        var pull=3;
+        gsap.to(ma.el,{attr:{cx:ma.x+dx/dist*pull},duration:0.8,ease:'power2.out'});
+        gsap.to(mb.el,{attr:{cy:mb.y+dy/dist*pull},duration:0.8,ease:'power2.out'});
+        ma.x+=dx/dist*pull; mb.y+=dy/dist*pull;
+      }
+    }
+  }
+}
+
+// Aroma particles
+var aromaPool=[];
+var AROMA_POOL_SIZE=12;
+var lastAromaSpawn=0;
+
+function initAromaParticles(){
+  var group=document.getElementById('aroma-group');
+  group.innerHTML='';
+  aromaPool=[];
+  for(var i=0;i<AROMA_POOL_SIZE;i++){
+    var c=svgEl('circle',{cx:0,cy:0,r:3,fill:'#ffd700',opacity:0,filter:'url(#glow)'});
+    group.appendChild(c);
+    aromaPool.push({el:c,active:false});
+  }
+}
+
+function spawnAromaParticle(){
+  var halfW=28+state.decanterWidth*12;
+  var x=DECANTER_CX-halfW+10+Math.random()*(halfW*2-20);
+  var p=null;
+  for(var i=0;i<aromaPool.length;i++){
+    if(!aromaPool[i].active){p=aromaPool[i];break;}
+  }
+  if(!p)return;
+  p.active=true;
+  p.el.setAttribute('cx',x);
+  p.el.setAttribute('cy',320);
+  gsap.timeline({onComplete:function(){p.active=false;}})
+    .to(p.el,{opacity:0.8,duration:0.3})
+    .to(p.el,{attr:{cy:160},opacity:0,duration:2.5,ease:'power1.out'});
+}
+
+function updateAromaParticles(){
+  if(!state.poured||!state.playing)return;
+  var now=performance.now()/1000;
+  var rate=0.3+state.aromaRelease*1.5*surfaceAreaFactor(state.decanterWidth)/2.2;
+  var interval=1/rate;
+  if(now-lastAromaSpawn>interval){
+    spawnAromaParticle();
+    lastAromaSpawn=now;
+  }
+}
+
+// Dust motes
+function initDustMotes(){
+  var group=document.getElementById('dust-motes');
+  group.innerHTML='';
+  for(var i=0;i<15;i++){
+    var x=50+Math.random()*700;
+    var y=50+Math.random()*380;
+    var c=svgEl('circle',{cx:x,cy:y,r:Math.random()*1.5+0.5,fill:'#c9a060',opacity:0.3+Math.random()*0.3});
+    group.appendChild(c);
+    gsap.to(c,{attr:{cx:x+Math.random()*40-20},duration:3+Math.random()*4,repeat:-1,yoyo:true,ease:'sine.inOut'});
+    gsap.to(c,{attr:{cy:y+Math.random()*30-15},duration:2+Math.random()*3,repeat:-1,yoyo:true,ease:'sine.inOut'});
+  }
+}
+
+// ========== POUR ANIMATION ==========
+function pourAnimation(){
+  if(state.poured)return;
+  state.poured=true;
+  document.getElementById('pour-btn').disabled=true;
+  document.getElementById('play-btn').disabled=false;
+
+  // Calculate pour stream path (bottle neck after 30deg rotation → decanter neck)
+  // After rotation around (130,390), neck top at (130,120) →
+  // x = 130 + (120-390)*sin(30°) = 130 + (-270)*0.5 = -5 → too far left
+  // Let's use 25deg: x = 130 + (-270)*sin(25°) = 130 + (-270)*0.423 = 130-114=16
+  // Still too far. Use 20deg: x=130+(-270)*0.342=130-92=38
+  // The neck bottom (165) → x=130+(-225)*sin(20°)=130-77=53
+  // Pour from (53, ~175) to (520, 175) — stream goes across
+
+  var tl=gsap.timeline();
+
+  // 1. Rotate bottle
+  tl.to('#bottle-group',{
+    rotation:22,duration:1.0,ease:'power2.inOut',
+    transformOrigin:'130px 390px'
+  });
+
+  // 2. Show pour stream + drain bottle + fill decanter
+  tl.to('#pour-stream',{
+    opacity:0.85,duration:0.3,onStart:function(){
+      // Set pour stream path from rotated bottle neck to decanter
+      var streamPath='M 60,180 Q 250,150 520,175';
+      document.getElementById('pour-stream').setAttribute('d',streamPath);
+    }
+  },'-=0.2');
+
+  // Fill decanter wine
+  tl.to('#decanter-wine',{
+    attr:{y:320,height:110},duration:2.8,ease:'power1.inOut'
+  },'<');
+
+  // Drain bottle wine
+  tl.to('#bottle-wine',{
+    attr:{y:340,height:48},duration:2.8,ease:'power1.inOut'
+  },'<');
+
+  // Move shimmer to surface level
+  tl.to('#wine-surface-shimmer',{
+    attr:{cy:320},opacity:0.4,duration:0.5
+  },'<+1.0');
+
+  // 3. Stop pour stream
+  tl.to('#pour-stream',{opacity:0,duration:0.4});
+
+  // 4. Show molecules
+  tl.to('#o2-group',{opacity:1,duration:0.5},'-=0.2');
+  tl.to('#tannin-group',{opacity:1,duration:0.5},'<');
+  tl.to('#aroma-group',{opacity:1,duration:0.5},'<');
+
+  // 5. Start playing automatically
+  tl.call(function(){
+    state.playing=true;
+    document.getElementById('play-btn').textContent='⏸ Pause';
+    updateTimeDisplay();
+  });
+}
+
+function resetScene(){
+  state.time=0;state.playing=false;state.poured=false;
+  state.dissolvedO2=0.5;state.tanninPoly=0;state.aromaRelease=0;
+  state.astringency=state.initialTanninLevel;state.colorShift=0;
+
+  // Kill all molecule animations
+  gsap.killTweensOf('#o2-group circle');
+  gsap.killTweensOf('#o2-group text');
+  gsap.killTweensOf('#o2-group g');
+  gsap.killTweensOf('#tannin-group line');
+  gsap.killTweensOf('#tannin-group circle');
+  gsap.killTweensOf('#aroma-group circle');
+
+  // Reset bottle
+  gsap.to('#bottle-group',{rotation:0,duration:0.5,transformOrigin:'130px 390px'});
+  gsap.to('#bottle-wine',{attr:{y:200,height:190},duration:0.5});
+  gsap.to('#pour-stream',{opacity:0,duration:0.3});
+  gsap.to('#decanter-wine',{attr:{y:430,height:0},duration:0.5});
+  gsap.to('#wine-surface-shimmer',{opacity:0,duration:0.3});
+
+  // Hide molecules
+  gsap.to(['#o2-group','#tannin-group','#aroma-group'],{opacity:0,duration:0.3});
+
+  // Reset tannin bonds
+  for(var i=0;i<tanninBonds.length;i++){
+    tanninBonds[i].revealed=false;
+    tanninBonds[i].el.setAttribute('opacity',0);
+    tanninBonds[i].el.setAttribute('stroke-dashoffset',tanninBonds[i].length);
+  }
+  // Reset tannin monomer positions
+  for(var j=0;j<tanninMonomers.length;j++){
+    var m=tanninMonomers[j];
+    m.x=m.origX;m.y=m.origY;
+    m.el.setAttribute('cx',m.origX);
+    m.el.setAttribute('cy',m.origY);
+  }
+  // Reset O2 molecules
+  for(var k=0;k<o2Molecules.length;k++){
+    o2Molecules[k].active=false;
+    o2Molecules[k].el.style.opacity=0;
+    o2Molecules[k].el.setAttribute('transform','translate(0,0)');
+  }
+
+  // Reset buttons
+  document.getElementById('pour-btn').disabled=false;
+  document.getElementById('play-btn').disabled=true;
+  document.getElementById('play-btn').textContent='▶ Play';
+
+  // Reset UI
+  updateMetrics();
+  updateTimeline();
+  updateInfoStage();
+  updateTimeDisplay();
+  updateWineColor();
+}
+
+// ========== UI UPDATES ==========
+function updateTimeDisplay(){
+  var td=document.getElementById('time-display');
+  var sd=document.getElementById('status-display');
+  if(!state.poured){
+    td.textContent='Ready to Pour';
+    sd.textContent='Click "Pour Wine" to begin';
+  }else{
+    var h=Math.floor(state.time);
+    var m=Math.round((state.time-h)*60);
+    td.textContent=h+'h '+m+'m';
+    if(state.playing){
+      sd.textContent='● Simulating — wine is breathing';
+    }else{
+      sd.textContent='|| Paused — press Play or scrub timeline';
+    }
+  }
+}
+
+function updateMetrics(){
+  document.getElementById('o2-val').textContent=state.dissolvedO2.toFixed(1);
+  document.getElementById('o2-bar').style.width=Math.min(100,state.dissolvedO2/10*100)+'%';
+
+  document.getElementById('tannin-val').textContent=Math.round(state.tanninPoly*100);
+  document.getElementById('tannin-bar').style.width=(state.tanninPoly/0.85*100)+'%';
+
+  document.getElementById('aroma-val').textContent=Math.round(state.aromaRelease*100);
+  document.getElementById('aroma-bar').style.width=(state.aromaRelease*100)+'%';
+
+  document.getElementById('astringency-val').textContent=state.astringency.toFixed(1);
+  document.getElementById('astringency-bar').style.width=(state.astringency/10*100)+'%';
+
+  // Peak window display
+  var pStartH=Math.floor(state.peakStart), pStartM=Math.round((state.peakStart-pStartH)*60);
+  var pEndH=Math.floor(state.peakEnd), pEndM=Math.round((state.peakEnd-pEndH)*60);
+  var fmt=function(h,m){return h+'h '+m.toString().padStart(2,'0')+'m';};
+  document.getElementById('peak-val').textContent=fmt(pStartH,pStartM)+' – '+fmt(pEndH,pEndM);
+
+  // Peak status
+  var ps=document.getElementById('peak-status');
+  if(!state.poured){
+    ps.textContent='Wine has not been poured yet';
+    ps.className='peak-status pre-peak';
+  }else if(state.time<state.peakStart){
+    ps.textContent='Pre-peak — wine is still opening up';
+    ps.className='peak-status pre-peak';
+  }else if(state.time>=state.peakStart && state.time<=state.peakEnd){
+    ps.textContent='✓ In peak window — optimal drinking now';
+    ps.className='peak-status in-peak';
+  }else{
+    ps.textContent='Past peak — aromas fading, drink soon';
+    ps.className='peak-status post-peak';
+  }
+}
+
+function updateTimeline(){
+  var pct=(state.time/MAX_TIME)*100;
+  document.getElementById('timeline-progress').style.width=pct+'%';
+  document.getElementById('timeline-handle').style.left=pct+'%';
+
+  // Peak band
+  var startPct=(state.peakStart/MAX_TIME)*100;
+  var widthPct=((state.peakEnd-state.peakStart)/MAX_TIME)*100;
+  document.getElementById('peak-band').style.left=startPct+'%';
+  document.getElementById('peak-band').style.width=widthPct+'%';
+
+  // Handle color
+  var handle=document.getElementById('timeline-handle');
+  if(state.poured && state.time>=state.peakStart && state.time<=state.peakEnd){
+    handle.classList.add('in-peak');
+  }else{
+    handle.classList.remove('in-peak');
+  }
+}
+
+var STAGES=[
+  {range:[0,0.25],icon:'◇',title:'The Pour',badge:'0–15 min',
+   text:'Wine leaves the bottle and spreads across the decanter surface. Surface area increases up to 50×, and atmospheric oxygen begins dissolving at 1–2 mg/L per hour. Dormant chemical reactions reawaken.',
+   fact:'A standard wine bottle exposes ~5 cm² of surface; a wide decanter can expose 80–120 cm² — a 15–25× increase in gas exchange area.'},
+  {range:[0.25,1.0],icon:'◈',title:'Opening Up',badge:'15–60 min',
+   text:'Oxygen drives conversion of bound aromatic precursors into volatile compounds. Primary fruit aromas — cherry, berry, floral — become more expressive. Tannins begin polymerizing, shifting from short astringent chains toward longer, softer structures.',
+   fact:'Dissolved O₂ above ~2 mg/L accelerates acetaldehyde formation, which in turn bridges tannin-anthocyanin polymers — the chemistry behind "softer tannins."'},
+  {range:[1.0,2.0],icon:'◆',title:'Peak Expression',badge:'1–2 hr',
+   text:'The wine reaches maximum aromatic complexity. Esters and terpenes are at peak headspace concentration. Tannins have softened perceptibly. Texture is integrated, and the wine shows its full varietal character.',
+   fact:'Sensory panels consistently rate wines in the 60–120 minute decanting window as more "integrated" and "complex" than freshly opened samples — especially for full-bodied reds.'},
+  {range:[2.0,4.0],icon:'◈',title:'Fading',badge:'2+ hr',
+   text:'Extended oxygen exposure begins to work against the wine. Volatile aromas dissipate faster than they form. Acetaldehyde accumulates, introducing flat, bruised-fruit notes. For older or lighter wines, this transition can happen within 30 minutes.',
+   fact:'Henry\'s law dictates that O₂ continues dissolving as long as the wine is below saturation (~8.7 mg/L at 20°C). Without consumption, the wine eventually approaches full O₂ saturation — irreversible oxidation.'}
+];
+
+function updateInfoStage(){
+  var card=document.getElementById('info-card');
+  var stage=STAGES[0];
+  if(state.poured){
+    for(var i=0;i<STAGES.length;i++){
+      if(state.time>=STAGES[i].range[0] && state.time<STAGES[i].range[1]){
+        stage=STAGES[i];break;
+      }
+    }
+    if(state.time>=STAGES[STAGES.length-1].range[1])stage=STAGES[STAGES.length-1];
+  }
+
+  var prevTitle=document.getElementById('stage-title-text').textContent;
+  var newTitle=stage.title;
+
+  document.getElementById('stage-icon').textContent=stage.icon;
+  document.getElementById('stage-badge').textContent=stage.badge;
+
+  if(prevTitle!==newTitle){
+    gsap.timeline()
+      .to(card,{opacity:0,translateY:-10,duration:0.25})
+      .call(function(){
+        document.getElementById('stage-title-text').textContent=stage.title;
+        document.getElementById('stage-text').textContent=stage.text;
+        document.getElementById('stage-fact').textContent=stage.fact;
+      })
+      .to(card,{opacity:1,translateY:0,duration:0.35});
+  }
+}
+
+// ========== EVENT HANDLERS ==========
+function applyPreset(name){
+  var p=PRESETS[name];
+  if(!p)return;
+  state.preset=name;
+  state.wineAge=p.age;
+  state.initialTanninLevel=p.tanninLevel;
+  if(!state.poured){
+    state.astringency=p.tanninLevel;
+  }
+  state.peakStart=Math.max(0,p.peakCenter-p.peakWidth/2);
+  state.peakEnd=p.peakCenter+p.peakWidth/2;
+
+  document.getElementById('wine-age').value=p.age;
+  document.getElementById('age-val').textContent=p.age+' yr';
+
+  // Update active preset button
+  var btns=document.querySelectorAll('.preset-btn');
+  for(var i=0;i<btns.length;i++){
+    btns[i].classList.toggle('active',btns[i].getAttribute('data-preset')===name);
+  }
+
+  updateMetrics();
+  updateTimeline();
+  updateInfoStage();
+}
+
+function setupControls(){
+  // Preset buttons
+  document.querySelectorAll('.preset-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      applyPreset(btn.getAttribute('data-preset'));
+    });
+  });
+
+  // Wine age slider
+  var ageSlider=document.getElementById('wine-age');
+  ageSlider.addEventListener('input',function(){
+    state.wineAge=parseInt(this.value);
+    document.getElementById('age-val').textContent=state.wineAge+' yr';
+    // Update peak window based on age
+    var baseCenter=Math.max(0.25,2.0-state.wineAge*0.1);
+    var baseWidth=Math.max(0.15,0.5-state.wineAge*0.02);
+    state.peakStart=Math.max(0,baseCenter-baseWidth/2);
+    state.peakEnd=baseCenter+baseWidth/2;
+    // Update astringency base
+    var p=PRESETS[state.preset];
+    state.initialTanninLevel=p.tanninLevel+(state.wineAge-p.age)*(-0.1);
+    state.initialTanninLevel=Math.max(2,Math.min(10,state.initialTanninLevel));
+    if(!state.poured)state.astringency=state.initialTanninLevel;
+    updateMetrics();
+    updateTimeline();
+    updateWineColor();
+  });
+
+  // Temperature slider
+  var tempSlider=document.getElementById('temperature');
+  tempSlider.addEventListener('input',function(){
+    state.temperature=parseInt(this.value);
+    document.getElementById('temp-val').textContent=state.temperature+'°C';
+  });
+
+  // Decanter width slider
+  var widthSlider=document.getElementById('decanter-width');
+  widthSlider.addEventListener('input',function(){
+    state.decanterWidth=parseInt(this.value);
+    var labels=['Narrow','Small','Standard','Wide','Wide Bowl'];
+    document.getElementById('width-val').textContent=labels[state.decanterWidth-1];
+    updateDecanterShape();
+    initO2Molecules();
+  });
+
+  // Action buttons
+  document.getElementById('pour-btn').addEventListener('click',pourAnimation);
+  document.getElementById('play-btn').addEventListener('click',function(){
+    state.playing=!state.playing;
+    this.textContent=state.playing?'⏸ Pause':'▶ Play';
+    updateTimeDisplay();
+  });
+  document.getElementById('reset-btn').addEventListener('click',resetScene);
+}
+
+function setupTimeline(){
+  var track=document.getElementById('timeline-track');
+  var handle=document.getElementById('timeline-handle');
+  var dragging=false;
+
+  function getPct(e){
+    var rect=track.getBoundingClientRect();
+    var x=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
+    return Math.max(0,Math.min(1,x/rect.width));
+  }
+
+  function startDrag(e){
+    if(!state.poured)return;
+    dragging=true;
+    state.playing=false;
+    document.getElementById('play-btn').textContent='▶ Play';
+    handle.style.cursor='grabbing';
+  }
+
+  function doDrag(e){
+    if(!dragging)return;
+    e.preventDefault();
+    var pct=getPct(e);
+    state.time=pct*MAX_TIME;
+    // Recalculate physics from scratch at this time
+    recalcAtTime();
+  }
+
+  function endDrag(){
+    dragging=false;
+    handle.style.cursor='grab';
+  }
+
+  track.addEventListener('mousedown',function(e){
+    if(!state.poured)return;
+    var pct=getPct(e);
+    state.time=pct*MAX_TIME;
+    state.playing=false;
+    document.getElementById('play-btn').textContent='▶ Play';
+    recalcAtTime();
+    startDrag(e);
+  });
+  document.addEventListener('mousemove',doDrag);
+  document.addEventListener('mouseup',endDrag);
+
+  track.addEventListener('touchstart',function(e){
+    if(!state.poured)return;
+    var pct=getPct(e);
+    state.time=pct*MAX_TIME;
+    state.playing=false;
+    document.getElementById('play-btn').textContent='▶ Play';
+    recalcAtTime();
+    startDrag(e);
+  },{passive:true});
+  document.addEventListener('touchmove',doDrag,{passive:false});
+  document.addEventListener('touchend',endDrag);
+}
+
+function recalcAtTime(){
+  // Recompute all state variables at current time
+  var t=state.time;
+  var sat=o2Saturation(state.temperature);
+  var kLa=massTransferCoeff(state.temperature,state.decanterWidth);
+  // O2: first-order approach
+  state.dissolvedO2=0.5+(sat*0.95-0.5)*(1-Math.exp(-kLa*t));
+  // Tannin
+  var o2Frac=state.dissolvedO2/sat;
+  var tempFactor=Math.exp(0.025*(state.temperature-20));
+  var ageFactor=Math.max(0.3,1.0-state.wineAge*0.03);
+  state.tanninPoly=Math.min(0.85,0.10*ageFactor*o2Frac*tempFactor*t);
+  // Aroma
+  var aromaK=0.25*surfaceAreaFactor(state.decanterWidth)*Math.exp(0.04*(state.temperature-20));
+  state.aromaRelease=1-Math.exp(-aromaK*t);
+  // Astringency
+  state.astringency=Math.max(1.0,state.initialTanninLevel*(1-state.tanninPoly*0.65));
+  // Color
+  state.colorShift=Math.min(1,t/2.5);
+
+  updateMetrics();
+  updateTimeline();
+  updateInfoStage();
+  updateWineColor();
+  updateTimeDisplay();
+  updateTanninBonds();
+}
+
+// ========== MAIN LOOP ==========
+var lastTime=0;
+function loop(timestamp){
+  if(lastTime===0)lastTime=timestamp;
+  var dt=(timestamp-lastTime)/1000;
+  lastTime=timestamp;
+
+  if(state.playing && state.poured){
+    var simDt=dt*(5/60); // 5 sim minutes per real second
+    updatePhysics(simDt);
+  }
+
+  updateMetrics();
+  updateO2Molecules();
+  updateTanninBonds();
+  updateAromaParticles();
+  updateWineColor();
+  updateInfoStage();
+  updateTimeline();
+  updateTimeDisplay();
+
+  requestAnimationFrame(loop);
+}
+
+// ========== INIT ==========
+function init(){
+  // Set up SVG paths
+  var bp=bottlePath();
+  document.getElementById('bottle-glass').setAttribute('d',bp);
+  document.getElementById('bottle-outline').setAttribute('d',bp);
+  document.getElementById('bottle-clip-path').setAttribute('d',bp);
+
+  // Bottle highlight (simple line on left side)
+  var hp='M 108,200 Q 106,290 108,370';
+  document.getElementById('bottle-highlight').setAttribute('d',hp);
+
+  updateDecanterShape();
+  initO2Molecules();
+  initTanninMolecules();
+  initAromaParticles();
+  initDustMotes();
+
+  setupControls();
+  setupTimeline();
+  applyPreset('young-cab');
+  updateWineColor();
+
+  requestAnimationFrame(loop);
+}
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',init);
+}else{
+  init();
+}
+
+})();
+</script>
+</body>
+</html>
