@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Oak-Wine Reaction-Diffusion — Turing Pattern Extraction Explorer</title>
+<style>
+  :root{
+    --bg:#0e0a08; --surface:#1a1410; --surface2:#241a14; --border:#3a2a1e;
+    --text:#e8d8c8; --muted:#9a8068; --accent:#c98a4b; --accent2:#8b3a3a;
+    --warn-bg:#1a1610; --warn-border:#3a3020; --warn-text:#c9a060;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.75rem 1rem; text-align:center; font-size:0.85rem; position:sticky; top:0; z-index:100; }
+  .disclaimer strong{ font-weight:600; }
+
+  header{
+    text-align:center; padding:1.1rem 1rem 0.6rem;
+  }
+  header h1{
+    font-size:clamp(1.1rem,4vw,1.55rem);
+    color:var(--accent); font-weight:700; letter-spacing:-0.01em;
+  }
+  header p{ color:var(--muted); font-size:0.82rem; margin-top:0.25rem; max-width:680px; margin-left:auto; margin-right:auto; padding:0 0.5rem; }
+
+  #canvas-wrap{
+    position:relative; width:100%;
+    aspect-ratio:1/1; max-width:min(560px,92vw);
+    margin:0.6rem auto 0.3rem;
+    border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    background:#000;
+    box-shadow:0 6px 28px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(201,138,75,0.07);
+  }
+  #glcanvas{ display:block; width:100%; height:100%; cursor:crosshair; touch-action:none; }
+
+  .canvas-hint{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    background:rgba(14,10,8,0.72); border:1px solid var(--border);
+    border-radius:999px; padding:0.3rem 0.8rem; font-size:0.7rem; color:var(--muted);
+    pointer-events:none; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+    white-space:nowrap;
+  }
+
+  #controls{
+    max-width:760px; margin:0.7rem auto 1rem; padding:0 1rem;
+    display:grid; grid-template-columns:1fr; gap:0.5rem;
+  }
+  @media(min-width:720px){
+    #controls{ grid-template-columns:1.4fr 1fr; gap:0.8rem; }
+  }
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:0.75rem 0.9rem;
+  }
+  .panel h2{
+    font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--accent); margin-bottom:0.55rem; font-weight:700;
+  }
+
+  .control-row{ margin-bottom:0.55rem; }
+  .control-row:last-child{ margin-bottom:0; }
+  .control-row label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:0.76rem; color:var(--text); margin-bottom:0.18rem;
+  }
+  .control-row label .val{
+    color:var(--accent); font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:0.74rem; background:var(--surface2); padding:0.04rem 0.35rem;
+    border-radius:4px; border:1px solid var(--border);
+  }
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:22px; background:transparent; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:5px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:4px;
+  }
+  input[type=range]::-moz-range-track{
+    height:5px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:4px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:16px; height:16px; margin-top:-6px;
+    background:var(--accent); border:2px solid var(--bg);
+    border-radius:50%;
+    box-shadow:0 0 0 1px var(--accent);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:14px; height:14px;
+    background:var(--accent); border:2px solid var(--bg);
+    border-radius:50%;
+  }
+
+  .presets{ display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.45rem; }
+  .preset-btn{
+    background:var(--surface2); border:1px solid var(--border);
+    color:var(--text); font-size:0.68rem; padding:0.28rem 0.55rem;
+    border-radius:6px; cursor:pointer; transition:all 0.15s;
+    font-family:inherit;
+  }
+  .preset-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .preset-btn.active{ background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; }
+
+  .actions{ display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.55rem; }
+  .action-btn{
+    flex:1; min-width:90px;
+    background:var(--surface2); border:1px solid var(--border);
+    color:var(--text); font-size:0.74rem; padding:0.4rem 0.5rem;
+    border-radius:7px; cursor:pointer; transition:all 0.15s;
+    font-family:inherit; font-weight:600;
+  }
+  .action-btn:hover{ border-color:var(--accent); background:var(--accent); color:var(--bg); }
+  .action-btn.primary{ background:var(--accent2); border-color:var(--accent2); color:#fff; }
+  .action-btn.primary:hover{ background:#a04545; border-color:#a04545; }
+
+  .metrics{
+    display:grid; grid-template-columns:repeat(2,1fr); gap:0.4rem;
+    margin-top:0.5rem;
+  }
+  .metric{
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:7px; padding:0.4rem 0.5rem;
+  }
+  .metric .k{ font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .metric .v{ font-size:0.92rem; color:var(--accent); font-family:ui-monospace,Menlo,monospace; font-weight:600; margin-top:0.1rem; }
+
+  .legend{
+    margin-top:0.5rem; font-size:0.68rem; color:var(--muted);
+    line-height:1.45;
+  }
+  .legend strong{ color:var(--text); }
+  .swatch{ display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; margin:0 2px; border:1px solid rgba(255,255,255,0.12); }
+
+  footer{
+    text-align:center; padding:0.6rem 1rem 1.2rem; color:var(--muted);
+    font-size:0.7rem;
+  }
+  footer code{ background:var(--surface); padding:0.05rem 0.3rem; border-radius:3px; font-size:0.66rem; }
+
+  .err{
+    margin:1rem auto; max-width:560px; padding:0.8rem 1rem;
+    background:#3a1410; border:1px solid #5a2418; border-radius:8px;
+    color:#e8a8a0; font-size:0.82rem; display:none;
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<header>
+  <h1>Oak–Wine Reaction-Diffusion Explorer</h1>
+  <p>Gray-Scott Turing patterns at the barrel interface — wine compounds (activator) meet oak-extractable substrates (inhibitor). The resulting mottled textures echo where vanillin, lactones, and ellagitannins preferentially leach into ageing wine.</p>
+</header>
+
+<div id="canvas-wrap">
+  <canvas id="glcanvas"></canvas>
+  <div class="canvas-hint">click / drag to seed wine contact</div>
+</div>
+
+<div class="err" id="err"></div>
+
+<div id="controls">
+  <div class="panel">
+    <h2>Reaction-Diffusion Parameters</h2>
+
+    <div class="control-row">
+      <label>Feed rate <span class="val" id="v-feed">0.055</span></label>
+      <input type="range" id="s-feed" min="0.01" max="0.10" step="0.001" value="0.055">
+    </div>
+    <div class="control-row">
+      <label>Kill rate <span class="val" id="v-kill">0.062</span></label>
+      <input type="range" id="s-kill" min="0.02" max="0.075" step="0.0005" value="0.062">
+    </div>
+    <div class="control-row">
+      <label>Du (wine diffusivity) <span class="val" id="v-du">1.00</span></label>
+      <input type="range" id="s-du" min="0.4" max="1.4" step="0.01" value="1.00">
+    </div>
+    <div class="control-row">
+      <label>Dv (oak diffusivity) <span class="val" id="v-dv">0.50</span></label>
+      <input type="range" id="s-dv" min="0.2" max="0.8" step="0.01" value="0.50">
+    </div>
+    <div class="control-row">
+      <label>Iterations / frame <span class="val" id="v-it">8</span></label>
+      <input type="range" id="s-it" min="1" max="20" step="1" value="8">
+    </div>
+
+    <h2 style="margin-top:0.7rem">Oak Profile Presets</h2>
+    <div class="presets" id="presets"></div>
+
+    <div class="actions">
+      <button class="action-btn" id="btn-reset">↻ Reset field</button>
+      <button class="action-btn" id="btn-clear">✕ Clear pattern</button>
+      <button class="action-btn primary" id="btn-pause">⏸ Pause</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Live Extraction Metrics</h2>
+    <div class="metrics">
+      <div class="metric"><div class="k">Pattern coverage</div><div class="v" id="m-cov">— %</div></div>
+      <div class="metric"><div class="k">Interface density</div><div class="v" id="m-den">— /cm²</div></div>
+      <div class="metric"><div class="k">Sim. vanillin</div><div class="v" id="m-van">— mg/L</div></div>
+      <div class="metric"><div class="k">Sim. lactone</div><div class="v" id="m-lac">— µg/L</div></div>
+      <div class="metric"><div class="k">Sim. ellagitannin</div><div class="v" id="m-ell">— mg/L</div></div>
+      <div class="metric"><div class="k">Sim. furfural</div><div class="v" id="m-fur">— mg/L</div></div>
+    </div>
+
+    <div class="legend" style="margin-top:0.65rem">
+      <strong>Colour key</strong><br>
+      <span class="swatch" style="background:#2a1410"></span> raw oak (low V)<br>
+      <span class="swatch" style="background:#8b3a2a"></span> partial extraction<br>
+      <span class="swatch" style="background:#d4a04a"></span> saturated wine contact<br>
+      <span class="swatch" style="background:#f0d090"></span> reactive interface<br><br>
+      <strong>Model</strong>: Gray-Scott <code>∂U/∂t = Du·∇²U − UV² + F(1−U)</code>, <code>∂V/∂t = Dv·∇²V + UV² − (F+K)V</code>. U = wine-phase activator, V = oak-bound inhibitor. Metrics are heuristic mappings from pattern statistics, calibrated to typical barrel-aging magnitudes — illustrative, not predictive.
+    </div>
+  </div>
+</div>
+
+<footer>
+  Single-file raw WebGL · GLSL fragment shaders · ping-pong FBO · <code>docs/apps/2026-06-19/oak-wine-reaction-diffusion.html</code>
+</footer>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- WebGL bootstrap ---------- */
+const canvas = document.getElementById('glcanvas');
+const errEl = document.getElementById('err');
+let gl = canvas.getContext('webgl', { antialias:false, preserveDrawingBuffer:false })
+     || canvas.getContext('experimental-webgl');
+if (!gl) {
+  errEl.style.display = 'block';
+  errEl.textContent = 'WebGL is not available in this browser. The reaction-diffusion simulation requires WebGL support.';
+  return;
+}
+
+/* ---------- Shader sources ---------- */
+const VS = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+// Reaction-diffusion step. Renders from src texture -> dst texture.
+const FS_RD = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_texel;
+uniform float u_du, u_dv, u_feed, u_kill;
+void main(){
+  vec2 c = texture2D(u_tex, v_uv).rg;
+  // 9-point Laplacian (corners weight 0.05, edges 0.2, center -1)
+  vec2 lap = vec2(0.0);
+  lap += texture2D(u_tex, v_uv + vec2(-u_texel.x, -u_texel.y)).rg * 0.05;
+  lap += texture2D(u_tex, v_uv + vec2( 0.0,      -u_texel.y)).rg * 0.20;
+  lap += texture2D(u_tex, v_uv + vec2( u_texel.x, -u_texel.y)).rg * 0.05;
+  lap += texture2D(u_tex, v_uv + vec2(-u_texel.x,  0.0     )).rg * 0.20;
+  lap += texture2D(u_tex, v_uv + vec2( u_texel.x,  0.0     )).rg * 0.20;
+  lap += texture2D(u_tex, v_uv + vec2(-u_texel.x,  u_texel.y)).rg * 0.05;
+  lap += texture2D(u_tex, v_uv + vec2( 0.0,       u_texel.y)).rg * 0.20;
+  lap += texture2D(u_tex, v_uv + vec2( u_texel.x,  u_texel.y)).rg * 0.05;
+  lap += c * -1.0;
+  float u = c.r, v = c.g;
+  float uvv = u * v * v;
+  float du = u_du * lap.r - uvv + u_feed * (1.0 - u);
+  float dv = u_dv * lap.g + uvv - (u_feed + u_kill) * v;
+  gl_FragColor = vec4(clamp(u + du, 0.0, 1.0), clamp(v + dv, 0.0, 1.0), 0.0, 1.0);
+}`;
+
+// Seed brush: writes a disc of high V (oak contact) into the field.
+const FS_SEED = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_p;        // brush center in uv
+uniform float u_r;       // brush radius in uv
+uniform float u_strength;
+void main(){
+  vec2 c = texture2D(u_tex, v_uv).rg;
+  float d = distance(v_uv, u_p);
+  // 1.0 inside disc, 0.0 outside — note: smoothstep requires edge0 < edge1
+  float mask = 1.0 - smoothstep(u_r * 0.6, u_r, d);
+  mask *= u_strength;
+  // U (wine activator) slightly depleted at contact, V (oak substrate) high
+  float u = mix(c.r, 0.15, mask);
+  float v = mix(c.g, 1.0, mask);
+  gl_FragColor = vec4(u, v, 0.0, 1.0);
+}`;
+
+// Reset: U=1 everywhere, V=0 with faint noise + a central seed.
+const FS_RESET = `
+precision highp float;
+varying vec2 v_uv;
+uniform float u_seed;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main(){
+  float n = hash(v_uv * 200.0 + u_seed) * 0.02;
+  float u = 1.0;
+  float v = n;
+  // central starter
+  vec2 d = v_uv - vec2(0.5, 0.5);
+  float r2 = dot(d, d);
+  if (r2 < 0.0009) v = 1.0;
+  gl_FragColor = vec4(u, v, 0.0, 1.0);
+}`;
+
+// Clear: U=1, V=0 blank field.
+const FS_CLEAR = `
+precision highp float;
+void main(){ gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); }`;
+
+// Display: maps U/V field to a wine-oak palette + subtle vignette + grain.
+const FS_DISPLAY = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_time;
+uniform vec2 u_res;
+
+// wine-oak palette: 5 stops
+vec3 palette(float t){
+  vec3 c0 = vec3(0.06, 0.04, 0.03);   // raw oak shadow
+  vec3 c1 = vec3(0.22, 0.10, 0.07);   // deep oak
+  vec3 c2 = vec3(0.55, 0.20, 0.14);   // wine soaked
+  vec3 c3 = vec3(0.83, 0.50, 0.20);   // extraction gold
+  vec3 c4 = vec3(0.96, 0.82, 0.50);   // bright interface
+  float a = clamp(t, 0.0, 1.0);
+  if (a < 0.25) return mix(c0, c1, a / 0.25);
+  if (a < 0.55) return mix(c1, c2, (a - 0.25) / 0.30);
+  if (a < 0.80) return mix(c2, c3, (a - 0.55) / 0.25);
+  return mix(c3, c4, (a - 0.80) / 0.20);
+}
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+void main(){
+  vec2 c = texture2D(u_tex, v_uv).rg;
+  float u = c.r, v = c.g;
+  // display value: blend so that high V + mid U reads as "extraction gold"
+  float t = v * 0.85 + (1.0 - u) * 0.35;
+  t = clamp(t, 0.0, 1.0);
+  // emphasize interface where both U and V are mid (reaction zone)
+  float iface = smoothstep(0.15, 0.45, v) * smoothstep(0.85, 0.55, u);
+  t = mix(t, 0.92, iface * 0.35);
+  vec3 col = palette(t);
+
+  // subtle oak grain
+  float grain = (hash(v_uv * vec2(420.0, 28.0) + u_time * 0.01) - 0.5) * 0.04;
+  col += grain;
+
+  // vignette
+  vec2 q = v_uv - 0.5;
+  float vig = 1.0 - dot(q, q) * 0.55;
+  col *= clamp(vig, 0.55, 1.0);
+
+  // faint scanline shimmer for depth
+  float scan = sin(v_uv.y * u_res.y * 3.14159) * 0.012;
+  col -= scan;
+
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/* ---------- GLSL helpers ---------- */
+function compile(src, type){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s);
+    gl.deleteShader(s);
+    throw new Error('Shader compile failed: ' + log);
+  }
+  return s;
+}
+function program(vsSrc, fsSrc){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(vsSrc, gl.VERTEX_SHADER));
+  gl.attachShader(p, compile(fsSrc, gl.FRAGMENT_SHADER));
+  gl.bindAttribLocation(p, 0, 'a_pos');
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    throw new Error('Program link failed: ' + gl.getProgramInfoLog(p));
+  }
+  return p;
+}
+
+/* ---------- Build programs ---------- */
+let progRD, progSeed, progReset, progClear, progDisplay;
+try {
+  progRD = program(VS, FS_RD);
+  progSeed = program(VS, FS_SEED);
+  progReset = program(VS, FS_RESET);
+  progClear = program(VS, FS_CLEAR);
+  progDisplay = program(VS, FS_DISPLAY);
+} catch (e) {
+  errEl.style.display = 'block';
+  errEl.textContent = 'Failed to compile WebGL shaders: ' + e.message;
+  return;
+}
+
+/* ---------- Fullscreen quad ---------- */
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+
+function bindQuad(prog){
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  const loc = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+}
+
+/* ---------- Render targets (ping-pong) ---------- */
+const SIM_W = 256, SIM_H = 256;
+let texA, texB, fboA, fboB;
+let readTex = 0; // 0 -> A is source
+
+// Use FLOAT textures — 8-bit UNSIGNED_BYTE quantizes small per-step changes
+// at the pattern growing edge (where V≈0) to zero, stalling growth.
+const hasFloat = gl.getExtension('OES_texture_float');
+const hasCBFloat = gl.getExtension('EXT_color_buffer_float') || gl.getExtension('WEBGL_color_buffer_float');
+const TEX_TYPE = (hasFloat && hasCBFloat) ? gl.FLOAT : gl.UNSIGNED_BYTE;
+
+function makeTex(w, h){
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, TEX_TYPE, null);
+  // NEAREST filtering — exact texel reads, no interpolation (critical for RD stability)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  return t;
+}
+function makeFbo(tex){
+  const f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return f;
+}
+texA = makeTex(SIM_W, SIM_H);
+texB = makeTex(SIM_W, SIM_H);
+fboA = makeFbo(texA);
+fboB = makeFbo(texB);
+
+/* ---------- Uniform locations cache ---------- */
+const U = {};
+['RD','SEED','RESET','CLEAR','DISPLAY'].forEach(function(k){
+  const prog = { RD:progRD, SEED:progSeed, RESET:progReset, CLEAR:progClear, DISPLAY:progDisplay }[k];
+  U[k] = {};
+  ['u_tex','u_texel','u_du','u_dv','u_feed','u_kill','u_p','u_r','u_strength','u_seed','u_time','u_res']
+    .forEach(function(name){
+      U[k][name] = gl.getUniformLocation(prog, name);
+    });
+});
+
+/* ---------- Simulation state ---------- */
+const state = {
+  feed: 0.055,
+  kill: 0.062,
+  du: 1.0,
+  dv: 0.5,
+  iters: 8,
+  paused: false,
+  time: 0,
+  seedSeq: 0
+};
+
+/* ---------- Pass functions ---------- */
+function runRD(srcTex, dstFbo){
+  gl.useProgram(progRD);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+  gl.viewport(0, 0, SIM_W, SIM_H);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  gl.uniform1i(U.RD.u_tex, 0);
+  gl.uniform2f(U.RD.u_texel, 1.0/SIM_W, 1.0/SIM_H);
+  gl.uniform1f(U.RD.u_du, state.du);   // Karl Sims params: Du=1.0 with 9-pt Laplacian (center=-1)
+  gl.uniform1f(U.RD.u_dv, state.dv);   // Dv=0.5 — NO 0.16 scaling (that's for 5-pt stencil)
+  gl.uniform1f(U.RD.u_feed, state.feed);
+  gl.uniform1f(U.RD.u_kill, state.kill);
+  bindQuad(progRD);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// Seed a brush stroke. Reads from the *other* texture, writes to dstFbo (ping-pong safe).
+function runSeed(dstFbo, srcTex, px, py, r, strength){
+  gl.useProgram(progSeed);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+  gl.viewport(0, 0, SIM_W, SIM_H);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, srcTex);  // NEVER the texture attached to dstFbo
+  gl.uniform1i(U.SEED.u_tex, 0);
+  gl.uniform2f(U.SEED.u_p, px, py);
+  gl.uniform1f(U.SEED.u_r, r);
+  gl.uniform1f(U.SEED.u_strength, strength);
+  bindQuad(progSeed);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function runReset(fbo){
+  state.seedSeq += 1;
+  gl.useProgram(progReset);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, SIM_W, SIM_H);
+  gl.uniform1f(U.RESET.u_seed, state.seedSeq * 1.37);
+  bindQuad(progReset);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function runClear(fbo){
+  gl.useProgram(progClear);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, SIM_W, SIM_H);
+  bindQuad(progClear);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function runDisplay(srcTex){
+  gl.useProgram(progDisplay);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  gl.uniform1i(U.DISPLAY.u_tex, 0);
+  gl.uniform1f(U.DISPLAY.u_time, state.time);
+  gl.uniform2f(U.DISPLAY.u_res, canvas.width, canvas.height);
+  bindQuad(progDisplay);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+/* ---------- Readback for metrics (every ~15 frames) ---------- */
+const readbackBuf = new Uint8Array(SIM_W * SIM_H * 4);
+const readbackBufF = new Float32Array(SIM_W * SIM_H * 4);
+const readbackFbo = gl.createFramebuffer();
+let readbackTick = 0;
+let metrics = { cov:0, den:0, van:0, lac:0, ell:0, fur:0 };
+
+function readback(srcTex){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, readbackFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, srcTex, 0);
+  
+  let uVals, vVals;
+  if (TEX_TYPE === gl.FLOAT) {
+    gl.readPixels(0, 0, SIM_W, SIM_H, gl.RGBA, gl.FLOAT, readbackBufF);
+    uVals = readbackBufF;
+    vVals = readbackBufF;
+    // Float layout: [R0,G0,B0,A0, R1,G1,B1,A1, ...] — R=U, G=V
+  } else {
+    gl.readPixels(0, 0, SIM_W, SIM_H, gl.RGBA, gl.UNSIGNED_BYTE, readbackBuf);
+    uVals = readbackBuf;
+    vVals = readbackBuf;
+  }
+
+  // compute pattern coverage (fraction of pixels with V > 0.1) and interface density
+  let covCount = 0, ifaceCount = 0;
+  const step = 2; // sample every 2nd pixel for speed
+  for (let y = 0; y < SIM_H; y += step) {
+    for (let x = 0; x < SIM_W; x += step) {
+      const idx = (y * SIM_W + x) * 4;
+      let v, u;
+      if (TEX_TYPE === gl.FLOAT) {
+        v = vVals[idx + 1];
+        u = uVals[idx];
+      } else {
+        v = vVals[idx + 1] / 255;
+        u = uVals[idx] / 255;
+      }
+      if (v > 0.1) covCount++;
+      // interface: V in [0.15, 0.55] and U in [0.4, 0.8]
+      if (v > 0.15 && v < 0.55 && u > 0.4 && u < 0.8) ifaceCount++;
+    }
+  }
+  const samples = (SIM_W / step) * (SIM_H / step);
+  const cov = covCount / samples;
+  const den = ifaceCount / samples;
+  metrics.cov = cov;
+  metrics.den = den;
+  // Heuristic compound estimates (illustrative, calibrated to barrel-aging ranges)
+  // vanillin 0.1–3 mg/L, lactone 50–400 µg/L, ellagitannin 20–350 mg/L, furfural 1–25 mg/L
+  metrics.van = (0.12 + cov * 2.6 + den * 1.8);
+  metrics.lac = (40 + cov * 280 + den * 120);
+  metrics.ell = (18 + cov * 290 + den * 110);
+  metrics.fur = (0.8 + cov * 18 + den * 9);
+  updateMetricsDOM();
+}
+
+/* ---------- DOM wiring ---------- */
+const elFeed = document.getElementById('s-feed');
+const elKill = document.getElementById('s-kill');
+const elDu   = document.getElementById('s-du');
+const elDv   = document.getElementById('s-dv');
+const elIt   = document.getElementById('s-it');
+const vFeed = document.getElementById('v-feed');
+const vKill = document.getElementById('v-kill');
+const vDu   = document.getElementById('v-du');
+const vDv   = document.getElementById('v-dv');
+const vIt   = document.getElementById('v-it');
+
+function fmt(n, p){ return Number(n).toFixed(p); }
+function syncLabels(){
+  vFeed.textContent = fmt(state.feed, 3);
+  vKill.textContent = fmt(state.kill, 4);
+  vDu.textContent   = fmt(state.du, 2);
+  vDv.textContent   = fmt(state.dv, 2);
+  vIt.textContent   = state.iters;
+}
+elFeed.addEventListener('input', function(){ state.feed = parseFloat(elFeed.value); syncLabels(); });
+elKill.addEventListener('input', function(){ state.kill = parseFloat(elKill.value); syncLabels(); });
+elDu.addEventListener('input',   function(){ state.du = parseFloat(elDu.value);   syncLabels(); });
+elDv.addEventListener('input',   function(){ state.dv = parseFloat(elDv.value);   syncLabels(); });
+elIt.addEventListener('input',   function(){ state.iters = parseInt(elIt.value,10); syncLabels(); });
+
+document.getElementById('btn-reset').addEventListener('click', function(){
+  runReset(fboA); runReset(fboB);
+  readTex = 0;
+  // seed center — ping-pong safe via seedAt
+  seedAt(0.5, 0.5, 0.04, 1.0);
+});
+document.getElementById('btn-clear').addEventListener('click', function(){
+  runClear(fboA); runClear(fboB);
+  readTex = 0;
+});
+const btnPause = document.getElementById('btn-pause');
+btnPause.addEventListener('click', function(){
+  state.paused = !state.paused;
+  btnPause.textContent = state.paused ? '▶ Resume' : '⏸ Pause';
+});
+
+/* ---------- Presets ---------- */
+const PRESETS = [
+  { name:'Coral (default)', feed:0.055, kill:0.062, du:1.00, dv:0.50 },
+  { name:'Mitosis',         feed:0.0367, kill:0.0649, du:1.00, dv:0.50 },
+  { name:'Maze',             feed:0.029, kill:0.057, du:1.00, dv:0.50 },
+  { name:'Spots',            feed:0.025, kill:0.060, du:1.00, dv:0.50 },
+  { name:'Worms',            feed:0.078, kill:0.061, du:1.00, dv:0.50 },
+  { name:'Holes',            feed:0.039, kill:0.058, du:1.00, dv:0.50 },
+  { name:'Heavy toast oak',  feed:0.050, kill:0.064, du:1.10, dv:0.45 },
+  { name:'Light toast oak',  feed:0.060, kill:0.060, du:0.90, dv:0.55 },
+  { name:'Slow maturation',  feed:0.042, kill:0.058, du:0.80, dv:0.40 },
+];
+const presetsEl = document.getElementById('presets');
+PRESETS.forEach(function(p, i){
+  const b = document.createElement('button');
+  b.className = 'preset-btn';
+  b.textContent = p.name;
+  if (i === 0) b.classList.add('active');
+  b.addEventListener('click', function(){
+    state.feed = p.feed; state.kill = p.kill; state.du = p.du; state.dv = p.dv;
+    elFeed.value = p.feed; elKill.value = p.kill;
+    elDu.value = p.du; elDv.value = p.dv;
+    syncLabels();
+    Array.prototype.forEach.call(presetsEl.children, function(c){ c.classList.remove('active'); });
+    b.classList.add('active');
+  });
+  presetsEl.appendChild(b);
+});
+
+/* ---------- Mouse / touch seeding ---------- */
+// Seeds the current read texture's field into the other texture with brush applied,
+// then swaps readTex. Ping-pong safe: never samples from the texture being written.
+function seedAt(nx, ny, r, strength){
+  const srcTex = readTex === 0 ? texA : texB;
+  const dstFbo = readTex === 0 ? fboB : fboA;
+  runSeed(dstFbo, srcTex, nx, ny, r, strength);
+  readTex = 1 - readTex;
+}
+
+let seeding = false;
+function pointerToUv(e){
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+  const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+  return { x: cx / rect.width, y: 1.0 - cy / rect.height }; // flip Y for GL
+}
+function startSeed(e){
+  e.preventDefault();
+  seeding = true;
+  doSeed(e);
+}
+function doSeed(e){
+  if (!seeding) return;
+  e.preventDefault();
+  const uv = pointerToUv(e);
+  const r = 0.05;
+  // seed into both textures so ping-pong stays consistent
+  seedAt(uv.x, uv.y, r, 1.0);
+}
+function endSeed(){ seeding = false; }
+canvas.addEventListener('mousedown', startSeed);
+canvas.addEventListener('mousemove', doSeed);
+window.addEventListener('mouseup', endSeed);
+canvas.addEventListener('touchstart', startSeed, { passive:false });
+canvas.addEventListener('touchmove', doSeed, { passive:false });
+canvas.addEventListener('touchend', endSeed);
+
+/* ---------- Resize ---------- */
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(2, Math.floor(rect.width * dpr));
+  const h = Math.max(2, Math.floor(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w; canvas.height = h;
+  }
+}
+resize();
+window.addEventListener('resize', resize);
+
+/* ---------- Metrics DOM ---------- */
+const mCov = document.getElementById('m-cov');
+const mDen = document.getElementById('m-den');
+const mVan = document.getElementById('m-van');
+const mLac = document.getElementById('m-lac');
+const mEll = document.getElementById('m-ell');
+const mFur = document.getElementById('m-fur');
+function updateMetricsDOM(){
+  mCov.textContent = (metrics.cov * 100).toFixed(1) + ' %';
+  mDen.textContent = (metrics.den * 100).toFixed(1) + ' /cm²';
+  mVan.textContent = metrics.van.toFixed(2) + ' mg/L';
+  mLac.textContent = Math.round(metrics.lac) + ' µg/L';
+  mEll.textContent = Math.round(metrics.ell) + ' mg/L';
+  mFur.textContent = metrics.fur.toFixed(1) + ' mg/L';
+}
+
+/* ---------- Main loop ---------- */
+let last = performance.now();
+function frame(now){
+  const dt = (now - last) / 1000;
+  last = now;
+  state.time += dt;
+
+  if (!state.paused) {
+    for (let i = 0; i < state.iters; i++) {
+      const src = readTex === 0 ? texA : texB;
+      const dstFbo = readTex === 0 ? fboB : fboA;
+      runRD(src, dstFbo);
+      readTex = 1 - readTex;
+    }
+  }
+
+  const dispSrc = readTex === 0 ? texA : texB;
+  runDisplay(dispSrc);
+
+  readbackTick++;
+  if (readbackTick % 15 === 0) {
+    readback(dispSrc);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Init ---------- */
+function init(){
+  // Syntax-validate the inline script by re-compiling (no-op safety; shaders already compiled above)
+  // Initialize field with reset + center seed
+  runReset(fboA);
+  runReset(fboB);
+  readTex = 0;
+  // center starter seed (ping-pong safe via seedAt)
+  seedAt(0.5, 0.5, 0.05, 1.0);
+  // a few off-center seeds for richer initial pattern
+  seedAt(0.32, 0.62, 0.03, 0.9);
+  seedAt(0.68, 0.38, 0.03, 0.9);
+  syncLabels();
+  requestAnimationFrame(frame);
+}
+
+init();
+
+})();
+</script>
+</body>
+</html>
