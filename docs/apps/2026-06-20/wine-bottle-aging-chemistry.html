@@ -404,12 +404,12 @@ function sensoryProfile(d, wineType) {
   const init = WINE_INIT[wineType];
   // Fruitiness: driven by esters, reduced by oxidation and age
   const esterRatio = Math.min(1.5, d.esters / init.esters);
-  const fruit = Math.max(0, Math.min(100, 90 * esterRatio - d.acetaldehyde * 0.5 - d.va * 20));
+  const fruit = Math.max(0, Math.min(100, 85 * esterRatio - d.acetaldehyde * 0.3 - d.va * 8));
 
   // Complexity: increases with controlled oxidation, acetaldehyde, tannin evolution
   const oxSign = Math.min(1, d.acetaldehyde / 30);
   const tanAge = wineType === 'red' ? Math.min(1, (1 - d.tanninPoly / init.tanninPoly) * 5) : 0.3;
-  const complexity = Math.max(0, Math.min(100, 15 + oxSign * 40 + tanAge * 35 + d.va * 30));
+  const complexity = Math.max(0, Math.min(100, 15 + oxSign * 40 + tanAge * 35 + d.va * 15));
 
   // Astringency: from tannin, softens with polymerization
   const astringency = wineType === 'red' ? Math.min(100, (d.tanninPoly / 2200) * 75 + 10) : Math.min(30, d.tanninPoly / 10);
@@ -418,13 +418,13 @@ function sensoryProfile(d, wineType) {
   const colorDepth = Math.min(100, d.colorInt * 85 + 5);
 
   // Freshness: from SO2 and low VA
-  const freshness = Math.max(0, Math.min(100, d.so2Free * 1.5 - d.va * 50));
+  const freshness = Math.max(0, Math.min(100, d.so2Free * 1.5 - d.va * 10));
 
   // Oxidation note
   const oxidation = Math.min(100, d.acetaldehyde * 1.5 + d.va * 40 + (1 - d.esters / init.esters) * 20);
 
   // Earthiness: develops with age
-  const earthiness = Math.min(100, d.year * 3 + d.va * 15 + d.acetaldehyde * 0.3);
+  const earthiness = Math.min(100, d.year * 3 + d.va * 10 + d.acetaldehyde * 0.3);
 
   return { fruit, complexity, astringency, colorDepth, freshness, oxidation, earthiness };
 }
@@ -629,7 +629,7 @@ function updateAll() {
 
   // Color swatch
   const swatchColor = wineColorRGB(dp.hue, dp.colorInt, params.wineType);
-  d3.select('#color-swatch').style('background', `linear-gradient(135deg, ${swatchColor}, ${swatchColor}dd)`);
+  d3.select('#color-swatch').style('background', swatchColor);
 
   // Risk indicators
   const oxRisk = dp.acetaldehyde > 40 ? 'HIGH' : dp.acetaldehyde > 15 ? 'MODERATE' : 'LOW';
