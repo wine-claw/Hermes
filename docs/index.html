@@ -118,6 +118,7 @@ const VIDEOS = [
 
 ];
 const APPS = [
+  {date: "2026-06-20", title: "Wine Bottle Aging Chemistry Dashboard", description: "Interactive D3.js Arrhenius-based wine aging simulator — temperature, closure OTR, wine type, ullage, UV, and humidity drive anthocyanin polymerization, SO₂ decline, ester hydrolysis, acetaldehyde/VA formation, and tannin evolution. Live compound evolution chart, sensory radar, wine color preview, and oxidation risk assessment.", url: "./apps/2026-06-20/wine-bottle-aging-chemistry.html"},
   {date: "2026-06-19", title: "Oak–Wine Reaction-Diffusion Explorer", description: "Interactive raw WebGL Gray-Scott Turing pattern simulator — wine compounds (activator) meet oak-extractable substrates (inhibitor) at the barrel interface. Adjust feed/kill rates, diffusivity, and iterations to explore coral, mitosis, maze, spots, worms, and holes patterns. Live heuristic extraction metrics for vanillin, lactone, ellagitannin, and furfural.", url: "./apps/2026-06-19/oak-wine-reaction-diffusion.html"},
   {date: "2026-06-18", title: "Decanting Dynamics — Oxygen & Wine Evolution Simulator", description: "Interactive GSAP SVG wine decanting simulator — oxygen uptake, volatile aroma opening, sediment settling, and temperature-driven flavour evolution with adjustable decanter geometry and pour rate.", url: "./apps/2026-06-18/decanting-dynamics.html"},
   {date: "2026-06-17", title: "Winery 3D Barrel Stack — Oak Ageing Microclimate Explorer", description: "Interactive Three.js 3D cellar scene with stacked oak barrels. Adjust temperature, humidity, toast level, ageing duration, stack height and air circulation to see live evaporation, oak-extraction flux, O₂ ingress, vanillin/lactone/ellagitannin/furfural estimates, and cellar risk status.", url: "./apps/2026-06-17/winery-3d-barrel-stack.html"},
@@ -200,7 +201,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById("last-updated").textContent="2026-06-17";
+document.getElementById("last-updated").textContent="2026-06-20";
 render();
 </script>
 </body>
