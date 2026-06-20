@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vineyard Wind & Canopy Sway Simulator</title>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; overflow:hidden; }
+  body{ background:#0a0f0a; font-family:system-ui,-apple-system,sans-serif; color:#c9d1d9; }
+
+  #canvas-container{ position:fixed; inset:0; z-index:0; }
+  canvas{ display:block; }
+
+  #ui-layer{
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    pointer-events:none; z-index:10;
+  }
+
+  .panel{
+    pointer-events:auto;
+    background:rgba(12,20,14,0.82);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+    border:1px solid rgba(80,120,60,0.35);
+    border-radius:12px;
+    padding:0.875rem 1rem;
+  }
+
+  #controls{
+    position:absolute; top:12px; left:12px;
+    width:280px; max-height:calc(100vh - 24px);
+    overflow-y:auto;
+  }
+  #controls h2{
+    font-size:0.95rem; color:#7ec850; margin-bottom:0.5rem;
+    font-weight:700; letter-spacing:0.02em;
+  }
+  #controls h3{
+    font-size:0.72rem; color:#5a8a40; margin-top:0.7rem; margin-bottom:0.35rem;
+    text-transform:uppercase; letter-spacing:0.06em; font-weight:600;
+  }
+
+  .ctrl-row{ margin-bottom:0.55rem; }
+  .ctrl-row label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:0.78rem; color:#b0c9a0; margin-bottom:0.2rem;
+  }
+  .ctrl-row label .val{
+    font-size:0.72rem; color:#7ec850; font-weight:600;
+    font-variant-numeric:tabular-nums;
+  }
+
+  input[type=range]{
+    width:100%; height:5px; -webkit-appearance:none; appearance:none;
+    background:rgba(80,120,60,0.25); border-radius:3px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:14px; height:14px; border-radius:50%;
+    background:#7ec850; cursor:pointer;
+    box-shadow:0 0 6px rgba(126,200,80,0.5);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:14px; height:14px; border-radius:50%; border:none;
+    background:#7ec850; cursor:pointer;
+  }
+
+  .btn-row{ display:flex; gap:0.4rem; margin-top:0.5rem; }
+  .btn{
+    flex:1; pointer-events:auto;
+    background:rgba(80,120,60,0.2); border:1px solid rgba(126,200,80,0.3);
+    color:#c9d1d9; font-size:0.75rem; padding:0.35rem 0.5rem;
+    border-radius:6px; cursor:pointer; font-family:inherit;
+    transition:background .15s;
+  }
+  .btn:hover{ background:rgba(126,200,80,0.3); }
+  .btn.active{ background:rgba(126,200,80,0.35); border-color:#7ec850; }
+
+  #metrics{
+    position:absolute; top:12px; right:12px;
+    width:220px;
+  }
+  #metrics h2{
+    font-size:0.82rem; color:#7ec850; margin-bottom:0.5rem;
+    font-weight:700; letter-spacing:0.02em;
+  }
+  .metric{ display:flex; justify-content:space-between; font-size:0.74rem; margin-bottom:0.3rem; }
+  .metric .label{ color:#8b949e; }
+  .metric .value{ color:#c9d1d9; font-weight:600; font-variant-numeric:tabular-nums; }
+  .metric .value.warn{ color:#e8a060; }
+  .metric .value.danger{ color:#e85040; }
+
+  .sparkline{ margin-top:0.5rem; }
+  .sparkline canvas{ width:100%; height:40px; border-radius:4px; background:rgba(0,0,0,0.3); }
+
+  #legend{
+    position:absolute; bottom:12px; left:12px;
+    font-size:0.72rem; color:#8b949e; max-width:400px;
+  }
+  #legend .items{ display:flex; gap:0.8rem; flex-wrap:wrap; }
+  #legend .item{ display:flex; align-items:center; gap:0.3rem; }
+  #legend .dot{ width:8px; height:8px; border-radius:50%; }
+
+  #panel-toggle{
+    position:absolute; top:12px; left:300px;
+    pointer-events:auto;
+    background:rgba(12,20,14,0.82); border:1px solid rgba(80,120,60,0.35);
+    color:#7ec850; width:28px; height:28px; border-radius:6px;
+    cursor:pointer; font-size:0.8rem; display:flex; align-items:center; justify-content:center;
+  }
+
+  #wind-arrow{
+    position:absolute; bottom:12px; right:12px;
+    pointer-events:none;
+  }
+  #wind-arrow svg{ filter:drop-shadow(0 0 4px rgba(126,200,80,0.4)); }
+
+  @media (max-width: 768px){
+    html,body{ overflow-y:auto; overflow-x:hidden; }
+    #canvas-container{ position:fixed !important; inset:0; z-index:0; }
+    #ui-layer{ position:relative !important; pointer-events:auto; }
+    #controls{
+      position:relative !important; top:auto !important; left:auto !important;
+      width:auto !important; max-height:none !important;
+      margin:12px;
+    }
+    #metrics{
+      position:relative !important; top:auto !important; right:auto !important;
+      width:auto !important; margin:12px;
+    }
+    #panel-toggle{ display:none; }
+    #legend{
+      position:relative !important; bottom:auto !important; left:auto !important;
+      margin:12px; max-width:none;
+    }
+    #wind-arrow{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div id="controls" class="panel">
+    <h2>🌿 Vineyard Wind Simulator</h2>
+
+    <h3>Wind Conditions</h3>
+    <div class="ctrl-row">
+      <label>Wind speed <span class="val" id="v-windspeed">5.0 m/s</span></label>
+      <input type="range" id="s-windspeed" min="0" max="25" step="0.5" value="5">
+    </div>
+    <div class="ctrl-row">
+      <label>Wind direction <span class="val" id="v-winddir">270° W</span></label>
+      <input type="range" id="s-winddir" min="0" max="359" step="1" value="270">
+    </div>
+    <div class="ctrl-row">
+      <label>Gustiness <span class="val" id="v-gust">30%</span></label>
+      <input type="range" id="s-gust" min="0" max="100" step="5" value="30">
+    </div>
+    <div class="ctrl-row">
+      <label>Turbulence <span class="val" id="v-turb">0.40</span></label>
+      <input type="range" id="s-turb" min="0" max="1" step="0.05" value="0.4">
+    </div>
+
+    <h3>Vineyard Layout</h3>
+    <div class="ctrl-row">
+      <label>Row spacing <span class="val" id="v-rowspacing">2.5 m</span></label>
+      <input type="range" id="s-rowspacing" min="1.5" max="4" step="0.1" value="2.5">
+    </div>
+    <div class="ctrl-row">
+      <label>Canopy density <span class="val" id="v-canopy">70%</span></label>
+      <input type="range" id="s-canopy" min="20" max="100" step="5" value="70">
+    </div>
+    <div class="ctrl-row">
+      <label>Row angle <span class="val" id="v-rowangle">0°</span></label>
+      <input type="range" id="s-rowangle" min="0" max="90" step="5" value="0">
+    </div>
+
+    <h3>Environment</h3>
+    <div class="ctrl-row">
+      <label>Air temp <span class="val" id="v-temp">22°C</span></label>
+      <input type="range" id="s-temp" min="-5" max="40" step="1" value="22">
+    </div>
+    <div class="ctrl-row">
+      <label>Time of day <span class="val" id="v-tod">14:00</span></label>
+      <input type="range" id="s-tod" min="5" max="20" step="0.5" value="14">
+    </div>
+
+    <h3>Visualization</h3>
+    <div class="ctrl-row">
+      <label>Particle count <span class="val" id="v-particles">800</span></label>
+      <input type="range" id="s-particles" min="200" max="2000" step="100" value="800">
+    </div>
+    <div class="ctrl-row">
+      <label>Trail length <span class="val" id="v-trail">0.92</span></label>
+      <input type="range" id="s-trail" min="0.80" max="0.99" step="0.01" value="0.92">
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="btn-reset">↺ Reset</button>
+      <button class="btn active" id="btn-flow">Flow field</button>
+      <button class="btn" id="btn-streak">Streaks</button>
+    </div>
+  </div>
+
+  <button id="panel-toggle" title="Toggle controls">✕</button>
+
+  <div id="metrics" class="panel">
+    <h2>📊 Live Metrics</h2>
+    <div class="metric"><span class="label">Mean wind speed</span><span class="value" id="m-meanspeed">— m/s</span></div>
+    <div class="metric"><span class="label">Canopy drag force</span><span class="value" id="m-drag">— N/m²</span></div>
+    <div class="metric"><span class="label">Shelter ratio</span><span class="value" id="m-shelter">—</span></div>
+    <div class="metric"><span class="label">Leaf flutter freq</span><span class="value" id="m-flutter">— Hz</span></div>
+    <div class="metric"><span class="label">Evap. enhancement</span><span class="value" id="m-evap">— ×</span></div>
+    <div class="metric"><span class="label">Frost risk flag</span><span class="value" id="m-frost">—</span></div>
+    <div class="sparkline"><canvas id="spark-speed"></canvas></div>
+  </div>
+
+  <div id="legend" class="panel">
+    <div class="items">
+      <div class="item"><div class="dot" style="background:#5fb3d4"></div> Wind particles</div>
+      <div class="item"><div class="dot" style="background:#7ec850"></div> Canopy / leaves</div>
+      <div class="item"><div class="dot" style="background:#8b6a3a"></div> Vine trunks</div>
+      <div class="item"><div class="dot" style="background:#e8a060"></div> Gust fronts</div>
+    </div>
+  </div>
+
+  <div id="wind-arrow">
+    <svg width="80" height="80" viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r="36" fill="rgba(12,20,14,0.6)" stroke="rgba(126,200,80,0.3)" stroke-width="1"/>
+      <g id="arrow-group" transform="rotate(0 40 40)">
+        <line x1="40" y1="55" x2="40" y2="20" stroke="#7ec850" stroke-width="2.5" stroke-linecap="round"/>
+        <polygon points="40,15 35,25 45,25" fill="#7ec850"/>
+      </g>
+      <text x="40" y="72" text-anchor="middle" fill="#5a8a40" font-size="9" font-family="monospace">N</text>
+    </svg>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script>
+'use strict';
+
+// ===== Parameters =====
+const P = {
+  windSpeed: 5.0,
+  windDir: 270,
+  gustiness: 0.30,
+  turbulence: 0.40,
+  rowSpacing: 2.5,
+  canopyDensity: 0.70,
+  rowAngle: 0,
+  airTemp: 22,
+  timeOfDay: 14,
+  particleCount: 800,
+  trailLength: 0.92,
+  vizMode: 'flow',
+};
+
+// Rebuild flags — checked inside draw() each frame
+let needVineyardRebuild = false;
+let needBgRebuild = false;
+
+// ===== Physical constants =====
+const RHO_AIR = 1.225;     // kg/m³
+const CD_LEAF = 0.47;      // drag coefficient for flat leaf
+const LEAF_AREA = 0.012;   // m² per leaf
+const PIXELS_PER_METER = 22;
+
+// ===== State =====
+let particles = [];
+let vineRows = [];
+let canopyPoints = [];
+let trunkPositions = [];
+let speedHistory = [];
+let frameCount = 0;
+let meanSpeedActual = 0;
+
+const sketch = (p) => {
+  let W, H;
+  let bgBuffer;
+  let time = 0;
+
+  p.setup = () => {
+    const container = document.getElementById('canvas-container');
+    W = container.clientWidth;
+    H = container.clientHeight;
+    const cnv = p.createCanvas(W, H);
+    cnv.parent(container);
+
+    buildVineyard();
+    initParticles();
+    buildBackground();
+
+    p.frameRate(60);
+    p.colorMode(p.RGB, 255, 255, 255, 1);
+  };
+
+  p.windowResized = () => {
+    W = document.getElementById('canvas-container').clientWidth;
+    H = document.getElementById('canvas-container').clientHeight;
+    p.resizeCanvas(W, H);
+    buildVineyard();
+    buildBackground();
+  };
+
+  function buildVineyard(){
+    vineRows = [];
+    canopyPoints = [];
+    trunkPositions = [];
+
+    const rowAngleRad = p.radians(P.rowAngle);
+    const spacingPx = P.rowSpacing * PIXELS_PER_METER;
+    const cosA = Math.cos(rowAngleRad);
+    const sinA = Math.sin(rowAngleRad);
+    const diag = Math.sqrt(W*W + H*H);
+    const numLines = Math.ceil(diag / spacingPx) + 4;
+
+    for(let i = -2; i < numLines; i++){
+      const offset = i * spacingPx - diag/2 + spacingPx/2;
+      const dx = sinA;
+      const dy = cosA;
+      const px = -cosA * offset + W/2;
+      const py = -sinA * offset + H/2;
+
+      const halfLen = diag;
+      const row = {
+        x1: px - dx * halfLen, y1: py - dy * halfLen,
+        x2: px + dx * halfLen, y2: py + dy * halfLen,
+        cx: px, cy: py, dx: dx, dy: dy,
+      };
+      vineRows.push(row);
+
+      const canopyGap = 7;
+      const numLeaves = Math.floor((halfLen * 2) / canopyGap);
+      for(let j = 0; j < numLeaves; j++){
+        const t = j / numLeaves;
+        const lx = row.x1 + (row.x2 - row.x1) * t;
+        const ly = row.y1 + (row.y2 - row.y1) * t;
+        if(lx > -20 && lx < W+20 && ly > -20 && ly < H+20){
+          canopyPoints.push({
+            x: lx, y: ly, baseX: lx, baseY: ly,
+            rowIdx: vineRows.length - 1,
+            phase: p.random(p.TWO_PI),
+            swayAmt: 0, flutter: 0,
+            size: p.random(3.5, 6.5),
+            hue: p.random(0.85, 1.0),
+          });
+        }
+      }
+
+      const trunkGapPx = 2.5 * PIXELS_PER_METER;
+      const numTrunks = Math.floor((halfLen * 2) / trunkGapPx);
+      for(let j = 0; j < numTrunks; j++){
+        const t = j / numTrunks + 0.02;
+        const tx = row.x1 + (row.x2 - row.x1) * t;
+        const ty = row.y1 + (row.y2 - row.y1) * t;
+        if(tx > -20 && tx < W+20 && ty > -20 && ty < H+20){
+          trunkPositions.push({x: tx, y: ty, rowIdx: vineRows.length - 1});
+        }
+      }
+    }
+  }
+
+  function buildBackground(){
+    bgBuffer = p.createGraphics(W, H);
+    bgBuffer.colorMode(p.RGB, 255, 255, 255, 1);
+
+    const tod = P.timeOfDay;
+    let skyTop, skyBot, groundCol;
+
+    if(tod < 7 || tod > 19){
+      skyTop = bgBuffer.color(10, 15, 30);
+      skyBot = bgBuffer.color(20, 25, 40);
+      groundCol = bgBuffer.color(15, 20, 15);
+    } else if(tod < 9){
+      const t = (tod - 5) / 4;
+      skyTop = bgBuffer.color(20+30*t, 25+40*t, 40+60*t);
+      skyBot = bgBuffer.color(80+100*t, 60+80*t, 50+40*t);
+      groundCol = bgBuffer.color(20+20*t, 25+25*t, 15+10*t);
+    } else if(tod > 17){
+      const t = (20 - tod) / 3;
+      skyTop = bgBuffer.color(20+40*t, 25+50*t, 40+60*t);
+      skyBot = bgBuffer.color(100+60*t, 60+40*t, 50+20*t);
+      groundCol = bgBuffer.color(25+15*t, 30+15*t, 15+5*t);
+    } else {
+      skyTop = bgBuffer.color(70, 110, 160);
+      skyBot = bgBuffer.color(140, 170, 200);
+      groundCol = bgBuffer.color(35, 45, 25);
+    }
+
+    for(let y = 0; y < H * 0.65; y++){
+      const t = y / (H * 0.65);
+      const c = bgBuffer.lerpColor(skyTop, skyBot, t);
+      bgBuffer.stroke(c);
+      bgBuffer.line(0, y, W, y);
+    }
+
+    for(let y = Math.floor(H * 0.65); y < H; y++){
+      const t = (y - H*0.65) / (H * 0.35);
+      const c = bgBuffer.lerpColor(groundCol, bgBuffer.color(20, 25, 12), t);
+      bgBuffer.stroke(c);
+      bgBuffer.line(0, y, W, y);
+    }
+
+    bgBuffer.noStroke();
+    bgBuffer.fill(30, 40, 25, 0.6);
+    bgBuffer.beginShape();
+    bgBuffer.vertex(0, H*0.65);
+    for(let x = 0; x <= W; x += 20){
+      const hillY = H*0.62 + Math.sin(x*0.008) * 15 + Math.sin(x*0.02) * 8;
+      bgBuffer.vertex(x, hillY);
+    }
+    bgBuffer.vertex(W, H*0.65);
+    bgBuffer.endShape(p.CLOSE);
+
+    if(tod >= 6 && tod <= 19){
+      const sunAngle = p.map(tod, 6, 19, -0.2, Math.PI + 0.2);
+      const sunX = W * 0.5 + Math.cos(sunAngle - Math.PI/2) * W * 0.4;
+      const sunY = H * 0.35 - Math.sin(sunAngle) * H * 0.3;
+      if(sunY < H * 0.65){
+        const isLow = tod < 8 || tod > 17;
+        const sr = isLow ? 255 : 255;
+        const sg = isLow ? 180 : 240;
+        const sb = isLow ? 100 : 200;
+        bgBuffer.fill(sr, sg, sb, 0.7);
+        bgBuffer.circle(sunX, sunY, isLow ? 50 : 40);
+        for(let r = 1; r <= 4; r++){
+          bgBuffer.fill(sr, sg, sb, 0.1/r);
+          bgBuffer.circle(sunX, sunY, (isLow ? 50 : 40) + r * 30);
+        }
+      }
+    }
+
+    bgBuffer.noStroke();
+    for(let y = H*0.55; y < H*0.66; y++){
+      const t = (y - H*0.55) / (H*0.11);
+      bgBuffer.fill(180, 190, 200, 0.12 * (1-t));
+      bgBuffer.rect(0, y, W, 1);
+    }
+  }
+
+  // Wind field at (x,y,time)
+  function windAt(x, y, t){
+    const metAngle = p.radians(P.windDir);
+    const flowAngle = metAngle + Math.PI;
+    const dirX = Math.cos(flowAngle);
+    const dirY = Math.sin(flowAngle);
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    const pxPerSec = P.windSpeed * PIXELS_PER_METER * 0.8;
+
+    // Gust factor
+    const gustFreq = 0.3;
+    const gustAmp = P.gustiness;
+    const gustWave = 1 + gustAmp * (0.5 + 0.5 * Math.sin(t * gustFreq + x * 0.002 + y * 0.001));
+
+    // Turbulence
+    const noiseScale = 0.004;
+    const turbAmp = P.turbulence * P.windSpeed * 0.5;
+    const nx = p.noise(x * noiseScale, y * noiseScale, t * 0.15) - 0.5;
+    const ny = p.noise(x * noiseScale + 100, y * noiseScale + 100, t * 0.15) - 0.5;
+
+    const baseSpeed = pxPerSec * gustWave / 60;
+    let velX = dirX * baseSpeed + perpX * nx * turbAmp * PIXELS_PER_METER * 0.3 / 60;
+    let velY = dirY * baseSpeed + perpY * ny * turbAmp * PIXELS_PER_METER * 0.3 / 60;
+
+    // Canopy shelter
+    let shelterFactor = 1.0;
+    for(let i = 0; i < vineRows.length; i++){
+      const row = vineRows[i];
+      const dxr = row.x2 - row.x1;
+      const dyr = row.y2 - row.y1;
+      const len2 = dxr*dxr + dyr*dyr;
+      if(len2 < 1) continue;
+      const tProj = ((x - row.x1) * dxr + (y - row.y1) * dyr) / len2;
+      if(tProj < 0 || tProj > 1) continue;
+      const projX = row.x1 + tProj * dxr;
+      const projY = row.y1 + tProj * dyr;
+      const dotProd = (x - projX) * dirX + (y - projY) * dirY;
+      const canopyWidth = 8 + P.canopyDensity * 12;
+      const shelterZone = canopyWidth * 4;
+
+      if(dotProd > 0 && dotProd < shelterZone){
+        const shelterDepth = 1 - (dotProd / shelterZone);
+        const lateralDist = Math.abs((x - projX) * perpX + (y - projY) * perpY);
+        if(lateralDist < canopyWidth * 2){
+          const lateralFactor = 1 - (lateralDist / (canopyWidth * 2));
+          shelterFactor -= shelterDepth * lateralFactor * P.canopyDensity * 0.5;
+        }
+      }
+    }
+    shelterFactor = Math.max(0.15, shelterFactor);
+
+    return {
+      vx: velX * shelterFactor,
+      vy: velY * shelterFactor,
+      speed: Math.sqrt(velX*velX + velY*velY) * shelterFactor,
+      shelter: shelterFactor,
+    };
+  }
+
+  function initParticles(){
+    particles = [];
+    for(let i = 0; i < P.particleCount; i++){
+      spawnParticle(true);
+    }
+  }
+
+  function spawnParticle(initialFill){
+    const flowAngle = p.radians(P.windDir) + Math.PI;
+    const dirX = Math.cos(flowAngle);
+    const dirY = Math.sin(flowAngle);
+    let x, y;
+    const margin = 20;
+
+    if(initialFill && Math.random() < 0.6){
+      x = p.random(W); y = p.random(H);
+    } else if(dirX > 0.3){
+      x = -margin; y = p.random(H);
+    } else if(dirX < -0.3){
+      x = W + margin; y = p.random(H);
+    } else if(dirY > 0.3){
+      y = -margin; x = p.random(W);
+    } else if(dirY < -0.3){
+      y = H + margin; x = p.random(W);
+    } else {
+      x = p.random(W); y = p.random(H);
+    }
+
+    particles.push({
+      x: x, y: y, px: x, py: y,
+      life: p.random(60, 200), maxLife: 200,
+      speed: 0, trail: [],
+    });
+  }
+
+  p.draw = () => {
+    // Handle rebuilds
+    if(needVineyardRebuild){
+      needVineyardRebuild = false;
+      buildVineyard();
+    }
+    if(needBgRebuild){
+      needBgRebuild = false;
+      buildBackground();
+    }
+
+    time += 1/60;
+
+    // Trail fade — blit background with low alpha
+    const fadeAlpha = 1 - P.trailLength;
+    p.noStroke();
+    p.tint(255, fadeAlpha * 255);
+    p.image(bgBuffer, 0, 0);
+    p.noTint();
+
+    // Draw vineyard structure
+    drawVineyardStructure();
+
+    // Update + draw particles
+    let totalSpeed = 0;
+    let activeCount = 0;
+
+    for(let i = particles.length - 1; i >= 0; i--){
+      const part = particles[i];
+      const w = windAt(part.x, part.y, time);
+
+      part.px = part.x;
+      part.py = part.y;
+      part.x += w.vx;
+      part.y += w.vy;
+      part.speed = w.speed;
+      part.life--;
+
+      totalSpeed += w.speed;
+      activeCount++;
+
+      if(P.vizMode === 'streak'){
+        part.trail.push({x: part.x, y: part.y});
+        if(part.trail.length > 15) part.trail.shift();
+      }
+
+      const speedNorm = Math.min(1, part.speed / (P.windSpeed * PIXELS_PER_METER * 0.8 / 60 * 2 + 0.1));
+      const alpha = Math.min(1, part.life / 30) * (0.4 + speedNorm * 0.6);
+
+      if(P.vizMode === 'flow'){
+        const lineLen = Math.min(8, part.speed * 2.5);
+        const angle = Math.atan2(w.vy, w.vx);
+        p.stroke(95 + speedNorm * 80, 179 + speedNorm * 30, 212 - speedNorm * 40, alpha * 0.7);
+        p.strokeWeight(1.2);
+        p.line(part.x, part.y, part.x - Math.cos(angle) * lineLen, part.y - Math.sin(angle) * lineLen);
+      } else {
+        if(part.trail.length > 1){
+          p.noFill();
+          for(let j = 1; j < part.trail.length; j++){
+            const t = j / part.trail.length;
+            p.stroke(95, 179, 212, t * alpha * 0.6);
+            p.strokeWeight(1 + t);
+            p.line(part.trail[j-1].x, part.trail[j-1].y, part.trail[j].x, part.trail[j].y);
+          }
+        }
+      }
+
+      // Respawn
+      if(part.x < -30 || part.x > W+30 || part.y < -30 || part.y > H+30 || part.life <= 0){
+        const flowAngle = p.radians(P.windDir) + Math.PI;
+        const dirX = Math.cos(flowAngle);
+        const dirY = Math.sin(flowAngle);
+        if(dirX > 0.3){ part.x = -20; part.y = p.random(H); }
+        else if(dirX < -0.3){ part.x = W + 20; part.y = p.random(H); }
+        else if(dirY > 0.3){ part.y = -20; part.x = p.random(W); }
+        else if(dirY < -0.3){ part.y = H + 20; part.x = p.random(W); }
+        else { part.x = p.random(W); part.y = p.random(H); }
+        part.px = part.x; part.py = part.y;
+        part.life = p.random(60, 200);
+        part.trail = [];
+      }
+    }
+
+    // Adjust particle count
+    while(particles.length < P.particleCount) spawnParticle(false);
+    while(particles.length > P.particleCount) particles.pop();
+
+    meanSpeedActual = activeCount > 0 ? totalSpeed / activeCount : 0;
+
+    updateCanopies();
+
+    frameCount++;
+    if(frameCount % 5 === 0) updateMetrics();
+
+    // Wind arrow rotation
+    const arrowGroup = document.getElementById('arrow-group');
+    if(arrowGroup){
+      const flowAngleDeg = (P.windDir + 180) % 360;
+      arrowGroup.setAttribute('transform', `rotate(${flowAngleDeg - 90} 40 40)`);
+    }
+  };
+
+  function drawVineyardStructure(){
+    // Trunks
+    p.noStroke();
+    for(const trunk of trunkPositions){
+      p.fill(60, 45, 28, 0.7);
+      p.rect(trunk.x - 2, trunk.y - 8, 4, 16, 1);
+    }
+
+    // Canopy leaves
+    for(const cp of canopyPoints){
+      const sway = cp.swayAmt;
+      const x = cp.baseX + sway * 0.6;
+      const y = cp.baseY + Math.sin(time * 2 + cp.phase) * 0.5 * Math.min(sway, 3);
+
+      const tempFactor = Math.max(0, Math.min(1, (P.airTemp + 5) / 35));
+      const r = Math.floor(60 + cp.hue * 40 + tempFactor * 30);
+      const g = Math.floor(100 + cp.hue * 50 + tempFactor * 40);
+      const b = Math.floor(30 + cp.hue * 20);
+
+      const sizeMod = cp.size * (0.7 + P.canopyDensity * 0.5);
+      const alpha = 0.4 + P.canopyDensity * 0.4;
+
+      p.fill(r, g, b, alpha);
+      p.ellipse(x, y, sizeMod, sizeMod * 0.7);
+
+      if(cp.flutter > 0.3){
+        p.fill(180, 220, 120, cp.flutter * 0.25);
+        p.ellipse(x - 1, y - 1, sizeMod * 0.4, sizeMod * 0.3);
+      }
+    }
+  }
+
+  function updateCanopies(){
+    const flowAngle = p.radians(P.windDir) + Math.PI;
+    const dirX = Math.cos(flowAngle);
+    const dirY = Math.sin(flowAngle);
+
+    for(const cp of canopyPoints){
+      const w = windAt(cp.baseX, cp.baseY, time);
+      const localSpeed = w.speed;
+      const targetSway = localSpeed * 3 * (0.5 + P.canopyDensity * 0.5);
+      cp.swayAmt += (targetSway - cp.swayAmt) * 0.08;
+      cp.swayAmt = Math.min(cp.swayAmt, 12);
+      cp.flutter = Math.min(1, localSpeed / (P.windSpeed * 0.5 + 0.1));
+    }
+  }
+
+  function updateMetrics(){
+    const pxPerFrameToMs = 60 / (PIXELS_PER_METER * 0.8);
+    const meanMs = meanSpeedActual * pxPerFrameToMs;
+
+    document.getElementById('m-meanspeed').textContent = meanMs.toFixed(1) + ' m/s';
+
+    const leavesPerM2 = 30 * P.canopyDensity;
+    const dragPerM2 = leavesPerM2 * LEAF_AREA * 0.5 * RHO_AIR * CD_LEAF * meanMs * meanMs;
+    document.getElementById('m-drag').textContent = dragPerM2.toFixed(2) + ' N/m²';
+
+    let shelteredCount = 0;
+    const totalCanopy = Math.min(canopyPoints.length, 200);
+    for(let i = 0; i < totalCanopy; i++){
+      const cp = canopyPoints[i];
+      const w = windAt(cp.baseX, cp.baseY, time);
+      if(w.shelter < 0.5) shelteredCount++;
+    }
+    const shelterRatio = totalCanopy > 0 ? shelteredCount / totalCanopy : 0;
+    document.getElementById('m-shelter').textContent = shelterRatio.toFixed(2);
+
+    const flutterHz = 2 + Math.sqrt(Math.max(0, meanMs)) * 1.5;
+    document.getElementById('m-flutter').textContent = flutterHz.toFixed(1) + ' Hz';
+
+    const evapFactor = 1 + 0.08 * meanMs;
+    document.getElementById('m-evap').textContent = evapFactor.toFixed(2) + ' ×';
+
+    const frostEl = document.getElementById('m-frost');
+    if(P.airTemp < 2 && meanMs < 2){
+      frostEl.textContent = 'HIGH';
+      frostEl.className = 'value danger';
+    } else if(P.airTemp < 5 && meanMs < 3){
+      frostEl.textContent = 'MODERATE';
+      frostEl.className = 'value warn';
+    } else {
+      frostEl.textContent = 'LOW';
+      frostEl.className = 'value';
+    }
+
+    speedHistory.push(meanMs);
+    if(speedHistory.length > 80) speedHistory.shift();
+    drawSparkline();
+  }
+
+  function drawSparkline(){
+    const sparkCanvas = document.getElementById('spark-speed');
+    if(!sparkCanvas) return;
+    const sctx = sparkCanvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = sparkCanvas.offsetWidth || 200;
+    const cssH = 40;
+    sparkCanvas.width = cssW * dpr;
+    sparkCanvas.height = cssH * dpr;
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = cssW, h = cssH;
+
+    sctx.clearRect(0, 0, w, h);
+    if(speedHistory.length < 2) return;
+
+    const maxVal = Math.max(...speedHistory, P.windSpeed, 1);
+
+    sctx.strokeStyle = 'rgba(126,200,80,0.15)';
+    sctx.lineWidth = 0.5;
+    sctx.beginPath();
+    sctx.moveTo(0, h/2);
+    sctx.lineTo(w, h/2);
+    sctx.stroke();
+
+    sctx.strokeStyle = '#5fb3d4';
+    sctx.lineWidth = 1.2;
+    sctx.beginPath();
+    for(let i = 0; i < speedHistory.length; i++){
+      const x = (i / (speedHistory.length - 1)) * w;
+      const y = h - (speedHistory[i] / maxVal) * h * 0.85 - h * 0.075;
+      if(i === 0) sctx.moveTo(x, y);
+      else sctx.lineTo(x, y);
+    }
+    sctx.stroke();
+
+    sctx.lineTo(w, h);
+    sctx.lineTo(0, h);
+    sctx.closePath();
+    sctx.fillStyle = 'rgba(95,179,212,0.12)';
+    sctx.fill();
+  }
+};
+
+new p5(sketch);
+
+// ===== UI Wiring =====
+function wireSlider(id, key, fmt, rebuildVine, rebuildBg){
+  const slider = document.getElementById('s-' + id);
+  const display = document.getElementById('v-' + id);
+  if(!slider || !display) return;
+  slider.addEventListener('input', () => {
+    P[key] = parseFloat(slider.value);
+    display.textContent = fmt(P[key]);
+    if(rebuildVine) needVineyardRebuild = true;
+    if(rebuildBg) needBgRebuild = true;
+  });
+}
+
+const dirNames = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+
+wireSlider('windspeed', 'windSpeed', v => v.toFixed(1) + ' m/s');
+wireSlider('winddir', 'windDir', v => {
+  const idx = Math.round(v / 22.5) % 16;
+  return Math.round(v) + '° ' + dirNames[idx];
+});
+wireSlider('gust', 'gustiness', v => Math.round(v * 100) + '%');
+wireSlider('turb', 'turbulence', v => v.toFixed(2));
+wireSlider('rowspacing', 'rowSpacing', v => v.toFixed(1) + ' m', true, false);
+wireSlider('canopy', 'canopyDensity', v => Math.round(v * 100) + '%');
+wireSlider('rowangle', 'rowAngle', v => Math.round(v) + '°', true, false);
+wireSlider('temp', 'airTemp', v => Math.round(v) + '°C', false, true);
+wireSlider('tod', 'timeOfDay', v => {
+  const h = Math.floor(v);
+  const m = Math.round((v - h) * 60);
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}, false, true);
+wireSlider('particles', 'particleCount', v => Math.round(v).toString());
+wireSlider('trail', 'trailLength', v => v.toFixed(2));
+
+// Mode buttons
+document.getElementById('btn-flow').addEventListener('click', () => {
+  P.vizMode = 'flow';
+  document.getElementById('btn-flow').classList.add('active');
+  document.getElementById('btn-streak').classList.remove('active');
+});
+document.getElementById('btn-streak').addEventListener('click', () => {
+  P.vizMode = 'streak';
+  document.getElementById('btn-streak').classList.add('active');
+  document.getElementById('btn-flow').classList.remove('active');
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  const defaults = {
+    's-windspeed': 5, 's-winddir': 270, 's-gust': 30, 's-turb': 0.4,
+    's-rowspacing': 2.5, 's-canopy': 70, 's-rowangle': 0,
+    's-temp': 22, 's-tod': 14, 's-particles': 800, 's-trail': 0.92,
+  };
+  for(const [id, val] of Object.entries(defaults)){
+    const el = document.getElementById(id);
+    el.value = val;
+    el.dispatchEvent(new Event('input'));
+  }
+});
+
+// Panel toggle
+const toggleBtn = document.getElementById('panel-toggle');
+const controlsPanel = document.getElementById('controls');
+let panelVisible = true;
+toggleBtn.addEventListener('click', () => {
+  panelVisible = !panelVisible;
+  controlsPanel.style.display = panelVisible ? '' : 'none';
+  toggleBtn.textContent = panelVisible ? '✕' : '☰';
+  toggleBtn.style.left = panelVisible ? '300px' : '12px';
+});
+</script>
+</body>
+</html>
