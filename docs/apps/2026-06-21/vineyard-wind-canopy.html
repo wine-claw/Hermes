@@ -119,22 +119,23 @@
   #wind-arrow svg{ filter:drop-shadow(0 0 4px rgba(126,200,80,0.4)); }
 
   @media (max-width: 768px){
-    html,body{ overflow-y:auto; overflow-x:hidden; }
-    #canvas-container{ position:fixed !important; inset:0; z-index:0; }
-    #ui-layer{ position:relative !important; pointer-events:auto; }
+    html,body{ overflow-y:auto; overflow-x:hidden; height:auto; }
+    #canvas-container{ position:relative !important; width:100% !important; height:42vh !important; min-height:280px; max-height:400px; inset:auto !important; z-index:0; }
+    canvas{ width:100% !important; height:100% !important; }
+    #ui-layer{ position:relative !important; pointer-events:auto; inset:auto !important; top:auto !important; left:auto !important; right:auto !important; bottom:auto !important; }
     #controls{
       position:relative !important; top:auto !important; left:auto !important;
       width:auto !important; max-height:none !important;
-      margin:12px;
+      margin:0; border-radius:0; border-left:none; border-right:none;
     }
     #metrics{
       position:relative !important; top:auto !important; right:auto !important;
-      width:auto !important; margin:12px;
+      width:auto !important; margin:0; border-radius:0; border-left:none; border-right:none;
     }
     #panel-toggle{ display:none; }
     #legend{
       position:relative !important; bottom:auto !important; left:auto !important;
-      margin:12px; max-width:none;
+      margin:0; max-width:none; border-radius:0; border-left:none; border-right:none;
     }
     #wind-arrow{ display:none; }
   }
