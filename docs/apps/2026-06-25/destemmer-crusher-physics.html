@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Destemmer Crusher Physics — Grape Separation Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; }
+  body {
+    background: #0e1a14;
+    color: #c9d1d9;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* Disclaimer */
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  /* Desktop layout */
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+  canvas { display: block; }
+
+  #ui-layer {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #title-bar {
+    position: absolute;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    text-align: center;
+  }
+  #title-bar h1 {
+    font-size: 1.1rem;
+    color: #d4e8c8;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    letter-spacing: 0.02em;
+  }
+  #title-bar p {
+    font-size: 0.75rem;
+    color: #8b949e;
+    margin-top: 2px;
+  }
+
+  #controls {
+    position: absolute;
+    top: 12px; left: 12px;
+    width: 280px;
+    background: rgba(20, 26, 22, 0.92);
+    border: 1px solid #2a3a30;
+    border-radius: 12px;
+    padding: 14px 16px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+  #controls h2 {
+    font-size: 0.9rem;
+    color: #8bc34a;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #2a3a30;
+    padding-bottom: 6px;
+  }
+  .ctrl-group {
+    margin-bottom: 12px;
+  }
+  .ctrl-group label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: #b0b8a0;
+    margin-bottom: 4px;
+  }
+  .ctrl-group label .val {
+    color: #8bc34a;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .ctrl-group input[type=range] {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #1a2a22;
+    border-radius: 3px;
+    outline: none;
+  }
+  .ctrl-group input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #8bc34a;
+    cursor: pointer;
+    border: 2px solid #4a6a30;
+  }
+  .ctrl-group input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #8bc34a;
+    cursor: pointer;
+    border: 2px solid #4a6a30;
+  }
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: #2a3a30;
+    border: 1px solid #3a4a40;
+    border-radius: 8px;
+    color: #c9d1d9;
+    font-size: 0.82rem;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: #3a4a40; }
+  .btn.active { background: #4a6a30; border-color: #8bc34a; color: #d4e8c8; }
+  .btn-pour { background: #5a2a20; border-color: #8a3a30; }
+  .btn-pour.active { background: #8a3a30; border-color: #cc5a40; color: #f0d0c0; }
+
+  #metrics {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 230px;
+    background: rgba(20, 26, 22, 0.92);
+    border: 1px solid #2a3a30;
+    border-radius: 12px;
+    padding: 14px 16px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+  }
+  #metrics h2 {
+    font-size: 0.9rem;
+    color: #8bc34a;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #2a3a30;
+    padding-bottom: 6px;
+  }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    margin-bottom: 6px;
+  }
+  .metric-row .label { color: #b0b8a0; }
+  .metric-row .value { color: #d4e8c8; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .metric-bar {
+    height: 4px;
+    background: #1a2a22;
+    border-radius: 2px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .metric-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #8bc34a, #d4e8c8);
+    transition: width 0.3s;
+  }
+  .metric-bar-fill.warn { background: linear-gradient(90deg, #e8a040, #e8c060); }
+  .metric-bar-fill.bad { background: linear-gradient(90deg, #e85040, #e87060); }
+  .status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-top: 6px;
+  }
+  .status-good { background: #2a4a20; color: #8bc34a; }
+  .status-warn { background: #4a3a10; color: #e8b060; }
+  .status-bad { background: #4a2010; color: #e87060; }
+
+  /* Legend */
+  #legend {
+    position: absolute;
+    bottom: 12px; left: 12px;
+    background: rgba(20,26,22,0.88);
+    border: 1px solid #2a3a30;
+    border-radius: 8px;
+    padding: 8px 12px;
+    pointer-events: none;
+    font-size: 0.72rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Mobile layout */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #title-bar {
+      position: relative !important;
+      top: auto !important; left: auto !important;
+      transform: none;
+      padding: 8px 12px 4px;
+    }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #legend {
+      position: relative !important;
+      bottom: auto !important; left: auto !important;
+      margin: 0;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div id="title-bar">
+    <h1>🍇 Destemmer Crusher Physics</h1>
+    <p>Matter.js grape separation simulator</p>
+  </div>
+
+  <div id="controls">
+    <h2>⚙ Machine Controls</h2>
+
+    <div class="ctrl-group">
+      <label>Drum Speed <span class="val" id="val-drum">180 rpm</span></label>
+      <input type="range" id="slider-drum" min="0" max="400" value="180" step="10">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Crusher Roller Gap <span class="val" id="val-gap">8 mm</span></label>
+      <input type="range" id="slider-gap" min="2" max="20" value="8" step="1">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Roller Speed <span class="val" id="val-roller">120 rpm</span></label>
+      <input type="range" id="slider-roller" min="0" max="300" value="120" step="10">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Sorter Hole Size <span class="val" id="val-hole">14 mm</span></label>
+      <input type="range" id="slider-hole" min="8" max="24" value="14" step="1">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Incline Angle <span class="val" id="val-incline">12°</span></label>
+      <input type="range" id="slider-incline" min="0" max="25" value="12" step="1">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Grape Variety</label>
+    </div>
+    <div class="btn-row">
+      <div class="btn active" id="btn-pino" data-variety="pinot">Pinot Noir</div>
+      <div class="btn" id="btn-cab" data-variety="cab">Cabernet</div>
+    </div>
+
+    <div class="btn-row" style="margin-top: 8px;">
+      <div class="btn btn-pour active" id="btn-pour">⏸ Pause Feed</div>
+      <div class="btn" id="btn-reset">↻ Reset</div>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <h2>📊 Live Metrics</h2>
+    <div class="metric-row"><span class="label">Berries Sorted</span><span class="value" id="m-sorted">0</span></div>
+    <div class="metric-bar"><div class="metric-bar-fill" id="bar-sorted" style="width:0%"></div></div>
+    <div class="metric-row"><span class="label">Stems Rejected</span><span class="value" id="m-stems">0</span></div>
+    <div class="metric-bar"><div class="metric-bar-fill" id="bar-stems" style="width:0%"></div></div>
+    <div class="metric-row"><span class="label">Berries Crushed</span><span class="value" id="m-crushed">0</span></div>
+    <div class="metric-bar"><div class="metric-bar-fill" id="bar-crushed" style="width:0%"></div></div>
+    <div class="metric-row"><span class="label">Whole Berries</span><span class="value" id="m-whole">0</span></div>
+    <div class="metric-bar"><div class="metric-bar-fill" id="bar-whole" style="width:0%"></div></div>
+    <div class="metric-row"><span class="label">Stem Carryover</span><span class="value" id="m-carryover">0%</span></div>
+    <div class="metric-bar"><div class="metric-bar-fill" id="bar-carryover" style="width:0%"></div></div>
+    <div class="metric-row"><span class="label">Efficiency</span><span class="value" id="m-eff">—</span></div>
+    <div style="text-align:center;"><span class="status-badge status-good" id="status-badge">Optimal</span></div>
+  </div>
+
+  <div id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#6b3a4a"></div>Berry (intact)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#9a2235"></div>Berry (crushed)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a5a28"></div>Stem segment</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8a7a3a"></div>Seed (MOG)</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const { Engine, World, Bodies, Body, Composite, Constraint, Events, Query } = Matter;
+
+  // ── State ──
+  let engine, world;
+  let canvas, ctx;
+  let W = 0, H = 0, DPR = 1;
+  let pouring = true;
+  let grapeVariety = 'pinot';
+  let frameCount = 0;
+  let lastSpawnFrame = 0;
+  let particles = []; // {body, type, crushed, counted}
+  let machineParts = []; // static bodies: drum, rollers, sorter bars
+  let drumBody = null, rollerA = null, rollerB = null;
+  let drumAngle = 0, rollerAngle = 0;
+
+  // Parameters
+  let P = {
+    drumSpeed: 180,
+    rollerGap: 8,
+    rollerSpeed: 120,
+    holeSize: 14,
+    incline: 12
+  };
+
+  // Metrics
+  let M = {
+    sorted: 0, stems: 0, crushed: 0, whole: 0, carryover: 0,
+    totalBerries: 0, totalStems: 0
+  };
+
+  // Variety presets
+  const VARIETY = {
+    pinot: { berryR: 11, berryColor: '#6b3a4a', crushedColor: '#9a2235', stemLen: 35, stemCount: 0.35, skinThick: 0.6 },
+    cab: { berryR: 14, berryColor: '#4a2a3a', crushedColor: '#7a1230', stemLen: 45, stemCount: 0.45, skinThick: 0.9 }
+  };
+
+  // ── Init ──
+  function init() {
+    engine = Engine.create();
+    world = engine.world;
+    engine.gravity.y = 1.0;
+
+    canvas = document.createElement('canvas');
+    document.getElementById('canvas-container').appendChild(canvas);
+    ctx = canvas.getContext('2d');
+
+    resize();
+    window.addEventListener('resize', resize);
+
+    buildMachine();
+    setupControls();
+    Events.on(engine, 'collisionStart', onCollision);
+
+    requestAnimationFrame(loop);
+  }
+
+  function resize() {
+    const container = document.getElementById('canvas-container');
+    DPR = window.devicePixelRatio || 1;
+    W = container.clientWidth;
+    H = container.clientHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (world) {
+      rebuildMachine();
+    }
+  }
+
+  // ── Machine geometry ──
+  // The machine layout (in canvas px):
+  // Top: feed hopper → rotating drum with holes (destemmer) → angled sorter grid → crusher rollers → collection
+  function getGeo() {
+    const cx = W / 2;
+    const scale = Math.min(W / 700, H / 500);
+    const s = Math.max(0.5, scale);
+
+    return {
+      scale: s,
+      // Feed hopper at top-left
+      hopperTop: H * 0.04,
+      hopperBottom: H * 0.18,
+      hopperLeftX: W * 0.10,
+      hopperRightX: W * 0.28,
+      // Destemmer drum — large rotating cylinder with holes
+      drumCX: W * 0.50,
+      drumCY: H * 0.32,
+      drumR: Math.max(40, 70 * s),
+      drumInnerR: Math.max(30, 58 * s),
+      // Sorter grid — angled bar grid below drum
+      gridTopY: H * 0.50,
+      gridBotY: H * 0.70,
+      gridLeftX: W * 0.20,
+      gridRightX: W * 0.75,
+      // Crusher rollers at bottom
+      rollerAY: H * 0.82,
+      rollerBY: H * 0.82,
+      rollerR: Math.max(20, 32 * s),
+      // Collection bins at very bottom
+      binY: H * 0.95,
+      binMustX: W * 0.55,
+      binStemX: W * 0.15
+    };
+  }
+
+  function buildMachine() {
+    // remove old
+    machineParts.forEach(b => World.remove(world, b));
+    machineParts = [];
+    drumBody = null; rollerA = null; rollerB = null;
+
+    const g = getGeo();
+    const v = VARIETY[grapeVariety];
+    const inclineRad = P.incline * Math.PI / 180;
+
+    // Feed hopper walls
+    const wallOpts = { isStatic: true, friction: 0.3, restitution: 0.2, label: 'wall' };
+    // Left hopper wall
+    machineParts.push(Bodies.rectangle(
+      g.hopperLeftX - 5 * g.scale, (g.hopperTop + g.hopperBottom) / 2,
+      6, g.hopperBottom - g.hopperTop, wallOpts
+    ));
+    // Right hopper wall
+    machineParts.push(Bodies.rectangle(
+      g.hopperRightX + 5 * g.scale, (g.hopperTop + g.hopperBottom) / 2,
+      6, g.hopperBottom - g.hopperTop, wallOpts
+    ));
+    // Hopper angled bottom-left (slide into drum)
+    machineParts.push(Bodies.rectangle(
+      g.hopperLeftX + 20 * g.scale, g.hopperBottom + 10 * g.scale,
+      80 * g.scale, 6, { ...wallOpts, angle: 0.3 }
+    ));
+
+    // Destemmer drum — a rotating cage with gaps for berries to fall through
+    // Only place segments around the top 270°, leaving the bottom open
+    const drumSegs = 18;
+    const drumArcStart = -Math.PI * 0.85; // start from upper-left
+    const drumArcEnd = Math.PI * 0.85;    // end at lower-right (270° coverage)
+    for (let i = 0; i < drumSegs; i++) {
+      const t = i / (drumSegs - 1);
+      const a = drumArcStart + (drumArcEnd - drumArcStart) * t;
+      const x = g.drumCX + Math.cos(a) * g.drumR;
+      const y = g.drumCY + Math.sin(a) * g.drumR;
+      const seg = Bodies.rectangle(x, y, 10 * g.scale, 8 * g.scale, {
+        isStatic: true, friction: 0.4, restitution: 0.3, label: 'drum',
+        angle: a + Math.PI / 2
+      });
+      machineParts.push(seg);
+    }
+
+    // Drum internal lift paddles (static, but we rotate the whole drum group)
+    // We store drum segment bodies for rotation
+    drumBody = machineParts.filter(b => b.label === 'drum');
+
+    // Sorter grid — parallel bars at an angle, with gaps for berries to fall through
+    const gridLen = Math.hypot(g.gridRightX - g.gridLeftX, g.gridBotY - g.gridTopY);
+    const numBars = 8;
+    const barSpacing = gridLen / (numBars + 1);
+    const holePx = P.holeSize * g.scale;
+    const barThickness = Math.max(3, 5 * g.scale);
+
+    for (let i = 0; i <= numBars; i++) {
+      const t = i / (numBars + 1);
+      const bx = g.gridLeftX + (g.gridRightX - g.gridLeftX) * t;
+      const by = g.gridTopY + (g.gridBotY - g.gridTopY) * t;
+      machineParts.push(Bodies.rectangle(bx, by, barThickness, 30 * g.scale, {
+        isStatic: true, friction: 0.3, restitution: 0.2, label: 'grid',
+        angle: inclineRad + Math.PI / 2
+      }));
+    }
+
+    // Side walls for sorter channel
+    machineParts.push(Bodies.rectangle(
+      g.gridLeftX - 15 * g.scale, (g.gridTopY + g.gridBotY) / 2,
+      6, g.gridBotY - g.gridTopY + 30, { ...wallOpts, angle: inclineRad }
+    ));
+    machineParts.push(Bodies.rectangle(
+      g.gridRightX + 15 * g.scale, (g.gridTopY + g.gridBotY) / 2,
+      6, g.gridBotY - g.gridTopY + 30, { ...wallOpts, angle: inclineRad }
+    ));
+
+    // Crusher rollers — two counter-rotating cylinders
+    const gapPx = Math.max(4, P.rollerGap * g.scale);
+    const rollerOffset = g.rollerR + gapPx / 2;
+    rollerA = Bodies.circle(g.drumCX - rollerOffset, g.rollerAY, g.rollerR, {
+      isStatic: false, friction: 0.6, restitution: 0.1, label: 'rollerA',
+      density: 5, frictionAir: 0.01
+    });
+    rollerB = Bodies.circle(g.drumCX + rollerOffset, g.rollerAY, g.rollerR, {
+      isStatic: false, friction: 0.6, restitution: 0.1, label: 'rollerB',
+      density: 5, frictionAir: 0.01
+    });
+    // Add rollers to world first
+    World.add(world, [rollerA, rollerB]);
+    // Then create constraints pinning them to their positions
+    var ax = rollerA.position.x, ay = rollerA.position.y;
+    var bx = rollerB.position.x, by = rollerB.position.y;
+    World.add(world, [
+      Constraint.create({ bodyA: rollerA, pointA: { x: 0, y: 0 }, pointB: { x: ax, y: ay }, stiffness: 0.9, length: 0 }),
+      Constraint.create({ bodyA: rollerB, pointA: { x: 0, y: 0 }, pointB: { x: bx, y: by }, stiffness: 0.9, length: 0 })
+    ]);
+    machineParts.push(rollerA, rollerB);
+
+    // Roller guard walls (prevent berries from going around outside)
+    machineParts.push(Bodies.rectangle(
+      g.drumCX - rollerOffset - g.rollerR - 8 * g.scale, g.rollerAY,
+      6, g.rollerR * 2 + 20, wallOpts
+    ));
+    machineParts.push(Bodies.rectangle(
+      g.drumCX + rollerOffset + g.rollerR + 8 * g.scale, g.rollerAY,
+      6, g.rollerR * 2 + 20, wallOpts
+    ));
+
+    // Chute from drum to sorter
+    machineParts.push(Bodies.rectangle(
+      g.drumCX - g.drumR - 10, g.drumCY + g.drumR * 0.5,
+      6, 60 * g.scale, { ...wallOpts, angle: 0.2 }
+    ));
+
+    // Collection bins — left for stems/MOG, center-right for must (crushed berries)
+    // Bin divider
+    machineParts.push(Bodies.rectangle(
+      g.binMustX - 30 * g.scale, g.binY - 15 * g.scale,
+      6, 40 * g.scale, wallOpts
+    ));
+    // Floor
+    machineParts.push(Bodies.rectangle(W / 2, g.binY + 20, W, 6, wallOpts));
+    // Left wall (stem rejection exit)
+    machineParts.push(Bodies.rectangle(8, g.binY, 6, 50, wallOpts));
+    // Right wall
+    machineParts.push(Bodies.rectangle(W - 8, g.binY, 6, 50, wallOpts));
+
+    World.add(world, machineParts);
+  }
+
+  function rebuildMachine() {
+    // Remove all machine parts and particles, rebuild
+    machineParts.forEach(b => World.remove(world, b));
+    particles.forEach(p => World.remove(world, p.body));
+    particles = [];
+    machineParts = [];
+    M = { sorted: 0, stems: 0, crushed: 0, whole: 0, carryover: 0, totalBerries: 0, totalStems: 0 };
+    buildMachine();
+  }
+
+  // ── Particle spawning ──
+  function spawnCluster() {
+    const g = getGeo();
+    const v = VARIETY[grapeVariety];
+    const cx = (g.hopperLeftX + g.hopperRightX) / 2 + (Math.random() - 0.5) * 30 * g.scale;
+    const cy = g.hopperTop + 20;
+
+    // Spawn a small cluster: 2-4 berries + maybe a stem
+    const nBerries = 2 + Math.floor(Math.random() * 3);
+    const hasStem = Math.random() < v.stemCount;
+
+    for (let i = 0; i < nBerries; i++) {
+      const r = v.berryR * g.scale * (0.85 + Math.random() * 0.3);
+      const body = Bodies.circle(cx + (Math.random() - 0.5) * 25 * g.scale, cy + (Math.random() - 0.5) * 20, r, {
+        friction: 0.4,
+        restitution: 0.35,
+        density: 1.0,
+        frictionAir: 0.005,
+        label: 'berry'
+      });
+      World.add(world, body);
+      particles.push({ body, type: 'berry', crushed: false, counted: false, r, color: v.berryColor, crushedColor: v.crushedColor });
+      M.totalBerries++;
+    }
+
+    if (hasStem) {
+      const stemLen = v.stemLen * g.scale * (0.7 + Math.random() * 0.6);
+      const stemBody = Bodies.rectangle(cx, cy, stemLen, 4 * g.scale, {
+        friction: 0.5,
+        restitution: 0.2,
+        density: 0.6,
+        frictionAir: 0.008,
+        label: 'stem',
+        angle: Math.random() * Math.PI
+      });
+      World.add(world, stemBody);
+      particles.push({ body: stemBody, type: 'stem', crushed: false, counted: false, r: stemLen, color: '#3a5a28' });
+      M.totalStems++;
+    }
+  }
+
+  // ── Collision handling ──
+  function onCollision(event) {
+    const v = VARIETY[grapeVariety];
+    const g = getGeo();
+    for (const pair of event.pairs) {
+      // Check berry hitting roller
+      const labels = [pair.bodyA.label, pair.bodyB.label];
+      if (labels.includes('berry') && (labels.includes('rollerA') || labels.includes('rollerB'))) {
+        const berryParticle = pair.bodyA.label === 'berry' ?
+          particles.find(p => p.body === pair.bodyA) :
+          particles.find(p => p.body === pair.bodyB);
+        if (berryParticle && !berryParticle.crushed) {
+          // Crush probability based on gap vs berry radius
+          const gapPx = P.rollerGap * g.scale;
+          const crushThreshold = gapPx + berryParticle.r * 0.5;
+          const relativeVel = Math.hypot(
+            pair.bodyA.velocity.x - pair.bodyB.velocity.x,
+            pair.bodyA.velocity.y - pair.bodyB.velocity.y
+          );
+          if (berryParticle.r > gapPx * 0.55 && relativeVel > 2) {
+            berryParticle.crushed = true;
+            // Shrink the berry slightly
+            Body.scale(berryParticle.body, 0.82, 0.82);
+            berryParticle.r *= 0.82;
+          }
+        }
+      }
+    }
+  }
+
+  // ── Rotation ──
+  function applyDrumRotation() {
+    if (!drumBody) return;
+    const g = getGeo();
+    const angVel = P.drumSpeed * 0.105; // rad/s approx
+    drumAngle += angVel / 60;
+
+    for (const seg of drumBody) {
+      // Get current angle relative to center
+      const dx = seg.position.x - g.drumCX;
+      const dy = seg.position.y - g.drumCY;
+      const dist = Math.hypot(dx, dy);
+      const newAngle = Math.atan2(dy, dx) + angVel / 60;
+      const newX = g.drumCX + Math.cos(newAngle) * dist;
+      const newY = g.drumCY + Math.sin(newAngle) * dist;
+      Body.setPosition(seg, { x: newX, y: newY });
+      Body.setAngle(seg, newAngle + Math.PI / 2);
+      Body.setAngularVelocity(seg, angVel);
+    }
+  }
+
+  function applyRollerTorque() {
+    if (!rollerA || !rollerB) return;
+    // Counter-rotating: A clockwise, B counter-clockwise
+    const torque = P.rollerSpeed * 0.0008;
+    Body.setAngularVelocity(rollerA, -P.rollerSpeed * 0.105);
+    Body.setAngularVelocity(rollerB, P.rollerSpeed * 0.105);
+  }
+
+  // ── Counting & cleanup ──
+  function updateCounts() {
+    const g = getGeo();
+    for (const p of particles) {
+      if (p.counted) continue;
+      const pos = p.body.position;
+
+      // Fell into must bin (bottom right area, past rollers)
+      if (pos.y > g.binY - 10) {
+        if (pos.x > g.binMustX - 30 * g.scale) {
+          // Must collection bin
+          if (p.type === 'berry') {
+            if (p.crushed) M.crushed++;
+            else M.whole++;
+            M.sorted++;
+          } else if (p.type === 'stem') {
+            M.carryover++;
+          }
+          p.counted = true;
+          World.remove(world, p.body);
+        } else if (pos.x < g.binMustX - 30 * g.scale) {
+          // Stem rejection bin
+          if (p.type === 'stem') M.stems++;
+          else if (p.type === 'berry') {
+            // Lost berry (went to stem side)
+          }
+          p.counted = true;
+          World.remove(world, p.body);
+        }
+      }
+
+      // Off-screen cleanup
+      if (pos.y > H + 100 || pos.x < -100 || pos.x > W + 100) {
+        p.counted = true;
+        World.remove(world, p.body);
+      }
+    }
+
+    // Remove counted particles from array
+    particles = particles.filter(p => !p.counted);
+  }
+
+  // ── Rendering ──
+  function drawBackground() {
+    // Dark winery background gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#0e1a14');
+    grad.addColorStop(0.5, '#122018');
+    grad.addColorStop(1, '#0a1410');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle grid pattern
+    ctx.strokeStyle = 'rgba(40, 60, 45, 0.15)';
+    ctx.lineWidth = 1;
+    const gridSize = 40;
+    for (let x = 0; x < W; x += gridSize) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += gridSize) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  }
+
+  function drawMachine() {
+    const g = getGeo();
+
+    // Feed hopper
+    ctx.strokeStyle = '#4a6a50';
+    ctx.lineWidth = 4;
+    ctx.fillStyle = 'rgba(30, 50, 35, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(g.hopperLeftX - 8 * g.scale, g.hopperTop);
+    ctx.lineTo(g.hopperRightX + 8 * g.scale, g.hopperTop);
+    ctx.lineTo(g.hopperRightX + 5 * g.scale, g.hopperBottom);
+    ctx.lineTo(g.hopperLeftX - 5 * g.scale, g.hopperBottom);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Hopper label
+    ctx.fillStyle = '#6a8a70';
+    ctx.font = `${10 * g.scale}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText('FEED HOPPER', (g.hopperLeftX + g.hopperRightX) / 2, g.hopperTop - 5);
+
+    // Destemmer drum
+    ctx.save();
+    ctx.translate(g.drumCX, g.drumCY);
+    ctx.rotate(drumAngle);
+
+    // Drum outer ring
+    ctx.strokeStyle = '#5a7a60';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, g.drumR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Drum inner ring
+    ctx.strokeStyle = '#3a5a40';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, g.drumInnerR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Drum holes (perforations)
+    const holeR = Math.max(4, P.holeSize * 0.4 * g.scale);
+    const numHoles = 12;
+    for (let i = 0; i < numHoles; i++) {
+      const a = (i / numHoles) * Math.PI * 2;
+      const hx = Math.cos(a) * g.drumInnerR * 0.85;
+      const hy = Math.sin(a) * g.drumInnerR * 0.85;
+      ctx.fillStyle = 'rgba(10, 20, 15, 0.6)';
+      ctx.beginPath();
+      ctx.arc(hx, hy, holeR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Lift paddles inside drum
+    ctx.strokeStyle = '#4a6a50';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * g.drumInnerR * 0.3, Math.sin(a) * g.drumInnerR * 0.3);
+      ctx.lineTo(Math.cos(a) * g.drumInnerR * 0.9, Math.sin(a) * g.drumInnerR * 0.9);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Drum label
+    ctx.fillStyle = '#6a8a70';
+    ctx.font = `${10 * g.scale}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText('DESTEMMER DRUM', g.drumCX, g.drumCY - g.drumR - 8);
+
+    // Rotation indicator
+    ctx.strokeStyle = '#8bc34a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const indAngle = drumAngle;
+    ctx.arc(g.drumCX, g.drumCY - g.drumR - 16, 8, indAngle, indAngle + Math.PI * 1.5);
+    ctx.stroke();
+
+    // Sorter grid
+    ctx.strokeStyle = '#5a7a60';
+    ctx.lineWidth = 3;
+    const inclineRad = P.incline * Math.PI / 180;
+    const gridLen = Math.hypot(g.gridRightX - g.gridLeftX, g.gridBotY - g.gridTopY);
+    const numBars = 8;
+    for (let i = 0; i <= numBars; i++) {
+      const t = i / (numBars + 1);
+      const bx = g.gridLeftX + (g.gridRightX - g.gridLeftX) * t;
+      const by = g.gridTopY + (g.gridBotY - g.gridTopY) * t;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(inclineRad + Math.PI / 2);
+      ctx.beginPath();
+      ctx.rect(-2, -15 * g.scale, 4, 30 * g.scale);
+      ctx.fillStyle = '#3a5a40';
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Grid label
+    ctx.fillStyle = '#6a8a70';
+    ctx.font = `${10 * g.scale}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.save();
+    ctx.translate((g.gridLeftX + g.gridRightX) / 2, g.gridTopY - 12);
+    ctx.rotate(inclineRad);
+    ctx.fillText('SORTER GRID', 0, 0);
+    ctx.restore();
+
+    // Crusher rollers
+    drawRoller(rollerA, '#8a6a3a', '#6a4a2a');
+    drawRoller(rollerB, '#8a6a3a', '#6a4a2a');
+
+    // Roller gap indicator
+    if (rollerA && rollerB) {
+      const gapDist = Math.hypot(rollerA.position.x - rollerB.position.x, rollerA.position.y - rollerB.position.y) - 2 * g.rollerR;
+      ctx.fillStyle = '#8bc34a';
+      ctx.font = `${9 * g.scale}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`gap: ${(gapDist / g.scale).toFixed(1)}mm`, (rollerA.position.x + rollerB.position.x) / 2, g.rollerAY + g.rollerR + 20);
+    }
+
+    // Roller label
+    ctx.fillStyle = '#6a8a70';
+    ctx.font = `${10 * g.scale}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText('CRUSHER ROLLERS', g.drumCX, g.rollerAY + g.rollerR + 35);
+
+    // Collection bins
+    ctx.fillStyle = 'rgba(30, 45, 35, 0.4)';
+    ctx.strokeStyle = '#4a6a50';
+    ctx.lineWidth = 2;
+    // Must bin
+    ctx.beginPath();
+    ctx.rect(g.binMustX - 30 * g.scale, g.binY - 25 * g.scale, W - g.binMustX - 15, 45 * g.scale);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#6a8a70';
+    ctx.font = `${9 * g.scale}px system-ui`;
+    ctx.fillText('MUST', g.binMustX + (W - g.binMustX) / 2 - 15, g.binY + 5);
+
+    // Stem bin
+    ctx.beginPath();
+    ctx.rect(15, g.binY - 25 * g.scale, g.binMustX - 30 * g.scale - 15, 45 * g.scale);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#6a8a70';
+    ctx.fillText('STEMS / MOG', g.binMustX / 2, g.binY + 5);
+
+    // Flow direction arrows
+    drawArrow(ctx, (g.hopperLeftX + g.hopperRightX) / 2, g.hopperBottom + 15, g.drumCX - g.drumR + 10, g.drumCY - 10, '#8bc34a80');
+    drawArrow(ctx, g.drumCX, g.drumCY + g.drumR + 10, (g.gridLeftX + g.gridRightX) / 2, g.gridTopY - 5, '#8bc34a80');
+    drawArrow(ctx, (g.gridLeftX + g.gridRightX) / 2, g.gridBotY + 10, g.drumCX, g.rollerAY - g.rollerR - 10, '#8bc34a80');
+  }
+
+  function drawRoller(body, fillCol, strokeCol) {
+    if (!body) return;
+    const g = getGeo();
+    ctx.save();
+    ctx.translate(body.position.x, body.position.y);
+    ctx.rotate(body.angle);
+
+    // Roller body
+    ctx.fillStyle = fillCol;
+    ctx.strokeStyle = strokeCol;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, g.rollerR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Knurled surface lines
+    ctx.strokeStyle = strokeCol;
+    ctx.lineWidth = 1.5;
+    const numRidges = 16;
+    for (let i = 0; i < numRidges; i++) {
+      const a = (i / numRidges) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * g.rollerR * 0.85, Math.sin(a) * g.rollerR * 0.85);
+      ctx.lineTo(Math.cos(a) * g.rollerR, Math.sin(a) * g.rollerR);
+      ctx.stroke();
+    }
+
+    // Center hub
+    ctx.fillStyle = '#4a3a1a';
+    ctx.beginPath();
+    ctx.arc(0, 0, g.rollerR * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawArrow(ctx, x1, y1, x2, y2, color) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Arrowhead
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 8 * Math.cos(ang - 0.4), y2 - 8 * Math.sin(ang - 0.4));
+    ctx.lineTo(x2 - 8 * Math.cos(ang + 0.4), y2 - 8 * Math.sin(ang + 0.4));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const pos = p.body.position;
+      const angle = p.body.angle;
+
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(angle);
+
+      if (p.type === 'berry') {
+        const r = p.r;
+        if (p.crushed) {
+          // Crushed berry — flattened, darker, juice splash
+          ctx.fillStyle = p.crushedColor;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, r * 0.9, r * 0.6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Juice highlight
+          ctx.fillStyle = 'rgba(200, 40, 60, 0.4)';
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          // Small juice droplets
+          ctx.fillStyle = 'rgba(154, 34, 53, 0.6)';
+          ctx.beginPath();
+          ctx.arc(r * 0.7, r * 0.3, r * 0.15, 0, Math.PI * 2);
+          ctx.arc(-r * 0.6, r * 0.4, r * 0.12, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Whole berry — round, glossy
+          const grad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r);
+          grad.addColorStop(0, p.color);
+          grad.addColorStop(0.7, p.color);
+          grad.addColorStop(1, 'rgba(40, 20, 30, 0.8)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fill();
+          // Bloom highlight
+          ctx.fillStyle = 'rgba(180, 160, 170, 0.25)';
+          ctx.beginPath();
+          ctx.arc(-r * 0.35, -r * 0.35, r * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (p.type === 'stem') {
+        // Stem — elongated rectangle, green-brown
+        ctx.fillStyle = p.color;
+        ctx.strokeStyle = '#2a4a18';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.rect(-p.r / 2, -2 * 1.5, p.r, 4 * 1.5);
+        ctx.fill();
+        ctx.stroke();
+        // Small nodes along stem
+        ctx.fillStyle = '#5a7a48';
+        for (let i = -2; i <= 2; i++) {
+          ctx.beginPath();
+          ctx.arc(i * p.r * 0.2, 0, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      ctx.restore();
+    }
+  }
+
+  // ── Metrics UI ──
+  function updateMetricsUI() {
+    const total = M.sorted + M.stems + M.carryover;
+    const eff = total > 0 ? (M.crushed / total * 100) : 0;
+    const carryoverPct = M.totalStems > 0 ? (M.carryover / M.totalStems * 100) : 0;
+
+    document.getElementById('m-sorted').textContent = M.sorted;
+    document.getElementById('m-stems').textContent = M.stems;
+    document.getElementById('m-crushed').textContent = M.crushed;
+    document.getElementById('m-whole').textContent = M.whole;
+    document.getElementById('m-carryover').textContent = carryoverPct.toFixed(1) + '%';
+    document.getElementById('m-eff').textContent = eff.toFixed(1) + '%';
+
+    document.getElementById('bar-sorted').style.width = Math.min(100, M.sorted / Math.max(1, M.totalBerries) * 100) + '%';
+    document.getElementById('bar-stems').style.width = Math.min(100, M.stems / Math.max(1, M.totalStems) * 100) + '%';
+    document.getElementById('bar-crushed').style.width = Math.min(100, M.crushed / Math.max(1, M.sorted) * 100) + '%';
+    document.getElementById('bar-whole').style.width = Math.min(100, M.whole / Math.max(1, M.sorted) * 100) + '%';
+
+    const carryBar = document.getElementById('bar-carryover');
+    carryBar.style.width = Math.min(100, carryoverPct) + '%';
+    carryBar.className = 'metric-bar-fill' + (carryoverPct > 15 ? ' bad' : carryoverPct > 5 ? ' warn' : '');
+
+    // Status badge
+    const badge = document.getElementById('status-badge');
+    if (carryoverPct > 15 || eff < 30) {
+      badge.textContent = 'Poor — adjust settings';
+      badge.className = 'status-badge status-bad';
+    } else if (carryoverPct > 5 || eff < 60) {
+      badge.textContent = 'Suboptimal';
+      badge.className = 'status-badge status-warn';
+    } else {
+      badge.textContent = 'Optimal';
+      badge.className = 'status-badge status-good';
+    }
+  }
+
+  // ── Controls ──
+  function setupControls() {
+    const sd = document.getElementById('slider-drum');
+    const sg = document.getElementById('slider-gap');
+    const sr = document.getElementById('slider-roller');
+    const sh = document.getElementById('slider-hole');
+    const si = document.getElementById('slider-incline');
+
+    sd.addEventListener('input', () => {
+      P.drumSpeed = +sd.value;
+      document.getElementById('val-drum').textContent = P.drumSpeed + ' rpm';
+    });
+    sg.addEventListener('input', () => {
+      P.rollerGap = +sg.value;
+      document.getElementById('val-gap').textContent = P.rollerGap + ' mm';
+      rebuildMachine();
+    });
+    sr.addEventListener('input', () => {
+      P.rollerSpeed = +sr.value;
+      document.getElementById('val-roller').textContent = P.rollerSpeed + ' rpm';
+    });
+    sh.addEventListener('input', () => {
+      P.holeSize = +sh.value;
+      document.getElementById('val-hole').textContent = P.holeSize + ' mm';
+    });
+    si.addEventListener('input', () => {
+      P.incline = +si.value;
+      document.getElementById('val-incline').textContent = P.incline + '°';
+      rebuildMachine();
+    });
+
+    // Pour toggle
+    const pourBtn = document.getElementById('btn-pour');
+    pourBtn.addEventListener('click', () => {
+      pouring = !pouring;
+      pourBtn.textContent = pouring ? '⏸ Pause Feed' : '▶ Start Feed';
+      pourBtn.classList.toggle('active', pouring);
+    });
+
+    // Reset
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      rebuildMachine();
+    });
+
+    // Variety
+    document.querySelectorAll('[data-variety]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-variety]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        grapeVariety = btn.dataset.variety;
+        rebuildMachine();
+      });
+    });
+  }
+
+  // ── Main loop ──
+  function loop() {
+    frameCount++;
+
+    // Spawn grape clusters
+    if (pouring && frameCount - lastSpawnFrame > 25) {
+      spawnCluster();
+      lastSpawnFrame = frameCount;
+    }
+
+    // Apply rotations
+    applyDrumRotation();
+    applyRollerTorque();
+
+    // Physics step
+    Engine.update(engine, 1000 / 60);
+
+    // Count and cleanup
+    if (frameCount % 10 === 0) updateCounts();
+
+    // Render
+    drawBackground();
+    drawMachine();
+    drawParticles();
+
+    // Update metrics
+    if (frameCount % 15 === 0) updateMetricsUI();
+
+    requestAnimationFrame(loop);
+  }
+
+  // Start
+  init();
+})();
+</script>
+</body>
+</html>
