@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Trellis Wire Tension & Load Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/konva@9.3.6/konva.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1a14;
+    --panel: rgba(16,28,22,0.92);
+    --border: #2a5a3a;
+    --text: #d4e8d0;
+    --muted: #8aa89a;
+    --accent: #6cd97a;
+    --accent2: #e0b870;
+    --danger: #e85d5d;
+    --warn: #e8b85d;
+    --ok: #5dd97a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; overflow: hidden; height: 100%; }
+
+  .disclaimer { background: #14181a; border-bottom: 1px solid #2a3420; color: #b0c8a0; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container { position: fixed; inset: 0; z-index: 0; background: linear-gradient(180deg, #0a1a12 0%, #0e2418 60%, #08180f 100%); }
+  #canvas-container canvas { width: 100%; height: 100%; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    pointer-events: auto;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .panel h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.5rem; font-weight: 700; }
+  .panel label { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--muted); margin: 0.45rem 0; }
+  .panel label span { color: var(--text); font-weight: 600; min-width: 3.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .panel input[type=range] { width: 100%; accent-color: var(--accent); height: 16px; }
+  .panel select {
+    width: 100%; background: #0e2018; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.4rem 0.5rem; font-size: 0.85rem; cursor: pointer;
+  }
+  .panel .preset-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.3rem; }
+  .preset-btn {
+    flex: 1; min-width: 60px; background: #0e2018; border: 1px solid var(--border);
+    color: var(--text); padding: 0.35rem 0.3rem; border-radius: 6px; font-size: 0.75rem;
+    cursor: pointer; transition: all 0.15s; text-align: center; pointer-events: auto;
+  }
+  .preset-btn:hover { border-color: var(--accent); background: #142818; }
+  .preset-btn.active { border-color: var(--accent); background: rgba(108,217,122,0.12); color: var(--accent); }
+  .check-row { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 0.35rem; }
+  .check-row label { display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; font-size: 0.8rem; color: var(--text); }
+  .check-row input { accent-color: var(--accent); width: auto; }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px; width: 290px;
+    max-height: calc(100vh - 24px); overflow-y: auto;
+  }
+  #metrics {
+    position: absolute; top: 12px; right: 12px; width: 230px;
+    max-height: calc(100vh - 24px); overflow-y: auto;
+  }
+
+  .metric { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(42,90,58,0.3); }
+  .metric:last-child { border-bottom: none; }
+  .metric .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .metric .v.ok { color: var(--ok); }
+  .metric .v.warn { color: var(--warn); }
+  .metric .v.danger { color: var(--danger); }
+
+  .risk-bar { height: 6px; border-radius: 3px; background: #1a3020; margin: 0.35rem 0 0.1rem; overflow: hidden; }
+  .risk-bar-fill { height: 100%; border-radius: 3px; transition: width 0.2s, background 0.2s; }
+
+  .legend { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.4rem; font-size: 0.7rem; color: var(--muted); }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+
+  .tip { font-size: 0.72rem; color: var(--muted); margin-top: 0.5rem; font-style: italic; }
+
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 45vh !important;
+      min-height: 300px;
+      max-height: 420px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div class="panel" id="controls">
+    <h3>Trellis Configuration</h3>
+    <div class="preset-row" id="preset-row"></div>
+
+    <label>Wire Height (fruiting) <span id="lbl-wireH">1.20 m</span></label>
+    <input type="range" id="wireH" min="0.60" max="2.10" step="0.05" value="1.20">
+
+    <label>Post Spacing <span id="lbl-spacing">6.0 m</span></label>
+    <input type="range" id="spacing" min="3.0" max="9.0" step="0.5" value="6.0">
+
+    <label>Wire Gauge <span id="lbl-gauge">2.5 mm</span></label>
+    <input type="range" id="gauge" min="1.6" max="4.0" step="0.1" value="2.5">
+
+    <label>Crop Load / Wire <span id="lbl-crop">8.0 kg/m</span></label>
+    <input type="range" id="crop" min="0" max="20" step="0.5" value="8.0">
+
+    <label>Wind Pressure <span id="lbl-wind">0 Pa</span></label>
+    <input type="range" id="wind" min="0" max="250" step="5" value="0">
+
+    <label>Pre-tension <span id="lbl-pretension">300 N</span></label>
+    <input type="range" id="pretension" min="0" max="800" step="10" value="300">
+
+    <label>Post Diameter <span id="lbl-postD">0.12 m</span></label>
+    <input type="range" id="postD" min="0.06" max="0.20" step="0.01" value="0.12">
+
+    <div class="check-row">
+      <label><input type="checkbox" id="catchWire" checked> Catch wire</label>
+      <label><input type="checkbox" id="endAssembly" checked> End assembly</label>
+    </div>
+
+    <div class="tip">Drag posts horizontally to reposition. Click end-post to toggle anchor.</div>
+  </div>
+
+  <div class="panel" id="metrics">
+    <h3>Live Engineering Metrics</h3>
+    <div class="metric">Wire Tension <span class="v" id="m-tension">—</span></div>
+    <div class="metric">Sag Deflection <span class="v" id="m-sag">—</span></div>
+    <div class="metric">Sag / Span Ratio <span class="v" id="m-sagRatio">—</span></div>
+    <div class="metric">Wire UTS % <span class="v" id="m-uts">—</span></div>
+    <div class="risk-bar"><div class="risk-bar-fill" id="bar-uts"></div></div>
+
+    <div class="metric" style="margin-top:0.5rem;">Post Bending M <span class="v" id="m-moment">—</span></div>
+    <div class="metric">Post Stress <span class="v" id="m-postStress">—</span></div>
+    <div class="metric">Post Safety Factor <span class="v" id="m-postSF">—</span></div>
+    <div class="risk-bar"><div class="risk-bar-fill" id="bar-postSF"></div></div>
+
+    <div class="metric" style="margin-top:0.5rem;">End-post Uplift <span class="v" id="m-uplift">—</span></div>
+    <div class="metric">Lateral Resist. <span class="v" id="m-resist">—</span></div>
+    <div class="metric">System Status <span class="v" id="m-status">—</span></div>
+
+    <div class="legend">
+      <span><span class="legend-dot" style="background:#5dd97a;"></span>Safe</span>
+      <span><span class="legend-dot" style="background:#e8b85d;"></span>Caution</span>
+      <span><span class="legend-dot" style="background:#e85d5d;"></span>Critical</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ============ PARAMETERS & CONSTANTS ============
+  const STEEL_UTS = 1200;       // MPa, high-tensile trellis wire UTS (typ 1100-1400)
+  const STEEL_E = 200000;       // MPa, Young's modulus steel
+  const TIMBER_YIELD = 35;      // MPa, treated pine bending yield (30-45 range)
+  const TIMBER_E = 9000;        // MPa, pine modulus of elasticity
+  const GRAVITY = 9.81;
+  const DENSITY_STEEL = 7850;   // kg/m³
+  const DENSITY_TIMBER = 550;   // kg/m³
+
+  let P = {
+    wireH: 1.20,
+    spacing: 6.0,
+    gauge: 2.5,
+    crop: 8.0,
+    wind: 0,
+    pretension: 300,
+    postD: 0.12,
+    catchWire: true,
+    endAssembly: true
+  };
+
+  let stage, layer, bgLayer, wireLayer, postLayer, loadLayer;
+  let posts = [];   // {x, isEnd, isAnchor, line}
+  let wires = [];   // {y, gauge}
+  let stageW = 0, stageH = 0;
+
+  // ============ INIT ============
+  function init() {
+    var container = document.getElementById('canvas-container');
+    stageW = container.clientWidth;
+    stageH = container.clientHeight;
+    stage = new Konva.Stage({ container: 'canvas-container', width: stageW, height: stageH });
+    bgLayer = new Konva.Layer();
+    wireLayer = new Konva.Layer();
+    postLayer = new Konva.Layer();
+    loadLayer = new Konva.Layer();
+    stage.add(bgLayer, wireLayer, postLayer, loadLayer);
+    drawBackground();
+    buildScene();
+    bindControls();
+    update();
+  }
+
+  // ============ COORDINATE MAPPING ============
+  // World: meters. We render ~18m wide window with posts at their real spacing
+  function worldToScreen(wx, wy) {
+    var padX = 60;
+    var usableW = stageW - padX * 2;
+    var groundY = stageH * 0.88;
+    var maxWorldH = 2.5; // max vine height visible
+    var scale = Math.min(usableW / 18, groundY / maxWorldH);
+    return {
+      x: padX + (wx) * scale,
+      y: groundY - wy * scale,
+      scale: scale
+    };
+  }
+
+  function getScale() {
+    return Math.min((stageW - 120) / 18, (stageH * 0.88) / 2.5);
+  }
+
+  // ============ BACKGROUND ============
+  function drawBackground() {
+    bgLayer.destroyChildren();
+    var groundY = stageH * 0.88;
+    // Sky gradient
+    var sky = new Konva.Rect({
+      x: 0, y: 0, width: stageW, height: groundY,
+      fillLinearGradientStartPoint: { x: 0, y: 0 },
+      fillLinearGradientEndPoint: { x: 0, y: groundY },
+      fillLinearGradientColorStops: [0, '#0d2418', 0.5, '#112e1e', 1, '#163524'],
+      listening: false
+    });
+    bgLayer.add(sky);
+
+    // Ground
+    var ground = new Konva.Rect({
+      x: 0, y: groundY, width: stageW, height: stageH - groundY,
+      fill: '#0a140e', listening: false
+    });
+    bgLayer.add(ground);
+
+    // Soil layers
+    for (var i = 0; i < 3; i++) {
+      var sy = groundY + 10 + i * 20;
+      if (sy < stageH) {
+        bgLayer.add(new Konva.Line({
+          points: [0, sy, stageW, sy],
+          stroke: 'rgba(42,90,58,' + (0.15 - i*0.04) + ')',
+          strokeWidth: 1, listening: false
+        }));
+      }
+    }
+
+    // Horizon line
+    bgLayer.add(new Konva.Line({
+      points: [0, groundY, stageW, groundY],
+      stroke: '#2a5a3a', strokeWidth: 2, listening: false
+    }));
+
+    // Ruler marks (bottom)
+    var scale = getScale();
+    var padX = 60;
+    for (var m = 0; m <= 18; m += 2) {
+      var rx = padX + m * scale;
+      bgLayer.add(new Konva.Line({
+        points: [rx, groundY, rx, groundY + 8],
+        stroke: '#3a6a4a', strokeWidth: 1, listening: false
+      }));
+      if (m > 0 && m < 18) {
+        bgLayer.add(new Konva.Text({
+          x: rx - 8, y: groundY + 10, text: m + 'm', fontSize: 9,
+          fontFamily: 'monospace', fill: '#5a8a6a', listening: false
+        }));
+      }
+    }
+
+    // Height ruler (left)
+    for (var h = 0; h <= 2.5; h += 0.5) {
+      var hy = groundY - h * scale;
+      bgLayer.add(new Konva.Line({
+        points: [padX - 5, hy, padX, hy], stroke: '#3a6a4a', strokeWidth: 1, listening: false
+      }));
+      if (h > 0) {
+        bgLayer.add(new Konva.Text({
+          x: 4, y: hy - 6, text: h.toFixed(1) + 'm', fontSize: 9,
+          fontFamily: 'monospace', fill: '#5a8a6a', listening: false
+        }));
+      }
+    }
+
+    bgLayer.batchDraw();
+  }
+
+  // ============ SCENE BUILD ============
+  function buildScene() {
+    postLayer.destroyChildren();
+    wireLayer.destroyChildren();
+    loadLayer.destroyChildren();
+    posts = [];
+
+    var scale = getScale();
+    var padX = 60;
+    var groundY = stageH * 0.88;
+    var nPosts = Math.floor(18 / P.spacing) + 1;
+    if (nPosts < 3) nPosts = 3;
+
+    // Create posts
+    for (var i = 0; i < nPosts; i++) {
+      var wx = i * P.spacing;
+      if (wx > 18) break;
+      var isEnd = (i === 0 || i === nPosts - 1);
+      var isAnchor = isEnd && P.endAssembly;
+      posts.push({ wx: wx, isEnd: isEnd, isAnchor: isAnchor, idx: i });
+    }
+
+    // Draw posts
+    for (var pi = 0; pi < posts.length; pi++) {
+      (function(post) {
+        var sx = padX + post.wx * scale;
+        var postHeightPx = (P.wireH + 0.35) * scale;
+        var postWpx = Math.max(8, P.postD * scale * 0.6);
+
+        // Post body
+        var postRect = new Konva.Rect({
+          x: sx - postWpx/2, y: groundY - postHeightPx,
+          width: postWpx, height: postHeightPx,
+          cornerRadius: 2,
+          fill: post.isAnchor ? '#5a6e4a' : '#6a5a3a',
+          stroke: post.isEnd ? '#8a7a4a' : '#4a4030',
+          strokeWidth: 1.5,
+          draggable: true,
+          dragBoundFunc: function(pos) {
+            // Constrain to horizontal within bounds
+            var minX = padX + 5;
+            var maxX = stageW - padX - 5;
+            var clampedX = Math.max(minX, Math.min(maxX, pos.x));
+            return { x: clampedX, y: groundY - postHeightPx };
+          }
+        });
+        post.rect = postRect;
+        post.postWpx = postWpx;
+        post.postHeightPx = postHeightPx;
+        post.sx = sx;
+
+        // Anchor diagonal brace for end assemblies
+        var brace = null;
+        if (post.isAnchor) {
+          brace = new Konva.Line({
+            points: [sx, groundY - postHeightPx * 0.3, sx + 30, groundY],
+            stroke: '#7a6e5a', strokeWidth: 3, lineCap: 'round', listening: false
+          });
+          post.brace = brace;
+        }
+
+        // Anchor ground plate
+        var plate = null;
+        if (post.isAnchor) {
+          plate = new Konva.Rect({
+            x: sx - postWpx, y: groundY - 4,
+            width: postWpx * 2.5, height: 6,
+            fill: '#3a3a2a', cornerRadius: 2, listening: false
+          });
+          post.plate = plate;
+        }
+
+        // Click to toggle anchor (end posts only)
+        postRect.on('click', function() {
+          if (post.isEnd) {
+            post.isAnchor = !post.isAnchor;
+            buildScene();
+            update();
+          }
+        });
+
+        postRect.on('dragmove', function() {
+          var newSx = postRect.x() + postWpx/2;
+          post.wx = (newSx - padX) / scale;
+          // Sort posts by wx
+          posts.sort(function(a,b) { return a.wx - b.wx; });
+          rebuildWires();
+          drawLoads();
+          updateMetrics();
+        });
+
+        postRect.on('dragend', function() {
+          buildScene();
+          update();
+        });
+
+        if (plate) postLayer.add(plate);
+        if (brace) postLayer.add(brace);
+        postLayer.add(postRect);
+
+        // Label
+        var lbl = new Konva.Text({
+          x: sx - 15, y: groundY + 12, text: (post.isAnchor ? '⚓' : (post.isEnd ? '◆' : '│')),
+          fontSize: 10, fill: post.isAnchor ? '#8aa89a' : '#6a6a5a', listening: false
+        });
+        postLayer.add(lbl);
+      })(posts[pi]);
+    }
+
+    rebuildWires();
+    postLayer.batchDraw();
+  }
+
+  // ============ WIRES ============
+  function rebuildWires() {
+    wireLayer.destroyChildren();
+    var scale = getScale();
+    var padX = 60;
+    var groundY = stageH * 0.88;
+
+    // Fruit wire at P.wireH
+    wires = [{ y: P.wireH, gauge: P.gauge }];
+    // Catch wire at P.wireH + 0.25
+    if (P.catchWire) {
+      wires.push({ y: P.wireH + 0.28, gauge: P.gauge * 0.85 });
+    }
+
+    for (var wi = 0; wi < wires.length; wi++) {
+      var wire = wires[wi];
+      var wireY = groundY - wire.y * scale;
+
+      for (var i = 0; i < posts.length - 1; i++) {
+        var p1 = posts[i];
+        var p2 = posts[i+1];
+        var x1 = padX + p1.wx * scale;
+        var x2 = padX + p2.wx * scale;
+
+        // Compute sag
+        var span = p2.wx - p1.wx;
+        if (span <= 0) continue;
+        var load = P.crop * GRAVITY; // N/m uniform load
+        if (wi === 1) load *= 0.3; // catch wire carries less
+        var windLoad = P.wind * (wire.y * 0.4); // simplified wind on canopy section
+        load += windLoad;
+
+        var H = P.pretension + load * span / 8; // approximate horizontal tension component
+        var sag = load * span * span / (8 * H); // catenary approx (parabolic)
+        var sagPx = sag * scale;
+        if (sagPx > 60) sagPx = 60; // clamp visual
+
+        // Color by tension ratio
+        var wireArea = Math.PI * Math.pow(wire.gauge / 2000, 2); // m²
+        var tensionMPa = H / (wireArea * 1e-6);
+        var utsRatio = tensionMPa / STEEL_UTS;
+        var wireColor;
+        if (utsRatio < 0.4) wireColor = '#5dd97a';
+        else if (utsRatio < 0.65) wireColor = '#e8b85d';
+        else if (utsRatio < 0.85) wireColor = '#e8805d';
+        else wireColor = '#e85d5d';
+
+        // Draw sagging wire as a parabola
+        var pts = [];
+        var segs = 20;
+        for (var s = 0; s <= segs; s++) {
+          var t = s / segs;
+          var px = x1 + (x2 - x1) * t;
+          var py = wireY + sagPx * 4 * t * (1 - t); // parabola: max sag at center
+          pts.push(px, py);
+        }
+
+        var wireLine = new Konva.Line({
+          points: pts, stroke: wireColor, strokeWidth: Math.max(1.5, wire.gauge * 0.8),
+          lineCap: 'round', listening: false
+        });
+        wireLayer.add(wireLine);
+
+        // Tension indicator
+        if (i === Math.floor((posts.length - 1) / 2)) {
+          var midX = (x1 + x2) / 2;
+          var midY = wireY + sagPx;
+          var arrowLen = Math.min(40, Math.max(15, H / 20));
+          // Tension arrows pulling inward
+          wireLayer.add(new Konva.Arrow({
+            points: [midX - arrowLen - 15, midY, midX - 15, midY],
+            pointerLength: 6, pointerWidth: 5, stroke: wireColor, strokeWidth: 2, listening: false
+          }));
+          wireLayer.add(new Konva.Arrow({
+            points: [midX + 15, midY, midX + arrowLen + 15, midY],
+            pointerLength: 6, pointerWidth: 5, stroke: wireColor, strokeWidth: 2, listening: false
+          }));
+        }
+      }
+    }
+
+    wireLayer.batchDraw();
+  }
+
+  // ============ LOADS VISUALIZATION ============
+  function drawLoads() {
+    loadLayer.destroyChildren();
+    var scale = getScale();
+    var padX = 60;
+    var groundY = stageH * 0.88;
+    var wireY = groundY - P.wireH * scale;
+
+    // Draw crop load as distributed force arrows on each span
+    for (var i = 0; i < posts.length - 1; i++) {
+      var p1 = posts[i];
+      var p2 = posts[i+1];
+      var x1 = padX + p1.wx * scale;
+      var x2 = padX + p2.wx * scale;
+      var span = p2.wx - p1.wx;
+      if (span <= 0) continue;
+
+      var nArrows = Math.max(3, Math.floor(span * 2));
+      for (var a = 0; a < nArrows; a++) {
+        var t = (a + 0.5) / nArrows;
+        var ax = x1 + (x2 - x1) * t;
+        var arrowLen = Math.min(35, Math.max(8, P.crop * 1.5));
+        if (arrowLen > 0.5) {
+          loadLayer.add(new Konva.Arrow({
+            points: [ax, wireY - arrowLen - 15, ax, wireY - 10],
+            pointerLength: 5, pointerWidth: 4, stroke: 'rgba(224,184,112,0.6)',
+            strokeWidth: 1.5, listening: false
+          }));
+        }
+      }
+    }
+
+    // Wind load visualization
+    if (P.wind > 0) {
+      var windY = groundY - P.wireH * scale - 40;
+      var windOpacity = Math.min(0.7, P.wind / 200 + 0.15);
+      for (var w = 0; w < 8; w++) {
+        var wx = padX + (w / 7) * (stageW - padX * 2);
+        var wl = 20 + P.wind * 0.3;
+        loadLayer.add(new Konva.Arrow({
+          points: [wx - wl, windY, wx + 10, windY],
+          pointerLength: 6, pointerWidth: 4, stroke: 'rgba(108,217,200,' + windOpacity + ')',
+          strokeWidth: 1.5, dash: [3, 2], listening: false
+        }));
+      }
+      // Wind label
+      loadLayer.add(new Konva.Text({
+        x: stageW / 2 - 40, y: windY - 18, text: '🌬 ' + P.wind + ' Pa',
+        fontSize: 11, fill: 'rgba(108,217,200,0.7)', listening: false
+      }));
+    }
+
+    // Post bending moment visualization
+    for (var bi = 0; bi < posts.length; bi++) {
+      var post = posts[bi];
+      if (!post.rect) continue;
+      var sx = padX + post.wx * scale;
+      var moment = computePostMoment(post);
+      var momentRatio = moment / (TIMBER_YIELD * 1e6 * Math.pow(P.postD, 3) / 32 * 1e-6);
+      if (momentRatio > 0.05) {
+        var bendColor = momentRatio < 0.5 ? '#5dd97a' : momentRatio < 0.8 ? '#e8b85d' : '#e85d5d';
+        var bendArrow = new Konva.Arrow({
+          points: [sx + post.postWpx/2 + 5, groundY - post.postHeightPx * 0.6,
+                   sx + post.postWpx/2 + 5 + Math.min(40, momentRatio * 50), groundY - post.postHeightPx * 0.6],
+          pointerLength: 6, pointerWidth: 5, stroke: bendColor, strokeWidth: 2, listening: false
+        });
+        loadLayer.add(bendArrow);
+      }
+    }
+
+    loadLayer.batchDraw();
+  }
+
+  // ============ PHYSICS CALCULATIONS ============
+  function computePostMoment(post) {
+    // Bending moment at base from wire tension
+    var scale = getScale();
+    var totalMoment = 0;
+    var wireHeightAvg = P.wireH;
+    // Tension from adjacent spans
+    var idx = posts.indexOf(post);
+    var span1 = idx > 0 ? post.wx - posts[idx-1].wx : P.spacing;
+    var span2 = idx < posts.length - 1 ? posts[idx+1].wx - post.wx : P.spacing;
+
+    // Horizontal tension force
+    var wireArea = Math.PI * Math.pow(P.gauge / 2000, 2);
+    var load = P.crop * GRAVITY + P.wind * (P.wireH * 0.4);
+    var H = P.pretension + load * P.spacing / 8;
+    var numWires = P.catchWire ? 2 : 1;
+
+    // End posts take full tension reaction; line posts take difference
+    if (post.isAnchor) {
+      // End post resists full tension from one side
+      totalMoment = H * numWires * wireHeightAvg;
+    } else if (post.isEnd) {
+      totalMoment = H * numWires * wireHeightAvg;
+    } else {
+      // Line post: small imbalance from tension differences + wind
+      totalMoment = H * numWires * wireHeightAvg * 0.05 + P.wind * wireHeightAvg * wireHeightAvg * 0.3;
+    }
+    return totalMoment;
+  }
+
+  function updateMetrics() {
+    var wireArea = Math.PI * Math.pow(P.gauge / 2000, 2); // m²
+    var load = P.crop * GRAVITY; // N/m
+    var windLoad = P.wind * (P.wireH * 0.4);
+    load += windLoad;
+    var span = P.spacing;
+    var H = P.pretension + load * span / 8; // N
+    var sag = load * span * span / (8 * H); // m
+    var tensionMPa = H / (wireArea * 1e-6); // Pa -> MPa (wireArea in m², *1e-6 = mm²)
+    // Actually: wireArea in m², *1e6 = mm²; tensionMPa = H / (wireArea * 1e6)
+    tensionMPa = H / (wireArea * 1e6);
+    var utsRatio = tensionMPa / STEEL_UTS;
+
+    // Post bending
+    var endPost = posts[0];
+    var moment = computePostMoment(endPost); // N·m
+    var postSectionMod = Math.PI * Math.pow(P.postD, 3) / 32; // m³ (solid circle approx)
+    var postStress = moment / postSectionMod / 1e6; // MPa
+    var postSF = TIMBER_YIELD / (postStress || 0.001);
+
+    // End post uplift
+    var uplift = H * (P.catchWire ? 2 : 1); // N
+    var soilResist = P.endAssembly ? 4000 : 800; // N, simplified soil resistance
+
+    // Status
+    var status, statusClass;
+    if (utsRatio > 0.85 || postSF < 1.2 || uplift > soilResist) {
+      status = 'CRITICAL'; statusClass = 'danger';
+    } else if (utsRatio > 0.6 || postSF < 2.0 || uplift > soilResist * 0.7) {
+      status = 'CAUTION'; statusClass = 'warn';
+    } else {
+      status = 'SAFE'; statusClass = 'ok';
+    }
+
+    setMetric('m-tension', H.toFixed(0) + ' N', tensionMPa/STEEL_UTS < 0.6 ? 'ok' : tensionMPa/STEEL_UTS < 0.85 ? 'warn' : 'danger');
+    setMetric('m-sag', sag.toFixed(2) + ' m', sag < 0.05 ? 'ok' : sag < 0.1 ? 'warn' : 'danger');
+    setMetric('m-sagRatio', (sag/span*100).toFixed(1) + ' %', sag/span < 0.01 ? 'ok' : sag/span < 0.02 ? 'warn' : 'danger');
+    setMetric('m-uts', (utsRatio*100).toFixed(1) + ' %', utsRatio < 0.6 ? 'ok' : utsRatio < 0.85 ? 'warn' : 'danger');
+
+    var barUts = document.getElementById('bar-uts');
+    barUts.style.width = Math.min(100, utsRatio * 100) + '%';
+    barUts.style.background = utsRatio < 0.6 ? '#5dd97a' : utsRatio < 0.85 ? '#e8b85d' : '#e85d5d';
+
+    setMetric('m-moment', moment.toFixed(0) + ' N·m');
+    setMetric('m-postStress', postStress.toFixed(1) + ' MPa', postSF > 2 ? 'ok' : postSF > 1.2 ? 'warn' : 'danger');
+    setMetric('m-postSF', postSF > 100 ? '>100' : postSF.toFixed(1), postSF > 2 ? 'ok' : postSF > 1.2 ? 'warn' : 'danger');
+
+    var barSF = document.getElementById('bar-postSF');
+    var sfRatio = Math.min(100, (4 / Math.max(0.5, postSF)) * 100);
+    barSF.style.width = sfRatio + '%';
+    barSF.style.background = postSF > 2 ? '#5dd97a' : postSF > 1.2 ? '#e8b85d' : '#e85d5d';
+
+    setMetric('m-uplift', uplift.toFixed(0) + ' N', uplift < soilResist * 0.7 ? 'ok' : uplift < soilResist ? 'warn' : 'danger');
+    setMetric('m-resist', soilResist.toFixed(0) + ' N', 'ok');
+    setMetric('m-status', status, statusClass);
+  }
+
+  function setMetric(id, val, cls) {
+    var el = document.getElementById(id);
+    el.textContent = val;
+    el.className = 'v' + (cls ? ' ' + cls : '');
+  }
+
+  // ============ PRESETS ============
+  var presets = {
+    vsp: { name: 'VSP', wireH: 1.20, spacing: 6.0, gauge: 2.5, crop: 8.0, wind: 0, pretension: 300, postD: 0.12, catchWire: true, endAssembly: true },
+    lyre: { name: 'Lyre', wireH: 1.30, spacing: 5.0, gauge: 3.0, crop: 12.0, wind: 0, pretension: 400, postD: 0.14, catchWire: true, endAssembly: true },
+    gable: { name: 'Gable', wireH: 1.60, spacing: 4.5, gauge: 2.8, crop: 14.0, wind: 0, pretension: 350, postD: 0.15, catchWire: true, endAssembly: true },
+    scott: { name: 'Scott-Henry', wireH: 1.50, spacing: 5.5, gauge: 3.2, crop: 16.0, wind: 0, pretension: 450, postD: 0.16, catchWire: true, endAssembly: true },
+    highwind: { name: 'High Wind', wireH: 1.20, spacing: 5.0, gauge: 3.5, crop: 8.0, wind: 150, pretension: 500, postD: 0.15, catchWire: false, endAssembly: true },
+    heavy: { name: 'Heavy Crop', wireH: 1.40, spacing: 5.0, gauge: 3.5, crop: 18.0, wind: 0, pretension: 550, postD: 0.18, catchWire: true, endAssembly: true }
+  };
+
+  function buildPresetButtons() {
+    var row = document.getElementById('preset-row');
+    var keys = Object.keys(presets);
+    row.innerHTML = '';
+    keys.forEach(function(key) {
+      var btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = presets[key].name;
+      btn.onclick = function() { applyPreset(key); };
+      row.appendChild(btn);
+    });
+  }
+
+  function applyPreset(key) {
+    var ps = presets[key];
+    P.wireH = ps.wireH; P.spacing = ps.spacing; P.gauge = ps.gauge;
+    P.crop = ps.crop; P.wind = ps.wind; P.pretension = ps.pretension;
+    P.postD = ps.postD; P.catchWire = ps.catchWire; P.endAssembly = ps.endAssembly;
+    syncControls();
+    buildScene();
+    update();
+
+    // Highlight active
+    document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+    var keys = Object.keys(presets);
+    var idx = keys.indexOf(key);
+    document.querySelectorAll('.preset-btn')[idx].classList.add('active');
+  }
+
+  // ============ CONTROL BINDING ============
+  function bindControls() {
+    buildPresetButtons();
+    var sliders = [
+      ['wireH', 'lbl-wireH', function(v) { return v.toFixed(2) + ' m'; }],
+      ['spacing', 'lbl-spacing', function(v) { return v.toFixed(1) + ' m'; }],
+      ['gauge', 'lbl-gauge', function(v) { return v.toFixed(1) + ' mm'; }],
+      ['crop', 'lbl-crop', function(v) { return v.toFixed(1) + ' kg/m'; }],
+      ['wind', 'lbl-wind', function(v) { return v.toFixed(0) + ' Pa'; }],
+      ['pretension', 'lbl-pretension', function(v) { return v.toFixed(0) + ' N'; }],
+      ['postD', 'lbl-postD', function(v) { return v.toFixed(2) + ' m'; }]
+    ];
+
+    sliders.forEach(function(s) {
+      var sl = document.getElementById(s[0]);
+      sl.value = P[s[0]];
+      document.getElementById(s[1]).textContent = s[2](P[s[0]]);
+      sl.addEventListener('input', function() {
+        P[s[0]] = parseFloat(sl.value);
+        document.getElementById(s[1]).textContent = s[2](P[s[0]]);
+        buildScene();
+        update();
+      });
+    });
+
+    document.getElementById('catchWire').addEventListener('change', function(e) {
+      P.catchWire = e.target.checked;
+      buildScene();
+      update();
+    });
+    document.getElementById('endAssembly').addEventListener('change', function(e) {
+      P.endAssembly = e.target.checked;
+      buildScene();
+      update();
+    });
+  }
+
+  function syncControls() {
+    document.getElementById('wireH').value = P.wireH;
+    document.getElementById('lbl-wireH').textContent = P.wireH.toFixed(2) + ' m';
+    document.getElementById('spacing').value = P.spacing;
+    document.getElementById('lbl-spacing').textContent = P.spacing.toFixed(1) + ' m';
+    document.getElementById('gauge').value = P.gauge;
+    document.getElementById('lbl-gauge').textContent = P.gauge.toFixed(1) + ' mm';
+    document.getElementById('crop').value = P.crop;
+    document.getElementById('lbl-crop').textContent = P.crop.toFixed(1) + ' kg/m';
+    document.getElementById('wind').value = P.wind;
+    document.getElementById('lbl-wind').textContent = P.wind.toFixed(0) + ' Pa';
+    document.getElementById('pretension').value = P.pretension;
+    document.getElementById('lbl-pretension').textContent = P.pretension.toFixed(0) + ' N';
+    document.getElementById('postD').value = P.postD;
+    document.getElementById('lbl-postD').textContent = P.postD.toFixed(2) + ' m';
+    document.getElementById('catchWire').checked = P.catchWire;
+    document.getElementById('endAssembly').checked = P.endAssembly;
+  }
+
+  // ============ UPDATE LOOP ============
+  function update() {
+    drawBackground();
+    rebuildWires();
+    drawLoads();
+    updateMetrics();
+  }
+
+  // ============ RESIZE ============
+  window.addEventListener('resize', function() {
+    var container = document.getElementById('canvas-container');
+    stageW = container.clientWidth;
+    stageH = container.clientHeight;
+    stage.width(stageW);
+    stage.height(stageH);
+    update();
+  });
+
+  // Wait for Konva to load
+  if (typeof Konva !== 'undefined') {
+    init();
+  } else {
+    window.addEventListener('load', function() {
+      if (typeof Konva !== 'undefined') init();
+      else setTimeout(function() { if (typeof Konva !== 'undefined') init(); }, 200);
+    });
+  }
+})();
+</script>
+</body>
+</html>
