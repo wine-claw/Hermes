@@ -470,8 +470,8 @@
     // Destemmer drum — a rotating cage with gaps for berries to fall through
     // Only place segments around the top 270°, leaving the bottom open
     const drumSegs = 18;
-    const drumArcStart = -Math.PI * 0.85; // start from upper-left
-    const drumArcEnd = Math.PI * 0.85;    // end at lower-right (270° coverage)
+    const drumArcStart = -Math.PI * 0.65; // start from upper-left
+    const drumArcEnd = Math.PI * 0.65;    // end at lower-right (~234° coverage, 126° open at bottom)
     for (let i = 0; i < drumSegs; i++) {
       const t = i / (drumSegs - 1);
       const a = drumArcStart + (drumArcEnd - drumArcStart) * t;
@@ -746,17 +746,36 @@
   function drawMachine() {
     const g = getGeo();
 
-    // Feed hopper
+    // Feed hopper — drawn to match physics: two vertical walls + angled bottom slide
+    const hwX = 6; // wall thickness
     ctx.strokeStyle = '#4a6a50';
     ctx.lineWidth = 4;
-    ctx.fillStyle = 'rgba(30, 50, 35, 0.3)';
+    ctx.fillStyle = 'rgba(30, 50, 35, 0.25)';
+    // Left wall
     ctx.beginPath();
-    ctx.moveTo(g.hopperLeftX - 8 * g.scale, g.hopperTop);
-    ctx.lineTo(g.hopperRightX + 8 * g.scale, g.hopperTop);
-    ctx.lineTo(g.hopperRightX + 5 * g.scale, g.hopperBottom);
-    ctx.lineTo(g.hopperLeftX - 5 * g.scale, g.hopperBottom);
-    ctx.closePath();
+    ctx.rect(g.hopperLeftX - 5 * g.scale - hwX / 2, g.hopperTop, hwX, g.hopperBottom - g.hopperTop);
     ctx.fill();
+    ctx.stroke();
+    // Right wall
+    ctx.beginPath();
+    ctx.rect(g.hopperRightX + 5 * g.scale - hwX / 2, g.hopperTop, hwX, g.hopperBottom - g.hopperTop);
+    ctx.fill();
+    ctx.stroke();
+    // Angled bottom slide (from hopper exit toward drum)
+    ctx.save();
+    ctx.translate(g.hopperLeftX + 20 * g.scale, g.hopperBottom + 10 * g.scale);
+    ctx.rotate(0.3);
+    ctx.beginPath();
+    ctx.rect(-40 * g.scale, -3, 80 * g.scale, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    // Hopper top rim (decorative connecting line)
+    ctx.strokeStyle = '#4a6a50';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(g.hopperLeftX - 5 * g.scale - hwX / 2, g.hopperTop);
+    ctx.lineTo(g.hopperRightX + 5 * g.scale + hwX / 2, g.hopperTop);
     ctx.stroke();
 
     // Hopper label
@@ -765,30 +784,46 @@
     ctx.textAlign = 'center';
     ctx.fillText('FEED HOPPER', (g.hopperLeftX + g.hopperRightX) / 2, g.hopperTop - 5);
 
-    // Destemmer drum
+    // Destemmer drum — drawn as 270° arc cage to match physics
     ctx.save();
     ctx.translate(g.drumCX, g.drumCY);
     ctx.rotate(drumAngle);
 
-    // Drum outer ring
+    // Drum cage segments (match the 18 physics segments)
+    const drumArcStart = -Math.PI * 0.65;
+    const drumArcEnd = Math.PI * 0.65;
+    const drumSegs = 18;
     ctx.strokeStyle = '#5a7a60';
     ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(0, 0, g.drumR, 0, Math.PI * 2);
-    ctx.stroke();
+    for (let i = 0; i < drumSegs; i++) {
+      const t = i / (drumSegs - 1);
+      const a = drumArcStart + (drumArcEnd - drumArcStart) * t;
+      const x = Math.cos(a) * g.drumR;
+      const y = Math.sin(a) * g.drumR;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(a + Math.PI / 2);
+      ctx.beginPath();
+      ctx.rect(-5 * g.scale, -4 * g.scale, 10 * g.scale, 8 * g.scale);
+      ctx.fillStyle = 'rgba(40, 60, 45, 0.4)';
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
 
-    // Drum inner ring
+    // Drum inner ring (decorative, only for the 270° arc)
     ctx.strokeStyle = '#3a5a40';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 0, g.drumInnerR, 0, Math.PI * 2);
+    ctx.arc(0, 0, g.drumInnerR, drumArcStart, drumArcEnd);
     ctx.stroke();
 
-    // Drum holes (perforations)
+    // Drum holes (perforations) — only within the arc
     const holeR = Math.max(4, P.holeSize * 0.4 * g.scale);
-    const numHoles = 12;
+    const numHoles = 10;
     for (let i = 0; i < numHoles; i++) {
-      const a = (i / numHoles) * Math.PI * 2;
+      const t = i / (numHoles - 1);
+      const a = drumArcStart + (drumArcEnd - drumArcStart) * t;
       const hx = Math.cos(a) * g.drumInnerR * 0.85;
       const hy = Math.sin(a) * g.drumInnerR * 0.85;
       ctx.fillStyle = 'rgba(10, 20, 15, 0.6)';
@@ -797,11 +832,12 @@
       ctx.fill();
     }
 
-    // Lift paddles inside drum
+    // Lift paddles inside drum (6 paddles, visible within arc)
     ctx.strokeStyle = '#4a6a50';
     ctx.lineWidth = 2;
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
+    for (let i = 0; i < 4; i++) {
+      const t = (i + 0.5) / 4;
+      const a = drumArcStart + (drumArcEnd - drumArcStart) * t;
       ctx.beginPath();
       ctx.moveTo(Math.cos(a) * g.drumInnerR * 0.3, Math.sin(a) * g.drumInnerR * 0.3);
       ctx.lineTo(Math.cos(a) * g.drumInnerR * 0.9, Math.sin(a) * g.drumInnerR * 0.9);
@@ -830,6 +866,7 @@
     const inclineRad = P.incline * Math.PI / 180;
     const gridLen = Math.hypot(g.gridRightX - g.gridLeftX, g.gridBotY - g.gridTopY);
     const numBars = 8;
+    const barThickness = Math.max(3, 5 * g.scale);
     for (let i = 0; i <= numBars; i++) {
       const t = i / (numBars + 1);
       const bx = g.gridLeftX + (g.gridRightX - g.gridLeftX) * t;
@@ -838,12 +875,48 @@
       ctx.translate(bx, by);
       ctx.rotate(inclineRad + Math.PI / 2);
       ctx.beginPath();
-      ctx.rect(-2, -15 * g.scale, 4, 30 * g.scale);
+      ctx.rect(-barThickness / 2, -15 * g.scale, barThickness, 30 * g.scale);
       ctx.fillStyle = '#3a5a40';
       ctx.fill();
       ctx.stroke();
       ctx.restore();
     }
+
+    // Sorter side walls (match physics bodies)
+    ctx.strokeStyle = '#4a6a50';
+    ctx.lineWidth = 4;
+    ctx.fillStyle = 'rgba(30, 50, 35, 0.2)';
+    // Left side wall
+    ctx.save();
+    ctx.translate(g.gridLeftX - 15 * g.scale, (g.gridTopY + g.gridBotY) / 2);
+    ctx.rotate(inclineRad);
+    ctx.beginPath();
+    ctx.rect(-3, -(g.gridBotY - g.gridTopY + 30) / 2, 6, g.gridBotY - g.gridTopY + 30);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    // Right side wall
+    ctx.save();
+    ctx.translate(g.gridRightX + 15 * g.scale, (g.gridTopY + g.gridBotY) / 2);
+    ctx.rotate(inclineRad);
+    ctx.beginPath();
+    ctx.rect(-3, -(g.gridBotY - g.gridTopY + 30) / 2, 6, g.gridBotY - g.gridTopY + 30);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Chute from drum to sorter (match physics body)
+    ctx.strokeStyle = '#4a6a50';
+    ctx.lineWidth = 4;
+    ctx.fillStyle = 'rgba(30, 50, 35, 0.2)';
+    ctx.save();
+    ctx.translate(g.drumCX - g.drumR - 10, g.drumCY + g.drumR * 0.5);
+    ctx.rotate(0.2);
+    ctx.beginPath();
+    ctx.rect(-3, -30 * g.scale, 6, 60 * g.scale);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
 
     // Grid label
     ctx.fillStyle = '#6a8a70';
@@ -858,6 +931,25 @@
     // Crusher rollers
     drawRoller(rollerA, '#8a6a3a', '#6a4a2a');
     drawRoller(rollerB, '#8a6a3a', '#6a4a2a');
+
+    // Roller guard walls (match physics bodies)
+    if (rollerA && rollerB) {
+      const gapPx = Math.max(4, P.rollerGap * g.scale);
+      const rollerOffset = g.rollerR + gapPx / 2;
+      ctx.strokeStyle = '#4a6a50';
+      ctx.lineWidth = 4;
+      ctx.fillStyle = 'rgba(30, 50, 35, 0.2)';
+      // Left guard
+      ctx.beginPath();
+      ctx.rect(g.drumCX - rollerOffset - g.rollerR - 8 * g.scale - 3, g.rollerAY - g.rollerR - 10, 6, g.rollerR * 2 + 20);
+      ctx.fill();
+      ctx.stroke();
+      // Right guard
+      ctx.beginPath();
+      ctx.rect(g.drumCX + rollerOffset + g.rollerR + 8 * g.scale - 3, g.rollerAY - g.rollerR - 10, 6, g.rollerR * 2 + 20);
+      ctx.fill();
+      ctx.stroke();
+    }
 
     // Roller gap indicator
     if (rollerA && rollerB) {
