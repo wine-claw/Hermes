@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Optical Grape Sorter — Conveyor & Ejector Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+<style>
+  :root {
+    --bg: #0c1218;
+    --panel: rgba(14, 22, 32, 0.94);
+    --border: #2a4058;
+    --text: #d8e4f0;
+    --muted: #7a94ac;
+    --accent: #4db8ff;
+    --ok: #5dd97a;
+    --warn: #e8b85d;
+    --danger: #e85d6a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; overflow: hidden; height: 100%; }
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+  #canvas-container { position: fixed; inset: 0; z-index: 0; background: linear-gradient(180deg, #080c12 0%, #0e1620 50%, #0a1018 100%); }
+  #canvas-container canvas { width: 100%; height: 100%; display: block; }
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; pointer-events: auto; backdrop-filter: blur(10px); }
+  .panel h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.5rem; font-weight: 700; }
+  .panel label { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--muted); margin: 0.45rem 0; }
+  .panel label span { color: var(--text); font-weight: 600; min-width: 3.2rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .panel input[type=range] { width: 100%; accent-color: var(--accent); height: 16px; }
+  .preset-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem; }
+  .preset-btn { flex: 1; min-width: 58px; background: #0a1420; border: 1px solid var(--border); color: var(--text); padding: 0.35rem 0.25rem; border-radius: 6px; font-size: 0.72rem; cursor: pointer; pointer-events: auto; }
+  .preset-btn.active { border-color: var(--accent); background: rgba(77,184,255,0.12); color: var(--accent); }
+  #controls { position: absolute; top: 12px; left: 12px; width: 288px; max-height: calc(100vh - 24px); overflow-y: auto; }
+  #metrics { position: absolute; top: 12px; right: 12px; width: 248px; max-height: calc(100vh - 24px); overflow-y: auto; }
+  .metric { display: flex; justify-content: space-between; font-size: 0.82rem; padding: 0.28rem 0; border-bottom: 1px solid rgba(42,64,88,0.35); }
+  .metric .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .metric .v.ok { color: var(--ok); }
+  .metric .v.warn { color: var(--warn); }
+  .metric .v.danger { color: var(--danger); }
+  .spark { height: 36px; margin-top: 0.4rem; background: #0a1420; border-radius: 6px; border: 1px solid var(--border); width: 100%; }
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container { position: relative !important; width: 100% !important; height: 42vh !important; min-height: 280px; max-height: 400px; inset: auto !important; z-index: 0; }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls { position: relative !important; top: auto !important; left: auto !important; width: auto !important; max-height: none !important; margin: 0; border-radius: 0; border-left: none; border-right: none; }
+    #metrics { position: relative !important; top: auto !important; right: auto !important; width: auto !important; margin: 0; border-radius: 0; border-left: none; border-right: none; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<div id="canvas-container"></div>
+<div id="ui-layer">
+  <div id="controls" class="panel">
+    <h3>Line parameters</h3>
+    <label>Conveyor speed <span id="v-speed">1.20</span> m/s</label>
+    <input type="range" id="speed" min="0.4" max="2.4" step="0.05" value="1.2">
+    <label>Throughput <span id="v-feed">85</span> berries/s</label>
+    <input type="range" id="feed" min="20" max="160" step="5" value="85">
+    <label>Defect rate <span id="v-defect">12</span>%</label>
+    <input type="range" id="defect" min="2" max="35" step="1" value="12">
+    <label>Color sensitivity <span id="v-color">72</span></label>
+    <input type="range" id="colorSens" min="40" max="95" step="1" value="72">
+    <label>Size min (mm) <span id="v-smin">8.0</span></label>
+    <input type="range" id="sizeMin" min="5" max="12" step="0.5" value="8">
+    <label>Size max (mm) <span id="v-smax">16.0</span></label>
+    <input type="range" id="sizeMax" min="12" max="22" step="0.5" value="16">
+    <label>Ejector delay <span id="v-delay">28</span> ms</label>
+    <input type="range" id="delay" min="10" max="55" step="1" value="28">
+    <label>Camera noise <span id="v-noise">8</span>%</label>
+    <input type="range" id="noise" min="0" max="25" step="1" value="8">
+    <div class="preset-row">
+      <button type="button" class="preset-btn active" data-preset="pinot">Pinot</button>
+      <button type="button" class="preset-btn" data-preset="cab">Cabernet</button>
+      <button type="button" class="preset-btn" data-preset="chard">Chardonnay</button>
+      <button type="button" class="preset-btn" data-preset="strict">Strict QC</button>
+    </div>
+  </div>
+  <div id="metrics" class="panel">
+    <h3>Sort metrics</h3>
+    <div class="metric"><span>Accepted</span><span class="v ok" id="m-accept">0</span></div>
+    <div class="metric"><span>Rejected</span><span class="v" id="m-reject">0</span></div>
+    <div class="metric"><span>Est. mass flow</span><span class="v" id="m-tph">0</span> t/h*</div>
+    <div class="metric"><span>False reject</span><span class="v" id="m-fp">0.0</span>%</div>
+    <div class="metric"><span>Missed defect</span><span class="v" id="m-fn">0.0</span>%</div>
+    <div class="metric"><span>Accept ratio</span><span class="v ok" id="m-acc">—</span></div>
+    <div class="metric"><span>Line status</span><span class="v ok" id="m-status">Running</span></div>
+    <canvas class="spark" id="spark" width="220" height="36"></canvas>
+    <p style="font-size:0.68rem;color:var(--muted);margin-top:0.35rem;">*Heuristic from berry count &amp; mean diameter.</p>
+  </div>
+</div>
+<script>
+(function () {
+  if (typeof PIXI === 'undefined') {
+    document.getElementById('canvas-container').innerHTML = '<p style="padding:2rem;color:#e85d6a;">Pixi.js failed to load.</p>';
+    return;
+  }
+  const params = { speed: 1.2, feed: 85, defectPct: 12, colorSens: 72, sizeMin: 8, sizeMax: 16, delayMs: 28, noise: 8, variety: 'pinot' };
+  const PRESETS = {
+    pinot: { defectPct: 10, colorSens: 78, sizeMin: 7.5, sizeMax: 14, feed: 90, noise: 6 },
+    cab: { defectPct: 14, colorSens: 68, sizeMin: 9, sizeMax: 17, feed: 75, noise: 9 },
+    chard: { defectPct: 8, colorSens: 82, sizeMin: 8, sizeMax: 15, feed: 95, noise: 7 },
+    strict: { defectPct: 12, colorSens: 90, sizeMin: 9, sizeMax: 15, feed: 70, noise: 4, delayMs: 22 }
+  };
+  const stats = { accept: 0, reject: 0, fp: 0, fn: 0, hist: [] };
+  const container = document.getElementById('canvas-container');
+  const app = new PIXI.Application({ background: 0x0a1018, antialias: true, resizeTo: container, resolution: Math.min(window.devicePixelRatio || 1, 2) });
+  container.appendChild(app.view);
+  const beltGfx = new PIXI.Graphics();
+  const scanGfx = new PIXI.Graphics();
+  const berryLayer = new PIXI.Container();
+  const particleLayer = new PIXI.Container();
+  app.stage.addChild(beltGfx, scanGfx, berryLayer, particleLayer);
+  const berries = [];
+  const particles = [];
+  let spawnAcc = 0, t = 0;
+  function beltY() { return app.screen.height * 0.52; }
+  function beltTop() { return beltY() - app.screen.height * 0.06; }
+  function beltBot() { return beltY() + app.screen.height * 0.06; }
+  function scanX() { return app.screen.width * 0.42; }
+  function ejectX() { return app.screen.width * 0.58; }
+  function drawBelt() {
+    const W = app.screen.width, H = app.screen.height;
+    const y0 = beltTop(), y1 = beltBot();
+    beltGfx.clear();
+    beltGfx.beginFill(0x1a2838);
+    beltGfx.drawRect(0, y0 - 8, W, y1 - y0 + 16);
+    beltGfx.endFill();
+    beltGfx.lineStyle(2, 0x3a5068, 0.8);
+    beltGfx.moveTo(0, y0); beltGfx.lineTo(W, y0);
+    beltGfx.moveTo(0, y1); beltGfx.lineTo(W, y1);
+    const stripeW = 28, offset = (t * params.speed * 40) % stripeW;
+    beltGfx.lineStyle(3, 0x2a3848, 0.5);
+    for (let x = -stripeW + offset; x < W + stripeW; x += stripeW) {
+      beltGfx.moveTo(x, y0 + 4);
+      beltGfx.lineTo(x + stripeW * 0.5, y1 - 4);
+    }
+    scanGfx.clear();
+    scanGfx.lineStyle(2, 0x4db8ff, 0.9);
+    scanGfx.moveTo(scanX(), y0 - 30); scanGfx.lineTo(scanX(), y1 + 30);
+    scanGfx.beginFill(0x4db8ff, 0.08);
+    scanGfx.drawRect(scanX() - 4, y0 - 30, 8, y1 - y0 + 60);
+    scanGfx.endFill();
+    scanGfx.lineStyle(2, 0xc45c8a, 0.7);
+    scanGfx.moveTo(ejectX(), y0 - 20); scanGfx.lineTo(ejectX(), y1 + 20);
+  }
+  function mmToPx(mm) { return (mm / 14) * (app.screen.height * 0.045); }
+  function spawnBerry() {
+    const isDefect = Math.random() * 100 < params.defectPct;
+    let sizeMm = 9 + Math.random() * 7;
+    if (isDefect && Math.random() < 0.4) sizeMm = params.sizeMin - 1.5 - Math.random() * 2;
+    if (isDefect && Math.random() < 0.35) sizeMm = params.sizeMax + 1 + Math.random() * 3;
+    const r = mmToPx(sizeMm);
+    const g = new PIXI.Graphics();
+    let fill = 0x5a2878;
+    if (params.variety === 'chard') fill = 0xc8b878;
+    else if (params.variety === 'cab') fill = 0x3a1848;
+    if (isDefect) fill = Math.random() < 0.5 ? 0x6a5040 : ((fill >> 1) & 0x7f7f7f) | 0x300030;
+    g.beginFill(fill);
+    g.drawCircle(0, 0, r);
+    g.endFill();
+    const spr = new PIXI.Container();
+    spr.addChild(g);
+    spr.x = -r - 20;
+    spr.y = beltY() + (Math.random() - 0.5) * (beltBot() - beltTop() - r * 2) * 0.85;
+    spr.vx = params.speed * (55 + Math.random() * 8);
+    spr._r = r; spr._sizeMm = sizeMm; spr._defect = isDefect; spr._scanned = false; spr._ejected = false;
+    berryLayer.addChild(spr);
+    berries.push(spr);
+  }
+  function classify(berry) {
+    const noise = params.noise / 100;
+    let score = 0;
+    if (berry._sizeMm < params.sizeMin || berry._sizeMm > params.sizeMax) score += 0.55;
+    if (berry._defect) {
+      score += 0.35 + (params.colorSens / 100) * 0.45;
+      if (Math.random() < noise) score -= 0.25;
+    } else if (Math.random() < noise * 0.6) score += 0.4;
+    return score > 0.42 + (100 - params.colorSens) * 0.002;
+  }
+  function ejectBerry(berry) {
+    berry._ejected = true;
+    berry.vx = params.speed * 22;
+    berry.vy = -4 - Math.random() * 3;
+    stats.reject++;
+    if (!berry._defect) stats.fp++;
+    for (let i = 0; i < 6; i++) particles.push({ x: berry.x, y: berry.y, vx: (Math.random() - 0.3) * 6, vy: -Math.random() * 5, life: 1 });
+  }
+  function acceptBerry(berry) {
+    stats.accept++;
+    if (berry._defect) stats.fn++;
+  }
+  function updateMetrics() {
+    const total = stats.accept + stats.reject;
+    document.getElementById('m-accept').textContent = stats.accept;
+    document.getElementById('m-reject').textContent = stats.reject;
+    const tph = total * 0.0028 * params.speed;
+    document.getElementById('m-tph').textContent = tph.toFixed(2);
+    document.getElementById('m-fp').textContent = total ? (stats.fp / total * 100).toFixed(1) : '0.0';
+    document.getElementById('m-fn').textContent = total ? (stats.fn / total * 100).toFixed(1) : '0.0';
+    document.getElementById('m-acc').textContent = total ? (stats.accept / total * 100).toFixed(1) + '%' : '—';
+    const fnRate = total ? stats.fn / total : 0;
+    const el = document.getElementById('m-status');
+    if (fnRate > 0.08) { el.textContent = 'High miss rate'; el.className = 'v danger'; }
+    else if (stats.fp / Math.max(1, total) > 0.06) { el.textContent = 'Over-rejecting'; el.className = 'v warn'; }
+    else { el.textContent = 'Running'; el.className = 'v ok'; }
+    stats.hist.push(stats.accept / Math.max(1, total));
+    if (stats.hist.length > 80) stats.hist.shift();
+    const c = document.getElementById('spark'), ctx = c.getContext('2d'), w = c.width, h = c.height;
+    ctx.fillStyle = '#0a1420'; ctx.fillRect(0, 0, w, h);
+    if (stats.hist.length < 2) return;
+    ctx.strokeStyle = '#4db8ff'; ctx.lineWidth = 1.5; ctx.beginPath();
+    stats.hist.forEach((v, i) => {
+      const x = (i / (stats.hist.length - 1)) * (w - 4) + 2;
+      const y = h - 4 - v * (h - 8);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  const sliders = [
+    ['speed', 'speed', v => v.toFixed(2), 'v-speed'],
+    ['feed', 'feed', v => String(Math.round(v)), 'v-feed'],
+    ['defect', 'defectPct', v => String(Math.round(v)), 'v-defect'],
+    ['colorSens', 'colorSens', v => String(Math.round(v)), 'v-color'],
+    ['sizeMin', 'sizeMin', v => v.toFixed(1), 'v-smin'],
+    ['sizeMax', 'sizeMax', v => v.toFixed(1), 'v-smax'],
+    ['delay', 'delayMs', v => String(Math.round(v)), 'v-delay'],
+    ['noise', 'noise', v => String(Math.round(v)), 'v-noise']
+  ];
+  sliders.forEach(([id, key, fmt, outId]) => {
+    document.getElementById(id).addEventListener('input', e => {
+      params[key] = parseFloat(e.target.value);
+      document.getElementById(outId).textContent = fmt(params[key]) + (id === 'speed' ? ' m/s' : id === 'defect' || id === 'noise' ? '%' : id === 'delay' ? ' ms' : id === 'sizeMin' || id === 'sizeMax' ? '' : id === 'feed' ? ' berries/s' : '');
+    });
+  });
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const preset = btn.dataset.preset;
+      const p = PRESETS[preset];
+      params.variety = preset === 'cab' ? 'cab' : preset === 'chard' ? 'chard' : 'pinot';
+      Object.assign(params, p);
+      sliders.forEach(([id, key]) => { const el = document.getElementById(id); if (el && params[key] !== undefined) el.value = params[key]; });
+      document.getElementById('v-speed').textContent = params.speed.toFixed(2) + ' m/s';
+      document.getElementById('v-feed').textContent = Math.round(params.feed) + ' berries/s';
+      document.getElementById('v-defect').textContent = Math.round(params.defectPct) + '%';
+      document.getElementById('v-color').textContent = Math.round(params.colorSens);
+      document.getElementById('v-smin').textContent = params.sizeMin.toFixed(1);
+      document.getElementById('v-smax').textContent = params.sizeMax.toFixed(1);
+      document.getElementById('v-delay').textContent = Math.round(params.delayMs) + ' ms';
+      document.getElementById('v-noise').textContent = Math.round(params.noise) + '%';
+    });
+  });
+  let lastMetricTick = 0;
+  app.ticker.add((delta) => {
+    t += delta / 60;
+    const dt = delta / 60;
+    spawnAcc += params.feed * dt;
+    while (spawnAcc >= 1) { spawnAcc -= 1; spawnBerry(); }
+    const delayPx = params.delayMs * 0.001 * params.speed * 60;
+    const W = app.screen.width, H = app.screen.height;
+    for (let i = berries.length - 1; i >= 0; i--) {
+      const b = berries[i];
+      if (!b._ejected) {
+        b.x += b.vx * dt;
+        if (!b._scanned && b.x >= scanX()) {
+          b._scanned = true;
+          b._decision = classify(b);
+          b._ejectAt = b.x + delayPx;
+        }
+        if (b._scanned && b._decision && b.x >= b._ejectAt && !b._ejected) ejectBerry(b);
+        if (b._scanned && !b._decision && b.x >= ejectX() && !b._counted) { b._counted = true; acceptBerry(b); }
+      } else {
+        b.x += b.vx * dt;
+        b.y += (b.vy || 0) * dt;
+        b.vy = (b.vy || 0) + 12 * dt;
+      }
+      if (b.x > W + 80 || b.y > H + 40) { berryLayer.removeChild(b); berries.splice(i, 1); }
+    }
+    for (let j = particles.length - 1; j >= 0; j--) {
+      const p = particles[j];
+      p.x += p.vx; p.y += p.vy; p.life -= dt * 2;
+      if (p.life <= 0) particles.splice(j, 1);
+    }
+    particleLayer.removeChildren();
+    particles.forEach(p => {
+      const g = new PIXI.Graphics();
+      g.beginFill(0x4db8ff, p.life * 0.6);
+      g.drawCircle(p.x, p.y, 2);
+      g.endFill();
+      particleLayer.addChild(g);
+    });
+    drawBelt();
+    if (t - lastMetricTick > 0.5) { lastMetricTick = t; updateMetrics(); }
+  });
+  drawBelt();
+})();
+</script>
+</body>
+</html>
