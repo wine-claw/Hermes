@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Fermentation Isotherm 3D Explorer — Wine Yeast Kinetics</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 15px; }
+  body { background: #0d0f14; color: #d0c8b8; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.55; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  /* Layout */
+  #canvas-container { position: fixed; inset: 0; z-index: 0; background: #0d0f14; }
+  #plot-3d { width: 100%; height: 100%; }
+  #plot-2d { display: none; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+  #header-bar { position: absolute; top: 0; left: 0; right: 0; padding: 0.75rem 1rem; pointer-events: auto; background: linear-gradient(180deg, rgba(13,15,20,0.92) 0%, rgba(13,15,20,0.6) 70%, transparent 100%); }
+  #header-bar h1 { font-size: 1.05rem; color: #e8d8b8; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+  #header-bar .subtitle { font-size: 0.75rem; color: #8a8070; margin-top: 0.15rem; }
+
+  #controls {
+    position: absolute; top: 56px; left: 12px; width: 280px;
+    background: rgba(18,16,12,0.88); border: 1px solid #3a3020; border-radius: 10px;
+    padding: 0.85rem; pointer-events: auto; backdrop-filter: blur(8px);
+    max-height: calc(100vh - 80px); overflow-y: auto;
+  }
+  #controls h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #c9a060; margin-bottom: 0.5rem; border-bottom: 1px solid #3a3020; padding-bottom: 0.3rem; }
+  .ctrl-group { margin-bottom: 0.65rem; }
+  .ctrl-group label { display: block; font-size: 0.72rem; color: #a09080; margin-bottom: 0.2rem; }
+  .ctrl-group label .val { float: right; color: #e8c880; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ctrl-group input[type="range"] { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; background: #2a2418; border-radius: 2px; outline: none; }
+  .ctrl-group input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #c9a060; cursor: pointer; border: 1px solid #1a1610; }
+  .ctrl-group input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #c9a060; cursor: pointer; border: 1px solid #1a1610; }
+  .ctrl-group select {
+    width: 100%; background: #1a1610; color: #d0c8b8; border: 1px solid #3a3020;
+    border-radius: 5px; padding: 0.3rem 0.4rem; font-size: 0.78rem; font-family: inherit;
+  }
+
+  .btn-row { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .btn { flex: 1; min-width: 0; background: #1a1610; color: #c9a060; border: 1px solid #3a3020; border-radius: 5px; padding: 0.35rem 0.3rem; font-size: 0.68rem; cursor: pointer; text-align: center; font-family: inherit; transition: all 0.15s; }
+  .btn:hover { background: #2a2418; border-color: #c9a060; }
+  .btn.active { background: #3a3020; border-color: #c9a060; color: #e8d8b8; }
+
+  .view-btns { display: flex; gap: 0.3rem; margin-bottom: 0.5rem; }
+  .view-btn { flex: 1; background: #1a1610; color: #8a8070; border: 1px solid #3a3020; border-radius: 5px; padding: 0.3rem; font-size: 0.7rem; cursor: pointer; text-align: center; font-family: inherit; }
+  .view-btn.active { background: #3a3020; color: #e8d8b8; border-color: #c9a060; }
+
+  #metrics {
+    position: absolute; top: 56px; right: 12px; width: 230px;
+    background: rgba(18,16,12,0.88); border: 1px solid #3a3020; border-radius: 10px;
+    padding: 0.85rem; pointer-events: auto; backdrop-filter: blur(8px);
+  }
+  #metrics h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #c9a060; margin-bottom: 0.5rem; border-bottom: 1px solid #3a3020; padding-bottom: 0.3rem; }
+  .metric { display: flex; justify-content: space-between; align-items: baseline; padding: 0.2rem 0; border-bottom: 1px solid rgba(58,48,32,0.5); }
+  .metric:last-child { border-bottom: none; }
+  .metric .label { font-size: 0.72rem; color: #a09080; }
+  .metric .value { font-size: 0.85rem; color: #e8c880; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .metric .value.warn { color: #e07050; }
+  .metric .value.good { color: #60d080; }
+
+  .status-badge { display: inline-block; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge-lag { background: #2a2010; color: #e0a040; }
+  .badge-log { background: #1a3010; color: #60d080; }
+  .badge-stat { background: #1a2020; color: #60a0d0; }
+  .badge-dead { background: #2a1010; color: #e05050; }
+  .badge-stuck { background: #2a2010; color: #e08040; }
+  .badge-done { background: #102a1a; color: #40c060; }
+
+  /* Scrollbar styling */
+  #controls::-webkit-scrollbar { width: 5px; }
+  #controls::-webkit-scrollbar-thumb { background: #3a3020; border-radius: 3px; }
+  #controls::-webkit-scrollbar-track { background: transparent; }
+
+  /* Hide scrollbar in plot area on mobile */
+  .plotly { pointer-events: auto; }
+
+  /* MOBILE */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 48vh !important;
+      min-height: 320px;
+      max-height: 420px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    #plot-3d { width: 100% !important; height: 100% !important; }
+    #plot-2d { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #header-bar {
+      position: relative !important; top: auto !important; left: auto !important; right: auto !important;
+      padding: 0.6rem 0.75rem; background: rgba(13,15,20,0.95);
+    }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <div id="plot-3d"></div>
+  <div id="plot-2d"></div>
+</div>
+
+<div id="ui-layer">
+  <div id="header-bar">
+    <h1>🍷 Fermentation Isotherm 3D Explorer</h1>
+    <div class="subtitle">Monod + Arrhenius yeast kinetics — sugar consumption rate surface across time × temperature</div>
+  </div>
+
+  <div id="controls">
+    <h2>Controls</h2>
+
+    <div class="view-btns">
+      <button class="view-btn active" data-view="3d" onclick="switchView('3d')">3D Surface</button>
+      <button class="view-btn" data-view="2d" onclick="switchView('2d')">2D Heatmap</button>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Yeast Strain <span class="val" id="strain-val">EC1118</span></label>
+      <select id="strain-select" onchange="onParamChange()">
+        <option value="EC1118">Lalvin EC1118 (Champagne)</option>
+        <option value="QA23">Fermentis QA23 (White)</option>
+        <option value="RC212">Lalvin RC212 (Pinot)</option>
+        <option value="D254">Lalvin D254 (Syrah)</option>
+        <option value="BM45">Lalvin BM45 (Nebbiolo)</option>
+        <option value="W15">Fermentis W15 (Aromatic)</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Initial Sugar <span class="val" id="s0-val">240 g/L</span></label>
+      <input type="range" id="s0-slider" min="180" max="320" value="240" step="5" oninput="onParamChange()">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Inoculum Rate <span class="val" id="x0-val">2.0×10⁶</span></label>
+      <input type="range" id="x0-slider" min="5" max="40" value="20" step="1" oninput="onParamChange()">
+    </div>
+
+    <div class="ctrl-group">
+      <label>pH <span class="val" id="ph-val">3.5</span></label>
+      <input type="range" id="ph-slider" min="28" max="42" value="35" step="1" oninput="onParamChange()">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Aeration <span class="val" id="aer-val">0.0</span></label>
+      <input type="range" id="aer-slider" min="0" max="20" value="0" step="1" oninput="onParamChange()">
+    </div>
+
+    <div class="ctrl-group">
+      <label>YAN (mg N/L) <span class="val" id="yan-val">200</span></label>
+      <input type="range" id="yan-slider" min="50" max="400" value="200" step="10" oninput="onParamChange()">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Time Span <span class="val" id="tmax-val">14 days</span></label>
+      <input type="range" id="tmax-slider" min="7" max="30" value="14" step="1" oninput="onParamChange()">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Temp Range <span class="val" id="trange-val">10–35°C</span></label>
+      <input type="range" id="trange-slider" min="5" max="20" value="12.5" step="0.5" oninput="onParamChange()">
+    </div>
+
+    <h2 style="margin-top: 0.6rem;">Presets</h2>
+    <div class="btn-row">
+      <button class="btn" onclick="applyPreset('cool')">Cool White</button>
+      <button class="btn" onclick="applyPreset('red')">Red Warm</button>
+    </div>
+    <div class="btn-row" style="margin-top: 0.3rem;">
+      <button class="btn" onclick="applyPreset('champagne')">Sparkling</button>
+      <button class="btn" onclick="applyPreset('stuck')">Stuck Risk</button>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <h2>Live Metrics <span style="float:right;" id="status-badge"></span></h2>
+    <div class="metric"><span class="label">Peak rate</span><span class="value" id="m-peak">— g/L/h</span></div>
+    <div class="metric"><span class="label">Peak temp</span><span class="value" id="m-peaktemp">— °C</span></div>
+    <div class="metric"><span class="label">Peak time</span><span class="value" id="m-peaktime">— d</span></div>
+    <div class="metric"><span class="label">Avg rate</span><span class="value" id="m-avg">— g/L/h</span></div>
+    <div class="metric"><span class="label">Ethanol @14d</span><span class="value" id="m-eth">— % v/v</span></div>
+    <div class="metric"><span class="label">Residual sugar</span><span class="value" id="m-rs">— g/L</span></div>
+    <div class="metric"><span class="label">Fermentation done</span><span class="value" id="m-done">— %</span></div>
+    <div class="metric"><span class="label">Optimal temp</span><span class="value" id="m-opttemp">— °C</span></div>
+    <div class="metric"><span class="label">Stuck risk</span><span class="value" id="m-stuck">—</span></div>
+  </div>
+</div>
+
+<script>
+// ── Yeast strain parameters ──────────────────────────────────────
+// Each strain has: mumax (max specific growth rate at Tref=25°C),
+// Ea (activation energy kJ/mol), Topt (optimal temp °C),
+// Ks (Monod half-saturation for sugar, g/L),
+// ethanol tolerance (max % v/v before inhibition),
+// deathTemp (temp above which rapid death, °C)
+const STRAINS = {
+  EC1118: { name: 'EC1118', mumax: 0.28, Ea: 65, Topt: 28, Ks: 3.5, etohMax: 16, deathTemp: 40, killMax: 0.18 },
+  QA23:   { name: 'QA23',   mumax: 0.24, Ea: 60, Topt: 22, Ks: 4.0, etohMax: 14, deathTemp: 36, killMax: 0.15 },
+  RC212:  { name: 'RC212',  mumax: 0.20, Ea: 70, Topt: 26, Ks: 5.0, etohMax: 14.5, deathTemp: 37, killMax: 0.12 },
+  D254:   { name: 'D254',   mumax: 0.22, Ea: 68, Topt: 30, Ks: 4.5, etohMax: 15, deathTemp: 39, killMax: 0.14 },
+  BM45:   { name: 'BM45',   mumax: 0.18, Ea: 75, Topt: 28, Ks: 6.0, etohMax: 15.5, deathTemp: 38, killMax: 0.10 },
+  W15:    { name: 'W15',    mumax: 0.26, Ea: 55, Topt: 20, Ks: 3.8, etohMax: 13, deathTemp: 34, killMax: 0.16 }
+};
+
+const R = 8.314; // J/(mol·K)
+const Tref = 298.15; // 25°C in Kelvin
+
+// ── Parameter reading ────────────────────────────────────────────
+function getParams() {
+  const strainKey = document.getElementById('strain-select').value;
+  const strain = STRAINS[strainKey];
+  const s0 = parseFloat(document.getElementById('s0-slider').value);
+  const x0 = parseFloat(document.getElementById('x0-slider').value) * 1e5; // scale to actual CFU
+  const ph = parseFloat(document.getElementById('ph-slider').value) / 10;
+  const aer = parseFloat(document.getElementById('aer-slider').value) / 10;
+  const yan = parseFloat(document.getElementById('yan-slider').value);
+  const tmax = parseFloat(document.getElementById('tmax-slider').value);
+  const trangeCenter = parseFloat(document.getElementById('trange-slider').value);
+
+  return { strainKey, strain, s0, x0, ph, aer, yan, tmax, trangeCenter };
+}
+
+// ── pH inhibition factor ────────────────────────────────────────
+function phFactor(ph) {
+  // Optimal pH ~3.2-3.8; inhibition below 2.8 and above 4.5
+  if (ph < 2.8) return 0.3 + (ph - 2.5) * 0.5;
+  if (ph > 4.5) return Math.max(0.2, 1.0 - (ph - 4.5) * 0.8);
+  return 1.0 - Math.abs(ph - 3.5) * 0.08;
+}
+
+// ── YAN factor ──────────────────────────────────────────────────
+function yanFactor(yan) {
+  // Below 150 mg/L: nitrogen-limited; above 300: slight inhibition
+  if (yan < 150) return 0.4 + (yan / 150) * 0.55;
+  if (yan > 300) return 1.0 - Math.min(0.15, (yan - 300) / 1000);
+  return 0.95 + (yan - 150) / 3000;
+}
+
+// ── Temperature factor (Arrhenius + thermal death) ──────────────
+function tempFactor(T, strain) {
+  const Tk = T + 273.15;
+  // Arrhenius growth rate
+  const arrhenius = Math.exp(-strain.Ea * 1000 / R * (1/Tk - 1/Tref));
+  // Inhibition above optimal temperature (Gaussian decline)
+  const toptK = strain.Topt + 273.15;
+  const sigma = 6.0; // width of optimal window
+  const thermalInhib = Math.exp(-Math.pow(Tk - toptK, 2) / (2 * sigma * sigma));
+  // Death above deathTemp
+  let deathFactor = 1.0;
+  if (T > strain.deathTemp) {
+    const excess = T - strain.deathTemp;
+    deathFactor = Math.max(0, 1.0 - excess * strain.killMax);
+  }
+  return arrhenius * thermalInhib * deathFactor;
+}
+
+// ── Ethanol inhibition ──────────────────────────────────────────
+function ethanolInhibitor(etoh, strain) {
+  // Sigmoid inhibition above etohMax
+  const k = 2.0; // steepness
+  return 1.0 / (1.0 + Math.exp(k * (etoh - strain.etohMax)));
+}
+
+// ── Monod sugar consumption rate ────────────────────────────────
+// Returns sugar consumption rate (g/L/h) at time t, temp T
+function sugarRate(t, T, params, state) {
+  const { strain, s0, x0, ph, aer, yan } = params;
+  // Estimate biomass growth (logistic, simplified)
+  // X(t) = X0 * exp(mu * t) with mu limited by temperature
+  const mu = strain.mumax * tempFactor(T, strain) * phFactor(ph) * yanFactor(yan);
+  // Biomass concentration (simplified logistic with carrying capacity)
+  const Xmax = x0 * 50; // carrying capacity
+  const Xt = x0 * Math.exp(mu * t) / (1 + x0 * (Math.exp(mu * t) - 1) / Xmax);
+
+  // Current sugar at time t (approximate — integrate backward)
+  // We compute this iteratively in the surface, so pass it in state
+  const S = state.sugar;
+  const etoh = state.etoh;
+
+  // Monod: q = mumax * S/(Ks+S) * X * tempFactor * pH * YAN * etohInhib
+  const monod = S / (strain.Ks + S);
+  const etohInhib = ethanolInhibitor(etoh, strain);
+
+  // Aeration boost (aerobic fermentation increases biomass yield ~2x but less ethanol)
+  const aerBoost = 1 + aer * 0.15;
+
+  const rate = strain.mumax * monod * (Xt / 1e6) * tempFactor(T, strain) * phFactor(ph) * yanFactor(yan) * etohInhib * aerBoost;
+
+  // Cap at physically reasonable max
+  return Math.min(rate, 8.0); // g/L/h max
+}
+
+// ── Compute surface data ────────────────────────────────────────
+function computeSurface() {
+  const params = getParams();
+  const { strain, tmax, trangeCenter } = params;
+
+  const nTime = 40;
+  const nTemp = 36;
+  const tMin = 0, tMax = tmax;
+  const tempMin = Math.max(5, trangeCenter - 12.5);
+  const tempMax = trangeCenter + 12.5;
+
+  const timeArr = [];
+  const tempArr = [];
+  for (let i = 0; i < nTime; i++) timeArr.push(tMin + (tMax - tMin) * i / (nTime - 1));
+  for (let j = 0; j < nTemp; j++) tempArr.push(tempMin + (tempMax - tempMin) * j / (nTemp - 1));
+
+  // Z matrix: sugar consumption rate (g/L/h)
+  const z = [];
+  // Also compute integrated sugar/ethanol for each temperature trajectory
+  const sugarTraj = {}; // key: temp index -> array of sugar over time
+  const etohTraj = {};
+
+  for (let j = 0; j < nTemp; j++) {
+    const T = tempArr[j];
+    const row = [];
+    let sugar = params.s0;
+    let etoh = 0;
+    const sTraj = [];
+    const eTraj = [];
+
+    for (let i = 0; i < nTime; i++) {
+      const t = timeArr[i];
+      const dt = (tMax - tMin) / (nTime - 1) * 24; // convert days to hours
+      const state = { sugar: sugar, etoh: etoh };
+      const rate = sugarRate(t, T, params, state);
+
+      // Update sugar and ethanol
+      sugar = Math.max(0, sugar - rate * dt);
+      // Ethanol: ~0.51 g ethanol per g sugar (theoretical 0.511)
+      etoh += rate * dt * 0.511 / 7.89; // convert g/L sugar to % v/v (density 0.789)
+
+      row.push(rate);
+      sTraj.push(sugar);
+      eTraj.push(etoh);
+    }
+    z.push(row);
+    sugarTraj[j] = sTraj;
+    etohTraj[j] = eTraj;
+  }
+
+  return { timeArr, tempArr, z, sugarTraj, etohTraj, params, nTime, nTemp, tempMin, tempMax };
+}
+
+// ── Plotly layout configurations ─────────────────────────────────
+const baseLayout = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: '#a09080', family: 'system-ui, sans-serif', size: 11 },
+  margin: { l: 0, r: 0, t: 0, b: 0 },
+  scene: {
+    xaxis: { title: { text: 'Time (days)', font: { color: '#c9a060', size: 11 } }, gridcolor: '#2a2418', zerolinecolor: '#3a3020', tickfont: { color: '#8a8070', size: 9 }, backgroundcolor: 'rgba(13,15,20,0.3)', showbackground: true },
+    yaxis: { title: { text: 'Temperature (°C)', font: { color: '#c9a060', size: 11 } }, gridcolor: '#2a2418', zerolinecolor: '#3a3020', tickfont: { color: '#8a8070', size: 9 }, backgroundcolor: 'rgba(20,16,10,0.3)', showbackground: true },
+    zaxis: { title: { text: 'Sugar Rate (g/L/h)', font: { color: '#c9a060', size: 11 } }, gridcolor: '#2a2418', zerolinecolor: '#3a3020', tickfont: { color: '#8a8070', size: 9 }, backgroundcolor: 'rgba(13,15,20,0.3)', showbackground: true },
+    camera: { eye: { x: 1.6, y: -1.4, z: 0.9 } },
+    aspectratio: { x: 1.2, y: 1.0, z: 0.7 }
+  }
+};
+
+const heatmapLayout = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: '#a09080', family: 'system-ui, sans-serif', size: 11 },
+  margin: { l: 50, r: 20, t: 30, b: 40 },
+  xaxis: { title: { text: 'Time (days)', font: { color: '#c9a060' } }, gridcolor: '#2a2418', tickfont: { color: '#8a8070' }, zerolinecolor: '#3a3020' },
+  yaxis: { title: { text: 'Temperature (°C)', font: { color: '#c9a060' } }, gridcolor: '#2a2418', tickfont: { color: '#8a8070' }, zerolinecolor: '#3a3020' },
+  coloraxis: {
+    colorscale: [[0, '#1a0a05'], [0.15, '#3a1a08'], [0.3, '#6a3010'], [0.45, '#a04818'], [0.6, '#d07020'], [0.75, '#e8a030'], [0.88, '#f0d040'], [1, '#f8f0a0']],
+    colorbar: { title: { text: 'g/L/h', font: { color: '#c9a060' } }, tickfont: { color: '#8a8070' }, outlinecolor: '#3a3020' }
+  }
+};
+
+let currentView = '3d';
+let surfaceData = null;
+
+// ── Render ──────────────────────────────────────────────────────
+function render() {
+  surfaceData = computeSurface();
+  const { timeArr, tempArr, z } = surfaceData;
+
+  if (currentView === '3d') {
+    const trace = {
+      type: 'surface',
+      x: timeArr,
+      y: tempArr,
+      z: z,
+      colorscale: [[0, '#1a0a05'], [0.12, '#3a1a08'], [0.25, '#6a3010'], [0.4, '#a04818'], [0.55, '#d07020'], [0.7, '#e8a030'], [0.85, '#f0d040'], [1, '#f8f0a0']],
+      showscale: true,
+      colorbar: { title: { text: 'g/L/h', font: { color: '#c9a060', size: 10 } }, tickfont: { color: '#8a8070' }, outlinecolor: '#3a3020', x: 1.0, len: 0.7 },
+      contours: {
+        z: { show: true, usecolormap: true, highlightcolor: '#c9a060', project: { z: true } }
+      },
+      opacity: 0.92,
+      hovertemplate: 't=%{x:.1f}d, T=%{y:.1f}°C<br>Rate=%{z:.2f} g/L/h<extra></extra>'
+    };
+
+    Plotly.react('plot-3d', [trace], baseLayout, { responsive: true, displayModeBar: false });
+    document.getElementById('plot-3d').style.display = 'block';
+    document.getElementById('plot-2d').style.display = 'none';
+  } else {
+    const trace = {
+      type: 'heatmap',
+      x: timeArr,
+      y: tempArr,
+      z: z,
+      colorscale: [[0, '#1a0a05'], [0.12, '#3a1a08'], [0.25, '#6a3010'], [0.4, '#a04818'], [0.55, '#d07020'], [0.7, '#e8a030'], [0.85, '#f0d040'], [1, '#f8f0a0']],
+      colorbar: { title: { text: 'g/L/h', font: { color: '#c9a060', size: 10 } }, tickfont: { color: '#8a8070' }, outlinecolor: '#3a3020', x: 1.0, len: 0.7 },
+      hovertemplate: 't=%{x:.1f}d, T=%{y:.1f}°C<br>Rate=%{z:.2f} g/L/h<extra></extra>'
+    };
+
+    // Add contour overlay
+    const contourTrace = {
+      type: 'contour',
+      x: timeArr,
+      y: tempArr,
+      z: z,
+      showscale: false,
+      line: { color: '#c9a060', width: 1, smoothing: 0.8 },
+      opacity: 0.5,
+      hoverinfo: 'skip'
+    };
+
+    Plotly.react('plot-2d', [trace, contourTrace], heatmapLayout, { responsive: true, displayModeBar: false });
+    document.getElementById('plot-3d').style.display = 'none';
+    document.getElementById('plot-2d').style.display = 'block';
+  }
+
+  updateMetrics(surfaceData);
+  updateLabels();
+}
+
+// ── Update label values ─────────────────────────────────────────
+function updateLabels() {
+  const p = getParams();
+  document.getElementById('strain-val').textContent = p.strain.name;
+  document.getElementById('s0-val').textContent = p.s0 + ' g/L';
+  document.getElementById('x0-val').textContent = (p.x0 / 1e5).toFixed(1) + '×10⁶';
+  document.getElementById('ph-val').textContent = p.ph.toFixed(1);
+  document.getElementById('aer-val').textContent = p.aer.toFixed(1);
+  document.getElementById('yan-val').textContent = p.yan.toFixed(0);
+  document.getElementById('tmax-val').textContent = p.tmax + ' days';
+  document.getElementById('trange-val').textContent = (p.trangeCenter - 12.5).toFixed(0) + '–' + (p.trangeCenter + 12.5).toFixed(0) + '°C';
+}
+
+// ── Update metrics panel ────────────────────────────────────────
+function updateMetrics(data) {
+  const { z, tempArr, timeArr, etohTraj, sugarTraj, params, nTime, nTemp, tempMin, tempMax } = data;
+
+  // Find peak rate
+  let peak = 0, peakT = 0, peakTime = 0;
+  let sum = 0, count = 0;
+  for (let j = 0; j < nTemp; j++) {
+    for (let i = 0; i < nTime; i++) {
+      const r = z[j][i];
+      sum += r;
+      count++;
+      if (r > peak) {
+        peak = r;
+        peakT = tempArr[j];
+        peakTime = timeArr[i];
+      }
+    }
+  }
+  const avg = sum / count;
+
+  // Find optimal temperature (temp where total sugar consumed is highest)
+  let optTemp = tempMin, optConsumed = 0;
+  for (let j = 0; j < nTemp; j++) {
+    const consumed = params.s0 - sugarTraj[j][nTime - 1];
+    if (consumed > optConsumed) {
+      optConsumed = consumed;
+      optTemp = tempArr[j];
+    }
+  }
+
+  // Metrics at optimal temperature
+  const optIdx = tempArr.indexOf(optTemp) >= 0 ? tempArr.indexOf(optTemp) : Math.round(nTemp / 2);
+  const finalSugar = sugarTraj[optIdx][nTime - 1];
+  const finalEtoh = etohTraj[optIdx][nTime - 1];
+  const donePct = ((params.s0 - finalSugar) / params.s0 * 100);
+
+  // Stuck risk: if at optimal temp, fermentation is < 90% done
+  let stuckRisk = 'Low';
+  let stuckClass = 'good';
+  if (donePct < 60) { stuckRisk = 'High'; stuckClass = 'warn'; }
+  else if (donePct < 85) { stuckRisk = 'Medium'; stuckClass = 'warn'; }
+
+  // Status badge
+  let badge = '';
+  if (donePct > 98) badge = '<span class="status-badge badge-done">Complete</span>';
+  else if (donePct > 80) badge = '<span class="status-badge badge-stat">Stationary</span>';
+  else if (donePct > 40) badge = '<span class="status-badge badge-log">Active</span>';
+  else if (donePct > 10) badge = '<span class="status-badge badge-lag">Lag</span>';
+  else badge = '<span class="status-badge badge-stuck">Stuck</span>';
+  document.getElementById('status-badge').innerHTML = badge;
+
+  document.getElementById('m-peak').textContent = peak.toFixed(2) + ' g/L/h';
+  document.getElementById('m-peaktemp').textContent = peakT.toFixed(1) + ' °C';
+  document.getElementById('m-peaktime').textContent = peakTime.toFixed(1) + ' d';
+  document.getElementById('m-avg').textContent = avg.toFixed(2) + ' g/L/h';
+  document.getElementById('m-eth').textContent = finalEtoh.toFixed(1) + ' %';
+  document.getElementById('m-rs').textContent = finalSugar.toFixed(0) + ' g/L';
+  document.getElementById('m-done').textContent = donePct.toFixed(0) + ' %';
+  document.getElementById('m-opttemp').textContent = optTemp.toFixed(1) + ' °C';
+  const stuckEl = document.getElementById('m-stuck');
+  stuckEl.textContent = stuckRisk;
+  stuckEl.className = 'value ' + stuckClass;
+}
+
+// ── View switching ──────────────────────────────────────────────
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  render();
+}
+
+// ── Presets ─────────────────────────────────────────────────────
+function applyPreset(name) {
+  const presets = {
+    cool:       { strain: 'QA23',  s0: 220, x0: 20, ph: 35, aer: 0,  yan: 200, tmax: 18, trange: 12.5 },
+    red:        { strain: 'D254',  s0: 260, x0: 20, ph: 35, aer: 0,  yan: 220, tmax: 14, trange: 17.5 },
+    champagne:  { strain: 'EC1118',s0: 280, x0: 25, ph: 33, aer: 0,  yan: 250, tmax: 20, trange: 15 },
+    stuck:      { strain: 'BM45',  s0: 300, x0: 10, ph: 38, aer: 0,  yan: 80,  tmax: 21, trange: 10 }
+  };
+  const p = presets[name];
+  if (!p) return;
+  document.getElementById('strain-select').value = p.strain;
+  document.getElementById('s0-slider').value = p.s0;
+  document.getElementById('x0-slider').value = p.x0;
+  document.getElementById('ph-slider').value = p.ph;
+  document.getElementById('aer-slider').value = p.aer;
+  document.getElementById('yan-slider').value = p.yan;
+  document.getElementById('tmax-slider').value = p.tmax;
+  document.getElementById('trange-slider').value = p.trange;
+  onParamChange();
+}
+
+// ── Debounced param change ──────────────────────────────────────
+let renderTimer = null;
+function onParamChange() {
+  if (renderTimer) clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => {
+    render();
+  }, 150);
+}
+
+// ── Init ────────────────────────────────────────────────────────
+render();
+
+// Resize handler
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (currentView === '3d') {
+      Plotly.Plots.resize('plot-3d');
+    } else {
+      Plotly.Plots.resize('plot-2d');
+    }
+  }, 200);
+});
+</script>
+</body>
+</html>
