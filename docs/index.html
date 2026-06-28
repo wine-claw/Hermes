@@ -124,6 +124,7 @@ const VIDEOS = [
 
 ];
 const APPS = [
+  {date: "2026-06-29", title: "Cellar Fermentation Live Dashboard", description: "Interactive Chart.js real-time winery cellar dashboard — three parallel tank simulators with Monod + Arrhenius kinetics drive live Brix traces, bar temperatures, CO₂ evolution, energy-split doughnut, and fermentation-health radar. Adjust ambient cellar temperature, time scale, target temp, initial Brix, and YAN with Red warm, White cool, Sparkling, and Stuck risk presets.", url: "./apps/2026-06-29/cellar-fermentation-dashboard.html"},
   {date: "2026-06-27", title: "Optical Grape Sorter — Conveyor & Ejector Simulator", description: "Interactive Pixi.js WebGL line simulator of optical berry sorting — berries stream on an animated belt past a vision scan zone and air ejectors. Adjust conveyor speed, throughput, defect rate, color/size thresholds, ejector delay, and camera noise. Live accept/reject counts, false-reject and missed-defect rates, accept-ratio sparkline, and Pinot, Cabernet, Chardonnay, and Strict QC presets.", url: "./apps/2026-06-27/optical-grape-sorter-pixi.html"},
   {date: "2026-06-26", title: "Trellis Wire Tension & Load Analyzer", description: "Interactive Konva.js vineyard trellis engineering tool — drag posts to reposition, adjust wire height/gauge, crop load, wind pressure, pre-tension, and post diameter. Live wire tension, sag deflection, UTS utilization, post bending moment, safety factor, end-post uplift, and system risk status with VSP, Lyre, Gable, Scott-Henry, High Wind, and Heavy Crop presets.", url: "./apps/2026-06-26/trellis-wire-load-analyzer.html"},
   {date: "2026-06-25", title: "Destemmer Crusher Physics — Grape Separation Simulator", description: "Interactive Matter.js 2D physics simulator of grape destemming and crushing — clusters fall through a rotating destemmer drum, angled sorter grid, and counter-rotating crusher rollers. Adjustable drum speed, roller gap, roller speed, sorter hole size, and incline. Live berry/stem sorting, crush ratio, stem carryover, and efficiency metrics with Pinot Noir and Cabernet presets.", url: "./apps/2026-06-25/destemmer-crusher-physics.html"},
@@ -212,7 +213,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById("last-updated").textContent="2026-06-28";
+document.getElementById("last-updated").textContent="2026-06-29";
 render();
 </script>
 </body>

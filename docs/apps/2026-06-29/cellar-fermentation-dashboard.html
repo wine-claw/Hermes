@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Cellar Fermentation Live Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0c1018;
+    --panel: rgba(18,24,36,0.94);
+    --border: #2a3a52;
+    --text: #d8e4f0;
+    --muted: #7a92a8;
+    --accent: #5eb8ff;
+    --accent2: #c97a4a;
+    --ok: #5dd97a;
+    --warn: #e8b85d;
+    --danger: #e85d6a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100%; }
+
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container {
+    position: fixed; inset: 0; z-index: 0;
+    background: radial-gradient(ellipse 120% 80% at 50% 0%, #1a2438 0%, var(--bg) 55%);
+    padding: 3.5rem 1rem 1rem;
+    overflow: auto;
+    pointer-events: none;
+  }
+  #chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    max-width: 1100px;
+    margin: 0 auto;
+    pointer-events: auto;
+  }
+  .chart-card {
+    background: rgba(14,20,32,0.85);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.65rem 0.75rem 0.5rem;
+    min-height: 200px;
+    position: relative;
+  }
+  .chart-card.wide { grid-column: 1 / -1; min-height: 240px; }
+  .chart-card h4 {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin-bottom: 0.35rem; font-weight: 700;
+  }
+  .chart-wrap { position: relative; height: calc(100% - 1.2rem); min-height: 160px; }
+  .chart-wrap canvas { max-height: 100%; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    pointer-events: auto;
+    backdrop-filter: blur(10px);
+  }
+  .panel h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.5rem; font-weight: 700; }
+  .panel label { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--muted); margin: 0.4rem 0; }
+  .panel label span { color: var(--text); font-weight: 600; min-width: 3.2rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .panel input[type=range] { width: 100%; accent-color: var(--accent); height: 14px; }
+  .panel select {
+    width: 100%; background: #0e1420; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.4rem 0.5rem; font-size: 0.85rem; cursor: pointer;
+  }
+  .preset-row { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.35rem; }
+  .preset-btn {
+    flex: 1; min-width: 58px; background: #0e1420; border: 1px solid var(--border);
+    color: var(--text); padding: 0.32rem 0.25rem; border-radius: 6px; font-size: 0.72rem;
+    cursor: pointer; pointer-events: auto;
+  }
+  .preset-btn:hover { border-color: var(--accent); }
+  .preset-btn.active { border-color: var(--accent); background: rgba(94,184,255,0.12); color: var(--accent); }
+
+  #controls { position: absolute; top: 12px; left: 12px; width: 280px; max-height: calc(100vh - 24px); overflow-y: auto; }
+  #metrics { position: absolute; top: 12px; right: 12px; width: 220px; max-height: calc(100vh - 24px); overflow-y: auto; }
+
+  .metric { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 0.28rem 0; border-bottom: 1px solid rgba(42,58,82,0.4); }
+  .metric .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .v.ok { color: var(--ok); }
+  .v.warn { color: var(--warn); }
+  .v.danger { color: var(--danger); }
+
+  .status-pill {
+    display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.5rem;
+    border-radius: 999px; margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .status-pill.active { background: rgba(93,217,122,0.2); color: var(--ok); border: 1px solid var(--ok); }
+  .status-pill.stuck { background: rgba(232,93,106,0.15); color: var(--danger); border: 1px solid var(--danger); }
+  .status-pill.cold { background: rgba(94,184,255,0.15); color: var(--accent); border: 1px solid var(--accent); }
+
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+      padding: 0.5rem;
+      overflow: hidden;
+    }
+    #chart-grid { grid-template-columns: 1fr; gap: 0.5rem; }
+    .chart-card { min-height: 140px; }
+    .chart-card.wide { min-height: 160px; }
+    .chart-wrap { min-height: 110px; }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <div id="chart-grid">
+    <div class="chart-card wide">
+      <h4>Must chemistry — live traces</h4>
+      <div class="chart-wrap"><canvas id="chartMain"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Tank temperatures °C</h4>
+      <div class="chart-wrap"><canvas id="chartTemp"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>CO₂ evolution g/L·h</h4>
+      <div class="chart-wrap"><canvas id="chartCo2"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Cellar energy split</h4>
+      <div class="chart-wrap"><canvas id="chartDoughnut"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Fermentation health radar</h4>
+      <div class="chart-wrap"><canvas id="chartRadar"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div id="ui-layer">
+  <div id="controls" class="panel">
+    <h3>Cellar & tank</h3>
+    <label>Ambient cellar °C <span id="vAmbient">14</span></label>
+    <input type="range" id="ambient" min="8" max="22" step="0.5" value="14">
+    <label>Time scale <span id="vSpeed">1.0×</span></label>
+    <input type="range" id="speed" min="0.2" max="4" step="0.1" value="1">
+    <label>Active tank</label>
+    <select id="tankSelect">
+      <option value="0">T1 — Cabernet (red)</option>
+      <option value="1">T2 — Chardonnay (white)</option>
+      <option value="2">T3 — Rosé</option>
+    </select>
+    <label>Target temp °C <span id="vTarget">24</span></label>
+    <input type="range" id="target" min="12" max="32" step="0.5" value="24">
+    <label>Initial Brix <span id="vBrix0">24.5</span></label>
+    <input type="range" id="brix0" min="18" max="28" step="0.1" value="24.5">
+    <label>YAN mg/L <span id="vYan">180</span></label>
+    <input type="range" id="yan" min="80" max="350" step="5" value="180">
+    <div class="preset-row">
+      <button type="button" class="preset-btn active" data-preset="red">Red warm</button>
+      <button type="button" class="preset-btn" data-preset="white">White cool</button>
+      <button type="button" class="preset-btn" data-preset="sparkle">Sparkling</button>
+      <button type="button" class="preset-btn" data-preset="stuck">Stuck risk</button>
+    </div>
+  </div>
+  <div id="metrics" class="panel">
+    <h3>Live telemetry</h3>
+    <div class="metric">Brix <span class="v" id="mBrix">—</span></div>
+    <div class="metric">Density <span class="v" id="mDensity">—</span></div>
+    <div class="metric">Temp <span class="v" id="mTemp">—</span></div>
+    <div class="metric">CO₂ rate <span class="v" id="mCo2">—</span></div>
+    <div class="metric">μmax <span class="v" id="mMu">—</span></div>
+    <div class="metric">Ethanol est. <span class="v" id="mEtOH">—</span></div>
+    <div class="metric">Stuck index <span class="v" id="mStuck">—</span></div>
+    <div id="statusPill" class="status-pill active">Fermenting</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (typeof Chart === 'undefined') {
+    document.getElementById('chart-grid').innerHTML = '<p style="color:#e85d6a;padding:1rem;">Chart.js failed to load. Check CDN.</p>';
+    return;
+  }
+
+  const R = 8.314;
+  const KS = 50;
+  const MU_REF = 0.35;
+  const T_REF = 298.15;
+  const EA = 52000;
+
+  const tanks = [
+    { name: 'T1 Cabernet', color: '#8b2942', brix: 24.5, temp: 26, yan: 200, t0: 0 },
+    { name: 'T2 Chardonnay', color: '#d4b84a', brix: 22.0, temp: 16, yan: 160, t0: 12 },
+    { name: 'T3 Rosé', color: '#e88a9a', brix: 21.5, temp: 18, yan: 170, t0: 24 }
+  ];
+
+  let simDay = 0;
+  let historyLen = 48;
+  let labels = [];
+  let seriesBrix = [[], [], []];
+  let seriesTemp = [[], [], []];
+  let seriesCo2 = [[], [], []];
+
+  const state = {
+    ambient: 14,
+    speed: 1,
+    active: 0,
+    target: 24,
+    brix0: 24.5,
+    yan: 180
+  };
+
+  function brixToDensity(b) {
+    return 0.997 + (b / 100) * 0.012;
+  }
+
+  function arrheniusMu(Tc) {
+    const T = Tc + 273.15;
+    return MU_REF * Math.exp(-EA / R * (1 / T - 1 / T_REF));
+  }
+
+  function monodSugar(brix) {
+    const sugar = brix * 10;
+    return sugar / (KS + sugar);
+  }
+
+  function stepTank(tank, dt) {
+    const mu = arrheniusMu(tank.temp) * monodSugar(tank.brix) * Math.min(1, tank.yan / 140);
+    const dBrix = -mu * 0.85 * dt;
+    tank.brix = Math.max(0, tank.brix + dBrix);
+    const cool = (tank.temp - state.ambient) * 0.08 * dt;
+    const heat = mu * 2.2 * dt;
+    tank.temp += heat - cool;
+    tank.temp += (state.target - tank.temp) * 0.02 * dt;
+    return { mu, co2: mu * tank.brix * 0.45 };
+  }
+
+  function pushHistory() {
+    const d = simDay.toFixed(1);
+    if (labels.length && labels[labels.length - 1] === d) return;
+    labels.push(d);
+    if (labels.length > historyLen) {
+      labels.shift();
+      seriesBrix.forEach(s => s.shift());
+      seriesTemp.forEach(s => s.shift());
+      seriesCo2.forEach(s => s.shift());
+    }
+    tanks.forEach((t, i) => {
+      seriesBrix[i].push(t.brix);
+      seriesTemp[i].push(t.temp);
+      const mu = arrheniusMu(t.temp) * monodSugar(t.brix);
+      seriesCo2[i].push(mu * t.brix * 0.45);
+    });
+  }
+
+  const chartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 0 },
+    plugins: { legend: { labels: { color: '#9ab0c4', boxWidth: 10, font: { size: 10 } } } },
+    scales: {
+      x: { ticks: { color: '#6a8098', maxTicksLimit: 8 }, grid: { color: 'rgba(42,58,82,0.35)' } },
+      y: { ticks: { color: '#6a8098' }, grid: { color: 'rgba(42,58,82,0.35)' } }
+    }
+  };
+
+  const chartMain = new Chart(document.getElementById('chartMain'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: tanks.map((t) => ({
+        label: t.name,
+        data: [],
+        borderColor: t.color,
+        backgroundColor: t.color + '33',
+        tension: 0.25,
+        pointRadius: 0,
+        borderWidth: 2
+      }))
+    },
+    options: { ...chartOpts, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, title: { display: true, text: 'Brix', color: '#7a92a8' } } } }
+  });
+
+  const chartTemp = new Chart(document.getElementById('chartTemp'), {
+    type: 'bar',
+    data: {
+      labels: tanks.map(t => t.name.split(' ')[0]),
+      datasets: [{ label: '°C', data: [0, 0, 0], backgroundColor: tanks.map(t => t.color + 'cc') }]
+    },
+    options: {
+      ...chartOpts,
+      plugins: { ...chartOpts.plugins, legend: { display: false } },
+      scales: { x: chartOpts.scales.x, y: { ...chartOpts.scales.y, max: 35 } }
+    }
+  });
+
+  const chartCo2 = new Chart(document.getElementById('chartCo2'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Active tank',
+        data: [],
+        borderColor: '#5eb8ff',
+        fill: true,
+        backgroundColor: 'rgba(94,184,255,0.15)',
+        tension: 0.3,
+        pointRadius: 0
+      }]
+    },
+    options: chartOpts
+  });
+
+  const chartDoughnut = new Chart(document.getElementById('chartDoughnut'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Cooling', 'Ferment heat', 'Ambient loss'],
+      datasets: [{
+        data: [35, 45, 20],
+        backgroundColor: ['#5eb8ff', '#c97a4a', '#4a5a6a'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 0 },
+      plugins: { legend: { position: 'bottom', labels: { color: '#9ab0c4', font: { size: 9 } } } }
+    }
+  });
+
+  const chartRadar = new Chart(document.getElementById('chartRadar'), {
+    type: 'radar',
+    data: {
+      labels: ['Temp control', 'Sugar decline', 'N status', 'CO₂ vigor', 'Ethanol pace'],
+      datasets: [{
+        label: 'Active tank',
+        data: [70, 70, 70, 70, 70],
+        borderColor: '#5dd97a',
+        backgroundColor: 'rgba(93,217,122,0.25)',
+        pointBackgroundColor: '#5dd97a'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 0 },
+      scales: { r: { angleLines: { color: 'rgba(42,58,82,0.5)' }, grid: { color: 'rgba(42,58,82,0.4)' }, pointLabels: { color: '#8aa0b8', font: { size: 9 } }, ticks: { display: false }, suggestedMin: 0, suggestedMax: 100 } },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  function syncCharts() {
+    chartMain.data.labels = labels;
+    tanks.forEach((_, i) => { chartMain.data.datasets[i].data = seriesBrix[i]; });
+    chartMain.update('none');
+
+    chartTemp.data.datasets[0].data = tanks.map(t => t.temp);
+    chartTemp.update('none');
+
+    chartCo2.data.labels = labels;
+    const ai = state.active;
+    chartCo2.data.datasets[0].data = seriesCo2[ai];
+    chartCo2.data.datasets[0].label = tanks[ai].name;
+    chartCo2.update('none');
+
+    const t = tanks[state.active];
+    const mu = arrheniusMu(t.temp) * monodSugar(t.brix);
+    const coolLoad = Math.max(0, (t.temp - state.ambient) * 8);
+    const heatLoad = mu * 120;
+    const amb = 15 + state.ambient;
+    const sum = coolLoad + heatLoad + amb;
+    chartDoughnut.data.datasets[0].data = [coolLoad / sum * 100, heatLoad / sum * 100, amb / sum * 100];
+    chartDoughnut.update('none');
+
+    const tempScore = Math.max(0, 100 - Math.abs(t.temp - state.target) * 8);
+    const sugarScore = Math.min(100, (24 - t.brix) / 24 * 100);
+    const nScore = Math.min(100, t.yan / 2.2);
+    const co2Score = Math.min(100, mu * 180);
+    const etoh = (24 - t.brix) * 0.59;
+    const etohScore = Math.min(100, etoh / 14 * 100);
+    chartRadar.data.datasets[0].data = [tempScore, sugarScore, nScore, co2Score, etohScore];
+    chartRadar.update('none');
+  }
+
+  function updateMetrics() {
+    const t = tanks[state.active];
+    const mu = arrheniusMu(t.temp) * monodSugar(t.brix) * Math.min(1, t.yan / 140);
+    const co2 = mu * t.brix * 0.45;
+    const etoh = Math.max(0, (state.brix0 - t.brix) * 0.59);
+    const stuck = t.brix > 4 && mu < 0.04 ? Math.min(100, (4 - mu) * 40 + (200 - t.yan) / 4) : mu < 0.02 && t.brix > 2 ? 85 : 0;
+
+    document.getElementById('mBrix').textContent = t.brix.toFixed(1);
+    document.getElementById('mDensity').textContent = brixToDensity(t.brix).toFixed(4);
+    document.getElementById('mTemp').textContent = t.temp.toFixed(1) + ' °C';
+    document.getElementById('mCo2').textContent = co2.toFixed(2);
+    document.getElementById('mMu').textContent = mu.toFixed(3) + ' /d';
+    document.getElementById('mEtOH').textContent = etoh.toFixed(1) + ' %vol est.';
+    const stuckEl = document.getElementById('mStuck');
+    stuckEl.textContent = stuck.toFixed(0) + '%';
+    stuckEl.className = 'v ' + (stuck > 60 ? 'danger' : stuck > 30 ? 'warn' : 'ok');
+
+    const pill = document.getElementById('statusPill');
+    if (stuck > 55) { pill.textContent = 'Stuck risk'; pill.className = 'status-pill stuck'; }
+    else if (t.temp < 14 && mu < 0.08) { pill.textContent = 'Cold slow'; pill.className = 'status-pill cold'; }
+    else if (t.brix < 0.5) { pill.textContent = 'Complete'; pill.className = 'status-pill active'; }
+    else { pill.textContent = 'Fermenting'; pill.className = 'status-pill active'; }
+  }
+
+  function bindUI() {
+    const bind = (id, key, fmt) => {
+      const el = document.getElementById(id);
+      const cap = key.charAt(0).toUpperCase() + key.slice(1);
+      const out = document.getElementById('v' + cap);
+      el.addEventListener('input', () => {
+        state[key] = parseFloat(el.value);
+        if (out) out.textContent = fmt ? fmt(state[key]) : state[key];
+        if (key === 'brix0' || key === 'yan') {
+          const tank = tanks[state.active];
+          if (key === 'brix0') tank.brix = state.brix0;
+          if (key === 'yan') tank.yan = state.yan;
+        }
+        syncCharts();
+        updateMetrics();
+      });
+    };
+    bind('ambient', 'ambient');
+    bind('speed', 'speed', v => v.toFixed(1) + '×');
+    bind('target', 'target');
+    bind('brix0', 'brix0', v => v.toFixed(1));
+    bind('yan', 'yan', v => String(Math.round(v)));
+
+    document.getElementById('tankSelect').addEventListener('change', e => {
+      state.active = parseInt(e.target.value, 10);
+      const tank = tanks[state.active];
+      state.brix0 = tank.brix;
+      state.yan = tank.yan;
+      state.target = tank.temp;
+      document.getElementById('brix0').value = tank.brix;
+      document.getElementById('yan').value = tank.yan;
+      document.getElementById('target').value = tank.temp;
+      document.getElementById('vBrix0').textContent = tank.brix.toFixed(1);
+      document.getElementById('vYan').textContent = String(Math.round(tank.yan));
+      document.getElementById('vTarget').textContent = tank.temp;
+      syncCharts();
+      updateMetrics();
+    });
+
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const p = btn.dataset.preset;
+        if (p === 'red') {
+          state.ambient = 16; state.target = 26; state.brix0 = 25; state.yan = 220; state.speed = 1.2;
+          tanks[0].brix = 25; tanks[0].temp = 26; tanks[0].yan = 220; state.active = 0;
+        } else if (p === 'white') {
+          state.ambient = 12; state.target = 15; state.brix0 = 22; state.yan = 160; state.speed = 0.9;
+          tanks[1].brix = 22; tanks[1].temp = 15; tanks[1].yan = 160; state.active = 1;
+        } else if (p === 'sparkle') {
+          state.ambient = 11; state.target = 14; state.brix0 = 20; state.yan = 140; state.speed = 0.7;
+          tanks[2].brix = 20; tanks[2].temp = 14; tanks[2].yan = 140; state.active = 2;
+        } else {
+          state.ambient = 18; state.target = 28; state.brix0 = 24; state.yan = 90; state.speed = 1;
+          tanks[0].brix = 12; tanks[0].temp = 28; tanks[0].yan = 85; state.active = 0;
+        }
+        document.getElementById('ambient').value = state.ambient;
+        document.getElementById('target').value = state.target;
+        document.getElementById('brix0').value = state.brix0;
+        document.getElementById('yan').value = state.yan;
+        document.getElementById('speed').value = state.speed;
+        document.getElementById('vAmbient').textContent = state.ambient;
+        document.getElementById('vTarget').textContent = state.target;
+        document.getElementById('vBrix0').textContent = state.brix0.toFixed(1);
+        document.getElementById('vYan').textContent = String(Math.round(state.yan));
+        document.getElementById('vSpeed').textContent = state.speed.toFixed(1) + '×';
+        document.getElementById('tankSelect').value = String(state.active);
+        syncCharts();
+        updateMetrics();
+      });
+    });
+  }
+
+  let acc = 0;
+  function tick(ts) {
+    if (!tick.last) tick.last = ts;
+    const frame = (ts - tick.last) / 1000;
+    tick.last = ts;
+    acc += frame * state.speed;
+    while (acc >= 0.15) {
+      acc -= 0.15;
+      simDay += 0.15;
+      tanks.forEach(t => stepTank(t, 0.15));
+      pushHistory();
+    }
+    syncCharts();
+    updateMetrics();
+    requestAnimationFrame(tick);
+  }
+
+  tanks.forEach((t, i) => {
+    t.brix = [24.5, 22, 21.5][i];
+    t.yan = [200, 160, 170][i];
+  });
+  for (let i = 0; i < 8; i++) {
+    simDay += 0.5;
+    tanks.forEach(t => stepTank(t, 0.5));
+    pushHistory();
+  }
+  bindUI();
+  syncCharts();
+  updateMetrics();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
