@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vineyard Drone NDVI Survey — 3D Flight Path Explorer</title>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<style>
+  :root {
+    --bg: #0a0e0a; --surface: #0f1a12; --border: #1a2e1e; --text: #a8c8a8;
+    --muted: #5a7a5a; --accent: #4ade80; --accent2: #22d3ee; --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 15px; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5; overflow: hidden;
+  }
+
+  .disclaimer {
+    background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060;
+    padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem;
+    font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  /* DESKTOP: canvas fixed full-screen, panels float as overlay HUD */
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  #canvas-container canvas { outline: none; display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #ui-layer {
+    position: fixed; inset: 0; z-index: 10; pointer-events: none;
+  }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px; width: 290px;
+    max-height: calc(100vh - 100px); overflow-y: auto;
+    background: rgba(12, 20, 14, 0.92); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem; pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  #metrics {
+    position: absolute; top: 12px; right: 12px; width: 240px;
+    background: rgba(12, 20, 14, 0.92); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem; pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  #legend {
+    position: absolute; bottom: 12px; left: 12px; width: 200px;
+    background: rgba(12, 20, 14, 0.92); border: 1px solid var(--border);
+    border-radius: 12px; padding: 0.75rem; pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  #view-btns {
+    position: absolute; bottom: 12px; right: 12px;
+    display: flex; gap: 6px; pointer-events: auto;
+  }
+  #view-btns button {
+    background: rgba(12,20,14,0.92); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.5rem 0.8rem; color: var(--text);
+    font-size: 0.8rem; cursor: pointer; backdrop-filter: blur(8px);
+    transition: border-color 0.15s, color 0.15s;
+  }
+  #view-btns button:hover, #view-btns button.active {
+    border-color: var(--accent); color: var(--accent);
+  }
+
+  .panel-title {
+    font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--accent); margin-bottom: 0.6rem;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .panel-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+  .ctrl-group { margin-bottom: 0.7rem; }
+  .ctrl-group label {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.78rem; color: var(--muted); margin-bottom: 0.2rem;
+  }
+  .ctrl-group label .val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  input[type="range"] {
+    width: 100%; height: 4px; -webkit-appearance: none; appearance: none;
+    background: var(--border); border-radius: 2px; outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; box-shadow: 0 0 6px rgba(74,222,128,0.5);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%; border: none;
+    background: var(--accent); cursor: pointer; box-shadow: 0 0 6px rgba(74,222,128,0.5);
+  }
+
+  .preset-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 0.6rem; }
+  .preset-btn {
+    background: rgba(26,46,30,0.6); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.3rem 0.6rem; font-size: 0.72rem;
+    color: var(--text); cursor: pointer; transition: all 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .preset-btn.active { background: rgba(74,222,128,0.15); border-color: var(--accent); color: var(--accent); }
+
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.3rem 0; border-bottom: 1px solid rgba(26,46,30,0.5);
+    font-size: 0.8rem;
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-row .ml { color: var(--muted); }
+  .metric-row .mr { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+  .metric-row .mr.warn { color: var(--warn); }
+  .metric-row .mr.ok { color: var(--accent); }
+
+  .ndvi-bar {
+    width: 100%; height: 10px; border-radius: 5px; margin-top: 0.3rem;
+    background: linear-gradient(90deg, #8b4513 0%, #daa520 25%, #adff2f 50%, #228b22 75%, #006400 100%);
+  }
+  .ndvi-labels { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--muted); margin-top: 2px; }
+
+  .section-sep { height: 1px; background: var(--border); margin: 0.6rem 0; }
+
+  .toggle-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--muted); cursor: pointer; }
+  .toggle-row input { width: 14px; height: 14px; accent-color: var(--accent); }
+
+  #panel-close {
+    position: absolute; top: 8px; right: 8px; width: 22px; height: 22px;
+    background: none; border: none; color: var(--muted); font-size: 1.1rem;
+    cursor: pointer; display: none; pointer-events: auto;
+  }
+
+  #status-bar {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: rgba(12,20,14,0.95); border: 1px solid var(--accent);
+    border-radius: 8px; padding: 0.6rem 1.2rem; font-size: 0.85rem;
+    color: var(--accent); pointer-events: none; display: none;
+    text-align: center; z-index: 20;
+  }
+
+  /* MOBILE: canvas in flow, panels stack below */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer {
+      position: relative !important;
+      inset: auto !important;
+      pointer-events: auto;
+    }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #legend {
+      position: relative !important; bottom: auto !important; left: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #view-btns {
+      position: relative !important; bottom: auto !important; right: auto !important;
+      margin: 0.5rem 0; flex-wrap: wrap;
+    }
+    #panel-close { display: block; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"><canvas id="render-canvas"></canvas></div>
+
+<div id="ui-layer">
+  <div id="status-bar"></div>
+
+  <div id="controls">
+    <button id="panel-close">✕</button>
+    <div class="panel-title"><span class="dot"></span> Flight Parameters</div>
+
+    <div class="ctrl-group">
+      <label>Altitude <span class="val" id="v-alt">40 m</span></label>
+      <input type="range" id="s-alt" min="15" max="120" value="40" step="1">
+    </div>
+    <div class="ctrl-group">
+      <label>Speed <span class="val" id="v-speed">8 m/s</span></label>
+      <input type="range" id="s-speed" min="2" max="18" value="8" step="0.5">
+    </div>
+    <div class="ctrl-group">
+      <label>Swath Width <span class="val" id="v-swath">60 m</span></label>
+      <input type="range" id="s-swath" min="20" max="120" value="60" step="2">
+    </div>
+    <div class="ctrl-group">
+      <label>Side Overlap <span class="val" id="v-overlap">60%</span></label>
+      <input type="range" id="s-overlap" min="20" max="85" value="60" step="5">
+    </div>
+    <div class="ctrl-group">
+      <label>Vineyard Area <span class="val" id="v-area">4.0 ha</span></label>
+      <input type="range" id="s-area" min="1" max="10" value="4" step="0.5">
+    </div>
+
+    <div class="section-sep"></div>
+    <div class="panel-title"><span class="dot" style="background:var(--accent2);box-shadow:0 0 8px var(--accent2)"></span> NDVI Health Map</div>
+
+    <div class="ctrl-group">
+      <label>Stress Patches <span class="val" id="v-stress">3</span></label>
+      <input type="range" id="s-stress" min="0" max="8" value="3" step="1">
+    </div>
+    <div class="ctrl-group">
+      <label>Stress Severity <span class="val" id="v-severity">50%</span></label>
+      <input type="range" id="s-severity" min="10" max="90" value="50" step="5">
+    </div>
+
+    <div class="section-sep"></div>
+    <label class="toggle-row">
+      <input type="checkbox" id="chk-overlay" checked> Show NDVI overlay
+    </label>
+    <label class="toggle-row" style="margin-top:0.3rem">
+      <input type="checkbox" id="chk-path" checked> Show flight path
+    </label>
+    <label class="toggle-row" style="margin-top:0.3rem">
+      <input type="checkbox" id="chk-dronecam"> Drone camera view
+    </label>
+
+    <div class="section-sep"></div>
+    <div class="panel-title"><span class="dot" style="background:var(--warn);box-shadow:0 0 8px var(--warn)"></span> Mission Presets</div>
+    <div class="preset-row">
+      <button class="preset-btn active" data-preset="standard">Standard</button>
+      <button class="preset-btn" data-preset="quick">Quick Scan</button>
+      <button class="preset-btn" data-preset="detail">High Detail</button>
+      <button class="preset-btn" data-preset="stress">Stress Detect</button>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <div class="panel-title"><span class="dot"></span> Mission Telemetry</div>
+    <div class="metric-row"><span class="ml">Flight Time</span><span class="mr" id="m-time">00:00</span></div>
+    <div class="metric-row"><span class="ml">Distance Flown</span><span class="mr" id="m-dist">0 m</span></div>
+    <div class="metric-row"><span class="ml">Coverage</span><span class="mr" id="m-cov">0%</span></div>
+    <div class="metric-row"><span class="ml">Images Captured</span><span class="mr" id="m-imgs">0</span></div>
+    <div class="metric-row"><span class="ml">Battery</span><span class="mr" id="m-batt">100%</span></div>
+    <div class="metric-row"><span class="ml">Lines Flown</span><span class="mr" id="m-lines">0 / 0</span></div>
+    <div class="section-sep"></div>
+    <div class="panel-title"><span class="dot" style="background:var(--accent2);box-shadow:0 0 8px var(--accent2)"></span> NDVI Analysis</div>
+    <div class="metric-row"><span class="ml">Mean NDVI</span><span class="mr ok" id="m-mean">—</span></div>
+    <div class="metric-row"><span class="ml">Healthy Area</span><span class="mr ok" id="m-healthy">—</span></div>
+    <div class="metric-row"><span class="ml">Stressed Area</span><span class="mr warn" id="m-stressed">—</span></div>
+    <div class="ndvi-bar"></div>
+    <div class="ndvi-labels"><span>-0.2</span><span>0.0</span><span>0.3</span><span>0.6</span><span>0.9</span></div>
+  </div>
+
+  <div id="legend">
+    <div class="panel-title" style="margin-bottom:0.4rem"><span class="dot"></span> View Controls</div>
+    <div style="font-size:0.72rem;color:var(--muted);line-height:1.6">
+      🖱️ Drag to orbit · Scroll to zoom<br>
+      ▶️ Mission auto-starts on load<br>
+      🔄 Reset with presets
+    </div>
+  </div>
+
+  <div id="view-btns">
+    <button id="btn-start" class="active">▶ Start</button>
+    <button id="btn-pause">⏸ Pause</button>
+    <button id="btn-reset">↺ Reset</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  "use strict";
+
+  // ===== Babylon.js Setup =====
+  var canvas = document.getElementById("render-canvas");
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.style.display = "block";
+  canvas.style.outline = "none";
+  var engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, antialias: true });
+  var scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color4(0.03, 0.06, 0.04, 1);
+  scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.006;
+  scene.fogColor = new BABYLON.Color3(0.08, 0.12, 0.10);
+
+  // Camera — arc rotate for orbit
+  var camera = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2.5, Math.PI / 3.2, 220, new BABYLON.Vector3(0, 0, 0), scene);
+  camera.attachControl(canvas, true);
+  camera.lowerRadiusLimit = 40;
+  camera.upperRadiusLimit = 600;
+  camera.upperBetaLimit = Math.PI / 2.1;
+  camera.lowerBetaLimit = 0.1;
+  camera.wheelDeltaPercentage = 0.8;
+
+  // Lights
+  var hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0.3, 1, 0.2), scene);
+  hemi.intensity = 0.7;
+  hemi.groundColor = new BABYLON.Color3(0.15, 0.18, 0.12);
+  hemi.diffuse = new BABYLON.Color3(0.7, 0.8, 0.6);
+
+  var sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.4, -0.7, 0.3), scene);
+  sun.intensity = 0.8;
+  sun.diffuse = new BABYLON.Color3(1, 0.9, 0.7);
+
+  // ===== Parameters =====
+  var P = {
+    altitude: 40, speed: 8, swath: 60, overlap: 60, area: 4,
+    stressPatches: 3, stressSeverity: 50,
+    showOverlay: true, showPath: true, droneCam: false,
+    running: true
+  };
+
+  // ===== Ground / Terrain =====
+  var groundSize = 300;
+  var ground = BABYLON.MeshBuilder.CreateGround("ground", { width: groundSize, height: groundSize, subdivisions: 64 }, scene);
+  var groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+  groundMat.diffuseColor = new BABYLON.Color3(0.12, 0.16, 0.08);
+  groundMat.specularColor = new BABYLON.Color3(0, 0, 0);
+  ground.material = groundMat;
+  ground.position.y = 0;
+
+  // NDVI overlay ground (slightly above)
+  var ndviGround = BABYLON.MeshBuilder.CreateGround("ndviGround", { width: groundSize, height: groundSize, subdivisions: 80 }, scene);
+  var ndviMat = new BABYLON.StandardMaterial("ndviMat", scene);
+  ndviMat.diffuseTexture = null;
+  ndviMat.specularColor = new BABYLON.Color3(0, 0, 0);
+  ndviMat.alpha = 0.78;
+  ndviGround.material = ndviMat;
+  ndviGround.position.y = 0.05;
+  ndviGround.isVisible = false;
+
+  // Dynamic NDVI texture
+  var ndviResolution = 256;
+  var ndviCanvas = document.createElement("canvas");
+  ndviCanvas.width = ndviResolution;
+  ndviCanvas.height = ndviResolution;
+  var ndviCtx = ndviCanvas.getContext("2d");
+  var ndviTexture = new BABYLON.DynamicTexture("ndviTex", { width: ndviResolution, height: ndviResolution }, scene, false);
+  ndviMat.diffuseTexture = ndviTexture;
+  ndviMat.diffuseTexture.uScale = 1;
+  ndviMat.diffuseTexture.vScale = 1;
+
+  // NDVI stress map data
+  var ndviData = [];
+  var stressCenters = [];
+
+  function generateStressCenters() {
+    stressCenters = [];
+    var count = P.stressPatches;
+    for (var i = 0; i < count; i++) {
+      stressCenters.push({
+        x: (Math.random() - 0.5) * groundSize * 0.7,
+        z: (Math.random() - 0.5) * groundSize * 0.7,
+        radius: 20 + Math.random() * 40,
+        severity: P.stressSeverity / 100
+      });
+    }
+  }
+
+  function computeNDVI(worldX, worldZ) {
+    var baseHealth = 0.72;
+    for (var i = 0; i < stressCenters.length; i++) {
+      var c = stressCenters[i];
+      var dx = worldX - c.x;
+      var dz = worldZ - c.z;
+      var dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < c.radius) {
+        var falloff = 1 - (dist / c.radius);
+        var reduction = c.severity * falloff * 0.65;
+        baseHealth -= reduction;
+      }
+    }
+    // Add perlin-like noise
+    var noise = Math.sin(worldX * 0.05) * Math.cos(worldZ * 0.04) * 0.04 +
+                Math.sin(worldX * 0.12 + worldZ * 0.08) * 0.02;
+    baseHealth += noise;
+    return Math.max(-0.1, Math.min(0.9, baseHealth));
+  }
+
+  function ndviToColor(ndvi) {
+    // -0.2 to 0.9 color scale
+    var t = (ndvi + 0.2) / 1.1;
+    t = Math.max(0, Math.min(1, t));
+    var r, g, b;
+    if (t < 0.25) {
+      var s = t / 0.25;
+      r = 139 + (218 - 139) * s; g = 69 + (165 - 69) * s; b = 19 + (32 - 19) * s;
+    } else if (t < 0.5) {
+      var s = (t - 0.25) / 0.25;
+      r = 218 + (173 - 218) * s; g = 165 + (255 - 165) * s; b = 32 + (47 - 32) * s;
+    } else if (t < 0.75) {
+      var s = (t - 0.5) / 0.25;
+      r = 173 + (34 - 173) * s; g = 255 + (139 - 255) * s; b = 47 + (34 - 47) * s;
+    } else {
+      var s = (t - 0.75) / 0.25;
+      r = 34 + (0 - 34) * s; g = 139 + (100 - 139) * s; b = 34 + (0 - 34) * s;
+    }
+    return [Math.round(r), Math.round(g), Math.round(b)];
+  }
+
+  function renderNDVITexture() {
+    var imgData = ndviCtx.createImageData(ndviResolution, ndviResolution);
+    var sumNDVI = 0;
+    var healthyPx = 0;
+    var stressedPx = 0;
+    var totalPx = ndviResolution * ndviResolution;
+
+    for (var py = 0; py < ndviResolution; py++) {
+      for (var px = 0; px < ndviResolution; px++) {
+        var worldX = (px / ndviResolution - 0.5) * groundSize;
+        var worldZ = (py / ndviResolution - 0.5) * groundSize;
+        var ndvi = computeNDVI(worldX, worldZ);
+        sumNDVI += ndvi;
+        if (ndvi > 0.5) healthyPx++;
+        if (ndvi < 0.35) stressedPx++;
+
+        var c = ndviToColor(ndvi);
+        var idx = (py * ndviResolution + px) * 4;
+        imgData.data[idx] = c[0];
+        imgData.data[idx + 1] = c[1];
+        imgData.data[idx + 2] = c[2];
+        imgData.data[idx + 3] = 255;
+      }
+    }
+
+    ndviCtx.putImageData(imgData, 0, 0);
+    ndviTexture.getContext().drawImage(ndviCanvas, 0, 0);
+    ndviTexture.update();
+
+    P._meanNDVI = sumNDVI / totalPx;
+    P._healthyPct = (healthyPx / totalPx * 100);
+    P._stressedPct = (stressedPx / totalPx * 100);
+  }
+
+  // ===== Vine Rows =====
+  var vineRowMeshes = [];
+
+  function buildVineRows() {
+    // Clear old
+    for (var i = 0; i < vineRowMeshes.length; i++) {
+      vineRowMeshes[i].dispose();
+    }
+    vineRowMeshes = [];
+
+    var halfSize = Math.sqrt(P.area * 10000) / 2; // area in m² → half side
+    halfSize = Math.min(halfSize, groundSize * 0.42);
+    var rowSpacing = 2.5; // meters between rows
+    var numRows = Math.floor((halfSize * 2) / rowSpacing);
+    var startX = -halfSize + rowSpacing / 2;
+
+    for (var r = 0; r < numRows; r++) {
+      var x = startX + r * rowSpacing;
+      if (Math.abs(x) > groundSize * 0.45) continue;
+
+      // Vine row as a thin box (canopy)
+      var rowMesh = BABYLON.MeshBuilder.CreateBox("vineRow" + r, { width: 0.8, height: 1.8, depth: halfSize * 2 }, scene);
+      rowMesh.position = new BABYLON.Vector3(x, 0.9, 0);
+      var rowMat = new BABYLON.StandardMaterial("vineMat" + r, scene);
+      rowMat.diffuseColor = new BABYLON.Color3(0.08, 0.22, 0.06);
+      rowMat.specularColor = new BABYLON.Color3(0, 0, 0);
+      rowMesh.material = rowMat;
+      vineRowMeshes.push(rowMesh);
+
+      // Posts every 8m
+      var postSpacing = 8;
+      var numPosts = Math.floor((halfSize * 2) / postSpacing);
+      for (var p = 0; p <= numPosts; p++) {
+        var pz = -halfSize + p * postSpacing;
+        if (Math.abs(pz) > halfSize) continue;
+        var post = BABYLON.MeshBuilder.CreateBox("post" + r + "_" + p, { width: 0.1, height: 2.0, depth: 0.1 }, scene);
+        post.position = new BABYLON.Vector3(x, 1.0, pz);
+        var postMat = new BABYLON.StandardMaterial("postMat" + r + "_" + p, scene);
+        postMat.diffuseColor = new BABYLON.Color3(0.35, 0.25, 0.12);
+        postMat.specularColor = new BABYLON.Color3(0, 0, 0);
+        post.material = postMat;
+        vineRowMeshes.push(post);
+      }
+
+      // Wire line (thin cylinder)
+      var wire = BABYLON.MeshBuilder.CreateCylinder("wire" + r, { height: halfSize * 2, diameter: 0.04 }, scene);
+      wire.rotation.x = Math.PI / 2;
+      wire.position = new BABYLON.Vector3(x, 1.6, 0);
+      var wireMat = new BABYLON.StandardMaterial("wireMat" + r, scene);
+      wireMat.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.45);
+      wireMat.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+      wire.material = wireMat;
+      vineRowMeshes.push(wire);
+
+      // Lower wire
+      var wire2 = BABYLON.MeshBuilder.CreateCylinder("wire2" + r, { height: halfSize * 2, diameter: 0.04 }, scene);
+      wire2.rotation.x = Math.PI / 2;
+      wire2.position = new BABYLON.Vector3(x, 0.9, 0);
+      wire2.material = wireMat;
+      vineRowMeshes.push(wire2);
+    }
+
+    P._halfSize = halfSize;
+    P._rowSpacing = rowSpacing;
+  }
+
+  // ===== Drone Model =====
+  var droneRoot = new BABYLON.TransformNode("droneRoot", scene);
+
+  // Body
+  var droneBody = BABYLON.MeshBuilder.CreateBox("droneBody", { width: 1.2, height: 0.3, depth: 1.2 }, scene);
+  droneBody.parent = droneRoot;
+  droneBody.position.y = 0;
+  var droneMat = new BABYLON.StandardMaterial("droneMat", scene);
+  droneMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.12);
+  droneMat.specularColor = new BABYLON.Color3(0.3, 0.3, 0.35);
+  droneMat.emissiveColor = new BABYLON.Color3(0.02, 0.02, 0.04);
+  droneBody.material = droneMat;
+
+  // Arms + rotors
+  var rotorMeshes = [];
+  var armPositions = [
+    { x: 0.8, z: 0.8 }, { x: -0.8, z: 0.8 },
+    { x: 0.8, z: -0.8 }, { x: -0.8, z: -0.8 }
+  ];
+  for (var i = 0; i < 4; i++) {
+    var arm = BABYLON.MeshBuilder.CreateCylinder("arm" + i, { height: 0.05, diameter: 0.1 }, scene);
+    arm.parent = droneRoot;
+    var ap = armPositions[i];
+    arm.position = new BABYLON.Vector3(ap.x * 0.5, 0.05, ap.z * 0.5);
+    arm.rotation.z = Math.atan2(ap.x, 0);
+    arm.rotation.x = Math.atan2(ap.z, ap.x);
+    arm.scaling = new BABYLON.Vector3(1, 3, 1);
+    arm.material = droneMat;
+
+    // Rotor disc
+    var rotor = BABYLON.MeshBuilder.CreateCylinder("rotor" + i, { height: 0.04, diameter: 0.8 }, scene);
+    rotor.parent = droneRoot;
+    rotor.position = new BABYLON.Vector3(ap.x, 0.15, ap.z);
+    var rotorMat = new BABYLON.StandardMaterial("rotorMat" + i, scene);
+    rotorMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.25);
+    rotorMat.alpha = 0.35;
+    rotorMat.specularColor = new BABYLON.Color3(0, 0, 0);
+    rotor.material = rotorMat;
+    rotorMeshes.push(rotor);
+  }
+
+  // LED indicator
+  var led = BABYLON.MeshBuilder.CreateSphere("led", { diameter: 0.15 }, scene);
+  led.parent = droneRoot;
+  led.position.y = -0.15;
+  var ledMat = new BABYLON.StandardMaterial("ledMat", scene);
+  ledMat.emissiveColor = new BABYLON.Color3(0, 1, 0.3);
+  ledMat.diffuseColor = new BABYLON.Color3(0, 0.5, 0.1);
+  led.material = ledMat;
+
+  // Camera gimbal
+  var gimbal = BABYLON.MeshBuilder.CreateSphere("gimbal", { diameter: 0.25 }, scene);
+  gimbal.parent = droneRoot;
+  gimbal.position.y = -0.2;
+  var gimbalMat = new BABYLON.StandardMaterial("gimbalMat", scene);
+  gimbalMat.diffuseColor = new BABYLON.Color3(0.05, 0.05, 0.06);
+  gimbalMat.specularColor = new BABYLON.Color3(0.4, 0.4, 0.4);
+  gimbal.material = gimbalMat;
+
+  // Drone shadow disc
+  var shadowDisc = BABYLON.MeshBuilder.CreateDisc("shadow", { radius: 1.0 }, scene);
+  shadowDisc.rotation.x = Math.PI / 2;
+  shadowDisc.parent = droneRoot;
+  shadowDisc.position.y = -P.altitude + 0.15;
+  var shadowMat = new BABYLON.StandardMaterial("shadowMat", scene);
+  shadowMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+  shadowMat.alpha = 0.25;
+  shadowMat.specularColor = new BABYLON.Color3(0, 0, 0);
+  shadowMat.emissiveColor = new BABYLON.Color3(0, 0, 0);
+  shadowMat.backFaceCulling = false;
+  shadowDisc.material = shadowMat;
+
+  // ===== Flight Path =====
+  var pathLines = [];
+  var waypoints = [];
+
+  function computeFlightPath() {
+    waypoints = [];
+    var half = P._halfSize || 100;
+    var effectiveSwath = P.swath * (1 - P.overlap / 100);
+    var numLines = Math.ceil((half * 2) / effectiveSwath);
+    var startLine = -half + effectiveSwath / 2;
+
+    for (var i = 0; i < numLines; i++) {
+      var x = startLine + i * effectiveSwath;
+      if (Math.abs(x) > half + effectiveSwath) continue;
+      var z1 = -half;
+      var z2 = half;
+      // Boustrophedon: alternate direction
+      if (i % 2 === 0) {
+        waypoints.push({ x: x, z: z1, line: i, phase: "start" });
+        waypoints.push({ x: x, z: z2, line: i, phase: "end" });
+      } else {
+        waypoints.push({ x: x, z: z2, line: i, phase: "start" });
+        waypoints.push({ x: x, z: z1, line: i, phase: "end" });
+      }
+    }
+
+    P._totalLines = numLines;
+    P._totalWaypoints = waypoints.length;
+    buildPathLines();
+  }
+
+  function buildPathLines() {
+    for (var i = 0; i < pathLines.length; i++) {
+      pathLines[i].dispose();
+    }
+    pathLines = [];
+
+    var half = P._halfSize || 100;
+    var effectiveSwath = P.swath * (1 - P.overlap / 100);
+    var numLines = Math.ceil((half * 2) / effectiveSwath);
+    var startLine = -half + effectiveSwath / 2;
+
+    for (var i = 0; i < numLines; i++) {
+      var x = startLine + i * effectiveSwath;
+      if (Math.abs(x) > half + effectiveSwath) continue;
+
+      var points = [
+        new BABYLON.Vector3(x, P.altitude, -half),
+        new BABYLON.Vector3(x, P.altitude, half)
+      ];
+      var line = BABYLON.MeshBuilder.CreateLines("pathLine" + i, { points: points }, scene);
+      line.color = new BABYLON.Color3(0.15, 0.7, 0.9);
+      line.alpha = 0.5;
+      line.isVisible = P.showPath;
+      pathLines.push(line);
+    }
+  }
+
+  // ===== Flight Simulation =====
+  var simState = {
+    wpIndex: 0,
+    progress: 0,
+    posX: 0, posZ: 0,
+    heading: 0,
+    distanceFlown: 0,
+    flightTime: 0,
+    imagesCaptured: 0,
+    battery: 100,
+    linesCompleted: 0,
+    coverage: 0,
+    capturedGrid: null
+  };
+
+  function resetSim() {
+    simState.wpIndex = 0;
+    simState.progress = 0;
+    simState.distanceFlown = 0;
+    simState.flightTime = 0;
+    simState.imagesCaptured = 0;
+    simState.battery = 100;
+    simState.linesCompleted = 0;
+    simState.coverage = 0;
+    simState.capturedGrid = new Uint8Array(ndviResolution * ndviResolution);
+
+    if (waypoints.length > 0) {
+      simState.posX = waypoints[0].x;
+      simState.posZ = waypoints[0].z;
+    }
+    droneRoot.position.x = simState.posX;
+    droneRoot.position.z = simState.posZ;
+    droneRoot.position.y = P.altitude;
+  }
+
+  function updateSim(dt) {
+    if (!P.running) return;
+    if (waypoints.length < 2) return;
+
+    var currentWP = waypoints[simState.wpIndex];
+    var nextWP = waypoints[Math.min(simState.wpIndex + 1, waypoints.length - 1)];
+
+    var dx = nextWP.x - currentWP.x;
+    var dz = nextWP.z - currentWP.z;
+    var segLen = Math.sqrt(dx * dx + dz * dz);
+    if (segLen < 0.01) {
+      simState.wpIndex++;
+      simState.progress = 0;
+      if (simState.wpIndex >= waypoints.length - 1) {
+        // Mission complete — loop
+        simState.wpIndex = 0;
+        simState.progress = 0;
+        simState.imagesCaptured = 0;
+        simState.distanceFlown = 0;
+        simState.flightTime = 0;
+        simState.battery = 100;
+        simState.linesCompleted = 0;
+        simState.coverage = 0;
+        simState.capturedGrid = new Uint8Array(ndviResolution * ndviResolution);
+      }
+      return;
+    }
+
+    var speed = P.speed;
+    var moveDist = speed * dt;
+    simState.progress += moveDist / segLen;
+
+    if (simState.progress >= 1) {
+      simState.wpIndex++;
+      simState.progress = 0;
+      if (simState.wpIndex >= waypoints.length - 1) {
+        // Mission complete
+        simState.wpIndex = 0;
+        simState.progress = 0;
+        simState.imagesCaptured = 0;
+        simState.distanceFlown = 0;
+        simState.flightTime = 0;
+        simState.battery = 100;
+        simState.linesCompleted = 0;
+        simState.coverage = 0;
+        simState.capturedGrid = new Uint8Array(ndviResolution * ndviResolution);
+      }
+      currentWP = waypoints[simState.wpIndex];
+      nextWP = waypoints[Math.min(simState.wpIndex + 1, waypoints.length - 1)];
+    }
+
+    // Interpolate position
+    var t = simState.progress;
+    simState.posX = currentWP.x + (nextWP.x - currentWP.x) * t;
+    simState.posZ = currentWP.z + (nextWP.z - currentWP.z) * t;
+
+    // Heading
+    var hdx = nextWP.x - currentWP.x;
+    var hdz = nextWP.z - currentWP.z;
+    simState.heading = Math.atan2(hdx, hdz);
+
+    droneRoot.position.x = simState.posX;
+    droneRoot.position.z = simState.posZ;
+    droneRoot.position.y = P.altitude;
+    droneRoot.rotation.y = simState.heading;
+
+    // Shadow follows on ground
+    shadowDisc.position.y = -P.altitude + 0.15;
+
+    // Metrics
+    simState.distanceFlown += moveDist;
+    simState.flightTime += dt;
+    simState.battery = Math.max(0, 100 - (simState.flightTime / 1800) * 100); // ~30 min battery
+
+    // Image capture (every 2 seconds of flight → 1 image)
+    simState._captureTimer = (simState._captureTimer || 0) + dt;
+    if (simState._captureTimer >= 2) {
+      simState._captureTimer = 0;
+      simState.imagesCaptured++;
+
+      // Mark captured area on grid
+      var gridX = Math.floor((simState.posX / groundSize + 0.5) * ndviResolution);
+      var gridZ = Math.floor((simState.posZ / groundSize + 0.5) * ndviResolution);
+      var captureRadius = Math.floor((P.swath / 2 / groundSize) * ndviResolution);
+      for (var cz = gridZ - captureRadius; cz <= gridZ + captureRadius; cz++) {
+        for (var cx = gridX - captureRadius; cx <= gridX + captureRadius; cx++) {
+          if (cx >= 0 && cx < ndviResolution && cz >= 0 && cz < ndviResolution) {
+            var dd = Math.sqrt((cx - gridX) * (cx - gridX) + (cz - gridZ) * (cz - gridZ));
+            if (dd <= captureRadius) {
+              simState.capturedGrid[cz * ndviResolution + cx] = 1;
+            }
+          }
+        }
+      }
+    }
+
+    // Lines completed
+    simState.linesCompleted = Math.floor(simState.wpIndex / 2);
+
+    // Coverage
+    var capturedCount = 0;
+    for (var i = 0; i < simState.capturedGrid.length; i++) {
+      if (simState.capturedGrid[i]) capturedCount++;
+    }
+    simState.coverage = (capturedCount / simState.capturedGrid.length) * 100;
+  }
+
+  // ===== Rotor animation =====
+  var rotorAngle = 0;
+  function animateRotors(dt) {
+    rotorAngle += dt * 40;
+    for (var i = 0; i < rotorMeshes.length; i++) {
+      rotorMeshes[i].rotation.y = rotorAngle + i * 0.5;
+      rotorMeshes[i].scaling.y = 1 + Math.sin(rotorAngle * 2 + i) * 0.1;
+    }
+    // LED blink
+    led.material.emissiveColor = new BABYLON.Color3(
+      P.running ? 0 : 1,
+      P.running ? 1 : 0.2,
+      P.running ? 0.3 : 0.1
+    );
+  }
+
+  // ===== UI Update =====
+  function fmtTime(s) {
+    var m = Math.floor(s / 60);
+    var sec = Math.floor(s % 60);
+    return String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+  }
+
+  function updateUI() {
+    document.getElementById("m-time").textContent = fmtTime(simState.flightTime);
+    document.getElementById("m-dist").textContent = Math.round(simState.distanceFlown) + " m";
+    document.getElementById("m-cov").textContent = Math.round(simState.coverage) + "%";
+    document.getElementById("m-imgs").textContent = simState.imagesCaptured;
+
+    var battEl = document.getElementById("m-batt");
+    battEl.textContent = Math.round(simState.battery) + "%";
+    battEl.className = "mr" + (simState.battery < 20 ? " warn" : (simState.battery > 50 ? " ok" : ""));
+
+    document.getElementById("m-lines").textContent = simState.linesCompleted + " / " + (P._totalLines || 0);
+
+    var meanEl = document.getElementById("m-mean");
+    meanEl.textContent = (P._meanNDVI !== undefined ? P._meanNDVI.toFixed(2) : "—");
+    meanEl.className = "mr " + (P._meanNDVI > 0.5 ? "ok" : (P._meanNDVI < 0.3 ? "warn" : ""));
+
+    document.getElementById("m-healthy").textContent = (P._healthyPct !== undefined ? P._healthyPct.toFixed(0) + "%" : "—");
+    document.getElementById("m-stressed").textContent = (P._stressedPct !== undefined ? P._stressedPct.toFixed(0) + "%" : "—");
+  }
+
+  // ===== Camera Modes =====
+  var droneCam = null;
+  function setupDroneCam() {
+    if (droneCam) droneCam.dispose();
+    droneCam = new BABYLON.FollowCamera("droneCam", new BABYLON.Vector3(0, P.altitude + 5, 0), scene, droneRoot);
+    droneCam.radius = 8;
+    droneCam.heightOffset = 3;
+    droneCam.rotationOffset = 180;
+    droneCam.cameraAcceleration = 0.08;
+    droneCam.maxCameraSpeed = 20;
+  }
+
+  function switchCamera(toDrone) {
+    if (toDrone) {
+      if (!droneCam) setupDroneCam();
+      scene.activeCamera = droneCam;
+    } else {
+      scene.activeCamera = camera;
+    }
+  }
+
+  // ===== Resize =====
+  window.addEventListener("resize", function() {
+    engine.resize();
+  });
+
+  // ===== Render Loop =====
+  var lastTime = performance.now();
+  engine.runRenderLoop(function() {
+    var now = performance.now();
+    var dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+
+    updateSim(dt);
+    animateRotors(dt);
+    updateUI();
+
+    scene.render();
+  });
+
+  // ===== Controls Binding =====
+  function bindSlider(id, key, suffix, transform, rebuild) {
+    var slider = document.getElementById(id);
+    var valSpan = document.getElementById("v-" + id.replace("s-", ""));
+    slider.addEventListener("input", function() {
+      var v = parseFloat(slider.value);
+      if (transform) v = transform(v);
+      P[key] = v;
+      valSpan.textContent = v + suffix;
+      if (rebuild) rebuild();
+    });
+  }
+
+  bindSlider("s-alt", "altitude", " m", null, function() {
+    shadowDisc.position.y = -P.altitude + 0.15;
+    computeFlightPath();
+  });
+  bindSlider("s-speed", "speed", " m/s");
+  bindSlider("s-swath", "swath", " m", null, function() {
+    computeFlightPath();
+  });
+  bindSlider("s-overlap", "overlap", "%", null, function() {
+    computeFlightPath();
+  });
+  bindSlider("s-area", "area", " ha", null, function() {
+    buildVineRows();
+    computeFlightPath();
+    resetSim();
+  });
+  bindSlider("s-stress", "stressPatches", "", null, function() {
+    generateStressCenters();
+    renderNDVITexture();
+  });
+  bindSlider("s-severity", "stressSeverity", "%", null, function() {
+    for (var i = 0; i < stressCenters.length; i++) {
+      stressCenters[i].severity = P.stressSeverity / 100;
+    }
+    renderNDVITexture();
+  });
+
+  document.getElementById("chk-overlay").addEventListener("change", function(e) {
+    P.showOverlay = e.target.checked;
+    ndviGround.isVisible = P.showOverlay;
+  });
+
+  document.getElementById("chk-path").addEventListener("change", function(e) {
+    P.showPath = e.target.checked;
+    for (var i = 0; i < pathLines.length; i++) {
+      pathLines[i].isVisible = P.showPath;
+    }
+  });
+
+  document.getElementById("chk-dronecam").addEventListener("change", function(e) {
+    P.droneCam = e.target.checked;
+    switchCamera(P.droneCam);
+  });
+
+  // Presets
+  var presets = {
+    standard: { altitude: 40, speed: 8, swath: 60, overlap: 60, stressPatches: 3, stressSeverity: 50 },
+    quick: { altitude: 80, speed: 15, swath: 100, overlap: 40, stressPatches: 2, stressSeverity: 30 },
+    detail: { altitude: 25, speed: 5, swath: 35, overlap: 75, stressPatches: 4, stressSeverity: 60 },
+    stress: { altitude: 35, speed: 6, swath: 50, overlap: 70, stressPatches: 6, stressSeverity: 75 }
+  };
+
+  document.querySelectorAll(".preset-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      document.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      var preset = presets[btn.dataset.preset];
+      P.altitude = preset.altitude;
+      P.speed = preset.speed;
+      P.swath = preset.swath;
+      P.overlap = preset.overlap;
+      P.stressPatches = preset.stressPatches;
+      P.stressSeverity = preset.stressSeverity;
+
+      // Update UI
+      document.getElementById("s-alt").value = preset.altitude;
+      document.getElementById("v-alt").textContent = preset.altitude + " m";
+      document.getElementById("s-speed").value = preset.speed;
+      document.getElementById("v-speed").textContent = preset.speed + " m/s";
+      document.getElementById("s-swath").value = preset.swath;
+      document.getElementById("v-swath").textContent = preset.swath + " m";
+      document.getElementById("s-overlap").value = preset.overlap;
+      document.getElementById("v-overlap").textContent = preset.overlap + "%";
+      document.getElementById("s-stress").value = preset.stressPatches;
+      document.getElementById("v-stress").textContent = preset.stressPatches;
+      document.getElementById("s-severity").value = preset.stressSeverity;
+      document.getElementById("v-severity").textContent = preset.stressSeverity + "%";
+
+      shadowDisc.position.y = -P.altitude + 0.15;
+      generateStressCenters();
+      renderNDVITexture();
+      computeFlightPath();
+      resetSim();
+    });
+  });
+
+  // View buttons
+  document.getElementById("btn-start").addEventListener("click", function() {
+    P.running = true;
+    document.getElementById("btn-start").classList.add("active");
+    document.getElementById("btn-pause").classList.remove("active");
+  });
+  document.getElementById("btn-pause").addEventListener("click", function() {
+    P.running = false;
+    document.getElementById("btn-start").classList.remove("active");
+    document.getElementById("btn-pause").classList.add("active");
+  });
+  document.getElementById("btn-reset").addEventListener("click", function() {
+    resetSim();
+  });
+
+  // Panel close (mobile)
+  document.getElementById("panel-close").addEventListener("click", function() {
+    var controls = document.getElementById("controls");
+    if (controls.style.display === "none") {
+      controls.style.display = "";
+    } else {
+      controls.style.display = "none";
+    }
+  });
+
+  // ===== Initialize =====
+  generateStressCenters();
+  renderNDVITexture();
+  ndviGround.isVisible = true; // show overlay by default
+  buildVineRows();
+  computeFlightPath();
+  resetSim();
+
+  // Set initial camera target to vineyard center
+  camera.setTarget(new BABYLON.Vector3(0, 0, 0));
+
+})();
+</script>
+</body>
+</html>
