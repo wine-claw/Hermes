@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vine Leaf Morphology — Paper.js Ampelography</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.17/paper-full.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0f0a; --panel:rgba(16,22,16,.93); --border:#2a3a2a;
+  --text:#e0e8d0; --muted:#7a8a6a; --accent:#6b9a4a; --accent2:#c4a050;
+  --warn:#d4704a; --leaf:#4a7c3a;
+}
+body{
+  background:radial-gradient(ellipse at center,#0d1810 0%,#050a05 100%);
+  color:var(--text); font-family:system-ui,sans-serif; overflow:hidden; height:100vh;
+}
+.disclaimer{background:#0f1a0f;border-bottom:1px solid #2a3a2a;color:#8a9a6a;padding:.75rem 1rem;text-align:center;font-size:.85rem;font-family:system-ui,sans-serif;position:sticky;top:0;z-index:100}
+.disclaimer strong{font-weight:600}
+#canvas-container{position:fixed;inset:0;z-index:0}
+#leaf-canvas{width:100%;height:100%;display:block;touch-action:none}
+#ui-layer{position:absolute;inset:0;pointer-events:none;z-index:10}
+.panel{
+  background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  padding:.85rem; pointer-events:auto; backdrop-filter:blur(10px);
+}
+#controls{
+  position:absolute; top:56px; left:16px; width:300px;
+  max-height:calc(100vh - 80px); overflow-y:auto;
+}
+#metrics{
+  position:absolute; top:56px; right:16px; width:230px;
+}
+.panel-title{font-size:.95rem;font-weight:600;color:var(--accent2);margin-bottom:1px}
+.panel-subtitle{font-size:.68rem;color:var(--muted);margin-bottom:8px}
+.section-header{
+  font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--accent);margin-top:14px;margin-bottom:6px;
+  border-bottom:1px solid var(--border);padding-bottom:3px;
+}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:4px}
+.preset-btn{
+  background:rgba(35,45,35,.8); border:1px solid var(--border); color:var(--text);
+  padding:5px 6px; border-radius:6px; font-size:.72rem; cursor:pointer;
+  transition:all .2s; text-align:center;
+}
+.preset-btn:hover{background:rgba(60,80,50,.8);border-color:var(--accent)}
+.preset-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+.random-btn{grid-column:1/-1;background:rgba(55,35,35,.8)!important;border-color:#4a2a2a!important;color:var(--warn)!important}
+.random-btn:hover{background:var(--warn)!important;color:#fff!important;border-color:var(--warn)!important}
+.slider-row{margin-bottom:9px}
+.slider-row label{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-bottom:3px}
+.slider-row label .val{color:var(--accent2);font-variant-numeric:tabular-nums;font-weight:600}
+input[type=range]{
+  width:100%;height:4px;background:rgba(30,40,30,.9);border-radius:2px;
+  appearance:none;outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);cursor:pointer;border:2px solid var(--bg);
+}
+input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--accent);
+  cursor:pointer;border:2px solid var(--bg);
+}
+.checkbox-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:.78rem;color:var(--muted)}
+.checkbox-row input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px}
+.metric-row{display:flex;justify-content:space-between;padding:3px 0;font-size:.78rem;border-bottom:1px solid rgba(35,45,35,.6)}
+.metric-row:last-child{border-bottom:none}
+.metric-label{color:var(--muted)}
+.metric-val{color:var(--text);font-variant-numeric:tabular-nums;text-align:right}
+.app-header{position:absolute;top:14px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:10}
+.app-header h1{font-size:1.05rem;color:var(--accent2);text-shadow:0 0 20px rgba(0,0,0,.9)}
+.app-header p{font-size:.7rem;color:var(--muted);margin-top:1px}
+#controls::-webkit-scrollbar{width:5px}
+#controls::-webkit-scrollbar-track{background:transparent}
+#controls::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+@media (max-width:768px){
+  html,body{overflow-y:auto;height:auto}
+  #canvas-container{position:relative!important;width:100%!important;height:42vh!important;min-height:280px;max-height:400px;inset:auto!important;z-index:0}
+  #leaf-canvas{width:100%!important;height:100%!important}
+  #ui-layer{position:relative!important;inset:auto!important;pointer-events:auto}
+  .app-header{position:relative!important;top:auto!important;left:auto!important;transform:none!important;padding:10px}
+  #controls{position:relative!important;top:auto!important;left:auto!important;width:auto!important;max-height:none!important;margin:0;border-radius:0;border-left:none;border-right:none}
+  #metrics{position:relative!important;top:auto!important;right:auto!important;width:auto!important;margin:0;border-radius:0;border-left:none;border-right:none}
+}
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #0f1a0f; border-bottom: 1px solid #2a3a2a; color: #8a9a6a; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"><canvas id="leaf-canvas"></canvas></div>
+
+<div id="ui-layer">
+  <div class="app-header">
+    <h1>🌱 Vine Leaf Morphology</h1>
+    <p>Paper.js Ampelographic Explorer</p>
+  </div>
+
+  <div id="controls" class="panel">
+    <div class="panel-title">Ampelography Studio</div>
+    <div class="panel-subtitle">Parametric grapevine leaf modelling</div>
+
+    <div class="section-header">Variety Presets</div>
+    <div class="presets">
+      <button class="preset-btn active" data-preset="cabernet-sauvignon">Cabernet Sauvignon</button>
+      <button class="preset-btn" data-preset="pinot-noir">Pinot Noir</button>
+      <button class="preset-btn" data-preset="chardonnay">Chardonnay</button>
+      <button class="preset-btn" data-preset="syrah">Syrah</button>
+      <button class="preset-btn" data-preset="merlot">Merlot</button>
+      <button class="preset-btn" data-preset="riesling">Riesling</button>
+      <button class="preset-btn" data-preset="sangiovese">Sangiovese</button>
+      <button class="preset-btn random-btn" id="btn-random">🎲 Random Leaf</button>
+    </div>
+
+    <div class="section-header">Morphology Parameters</div>
+    <div class="slider-row"><label>Lobe Count <span class="val" id="val-lobeCount">5</span></label><input type="range" id="slider-lobeCount" min="3" max="7" step="1" value="5"></div>
+    <div class="slider-row"><label>Lobe Depth <span class="val" id="val-lobeDepth">65%</span></label><input type="range" id="slider-lobeDepth" min="0" max="100" step="1" value="65"></div>
+    <div class="slider-row"><label>Petiolar Sinus Depth <span class="val" id="val-petiolarDepth">50%</span></label><input type="range" id="slider-petiolarDepth" min="0" max="90" step="1" value="50"></div>
+    <div class="slider-row"><label>Petiolar Sinus Width <span class="val" id="val-petiolarWidth">60°</span></label><input type="range" id="slider-petiolarWidth" min="10" max="90" step="1" value="60"></div>
+    <div class="slider-row"><label>Aspect Ratio <span class="val" id="val-aspectRatio">1.05</span></label><input type="range" id="slider-aspectRatio" min="0.70" max="1.30" step="0.01" value="1.05"></div>
+    <div class="slider-row"><label>Margin Serration <span class="val" id="val-serration">35%</span></label><input type="range" id="slider-serration" min="0" max="100" step="1" value="35"></div>
+    <div class="slider-row"><label>Anthocyanin <span class="val" id="val-anthocyanin">10%</span></label><input type="range" id="slider-anthocyanin" min="0" max="100" step="1" value="10"></div>
+
+    <div class="section-header">Display Options</div>
+    <div class="checkbox-row"><label><input type="checkbox" id="cb-veins" checked> Show palmate veins</label></div>
+    <div class="checkbox-row"><label><input type="checkbox" id="cb-particles" checked> Floating pollen</label></div>
+  </div>
+
+  <div id="metrics" class="panel">
+    <div class="panel-title">Ampelographic Data</div>
+    <div class="panel-subtitle">Live leaf measurements</div>
+    <div class="metric-row"><span class="metric-label">Variety</span><span class="metric-val" id="m-variety">Cabernet Sauvignon</span></div>
+    <div class="metric-row"><span class="metric-label">Lobes</span><span class="metric-val" id="m-lobes">5</span></div>
+    <div class="metric-row"><span class="metric-label">Leaf Area</span><span class="metric-val" id="m-area">—</span></div>
+    <div class="metric-row"><span class="metric-label">Perimeter</span><span class="metric-val" id="m-perimeter">—</span></div>
+    <div class="metric-row"><span class="metric-label">Shape</span><span class="metric-val" id="m-shape">—</span></div>
+    <div class="metric-row"><span class="metric-label">Sinus Type</span><span class="metric-val" id="m-sinus">—</span></div>
+    <div class="metric-row"><span class="metric-label">Margin</span><span class="metric-val" id="m-margin">—</span></div>
+    <div class="metric-row"><span class="metric-label">Pigmentation</span><span class="metric-val" id="m-pigmentation">—</span></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ── Guard: Paper.js loaded? ──────────────────────────────
+if (typeof paper === 'undefined') {
+  document.getElementById('canvas-container').innerHTML =
+    '<div style="color:#c4a050;padding:2rem;text-align:center;font-family:system-ui">Failed to load Paper.js from CDN. Please refresh the page.</div>';
+  return;
+}
+
+// ── Parameters ────────────────────────────────────────────
+var P = {
+  lobeCount: 5, lobeDepth: 65, petiolarDepth: 50, petiolarWidth: 60,
+  aspectRatio: 1.05, serration: 35, anthocyanin: 10,
+  showVeins: true, showParticles: true
+};
+
+// ── Variety Presets ───────────────────────────────────────
+var PRESETS = {
+  'cabernet-sauvignon': { lobeCount:5, lobeDepth:65, petiolarDepth:50, petiolarWidth:60, aspectRatio:1.05, serration:35, anthocyanin:10 },
+  'pinot-noir':         { lobeCount:3, lobeDepth:25, petiolarDepth:20, petiolarWidth:30, aspectRatio:0.95, serration:20, anthocyanin:5 },
+  'chardonnay':         { lobeCount:5, lobeDepth:45, petiolarDepth:35, petiolarWidth:45, aspectRatio:1.00, serration:25, anthocyanin:8 },
+  'syrah':              { lobeCount:5, lobeDepth:75, petiolarDepth:60, petiolarWidth:70, aspectRatio:1.10, serration:45, anthocyanin:20 },
+  'merlot':             { lobeCount:5, lobeDepth:55, petiolarDepth:45, petiolarWidth:55, aspectRatio:1.00, serration:30, anthocyanin:12 },
+  'riesling':           { lobeCount:5, lobeDepth:35, petiolarDepth:25, petiolarWidth:35, aspectRatio:0.90, serration:15, anthocyanin:5 },
+  'sangiovese':         { lobeCount:7, lobeDepth:70, petiolarDepth:55, petiolarWidth:65, aspectRatio:1.05, serration:40, anthocyanin:15 }
+};
+var PRESET_NAMES = {
+  'cabernet-sauvignon':'Cabernet Sauvignon','pinot-noir':'Pinot Noir',
+  'chardonnay':'Chardonnay','syrah':'Syrah','merlot':'Merlot',
+  'riesling':'Riesling','sangiovese':'Sangiovese'
+};
+var activePreset = 'cabernet-sauvignon';
+
+// ── Paper.js Setup ────────────────────────────────────────
+var canvas = document.getElementById('leaf-canvas');
+var container = document.getElementById('canvas-container');
+function getContainerSize() {
+  return { w: Math.max(container.clientWidth, 100), h: Math.max(container.clientHeight, 100) };
+}
+var sz = getContainerSize();
+canvas.width = sz.w; canvas.height = sz.h;
+paper.setup(canvas);
+
+// ── State ─────────────────────────────────────────────────
+var leafGroup = null;
+var bgParticles = [];
+var animTime = 0;
+
+// ── Leaf Geometry ─────────────────────────────────────────
+function leafRadius(theta, params) {
+  var nLobes = params.lobeCount;
+  var lobeDepth = params.lobeDepth / 100;
+  var petDepth = params.petiolarDepth / 100;
+  var petWidth = params.petiolarWidth * Math.PI / 180;
+  var serrAmp = (params.serration / 100) * 0.035;
+  var serrFreq = 60;
+
+  var r = 1.0;
+  // Lobe modulation: cos(nLobes*theta) = 1 at lobe tips, -1 at sinuses
+  var lobeMod = (1 - Math.cos(nLobes * theta)) / 2;
+  r *= 1 - lobeDepth * 0.62 * lobeMod;
+  // Petiolar sinus: deep notch at theta = PI (bottom)
+  var petDist = Math.abs(theta - Math.PI);
+  if (petDist < petWidth) {
+    var petNorm = petDist / petWidth;
+    var petFactor = Math.cos(petNorm * Math.PI / 2);
+    r *= 1 - petDepth * 0.85 * petFactor;
+  }
+  // Serration: fine teeth along margin
+  r *= 1 + serrAmp * Math.sin(serrFreq * theta);
+  return Math.max(r, 0.02);
+}
+
+function leafPoint(theta, params, cx, cy, scale) {
+  var r = leafRadius(theta, params) * scale;
+  var angle = theta - Math.PI / 2;
+  return new paper.Point(
+    cx + r * Math.cos(angle),
+    cy + r * Math.sin(angle) * params.aspectRatio
+  );
+}
+
+function lerpAngle(a, b, t) {
+  var diff = b - a;
+  if (diff > Math.PI) diff -= 2 * Math.PI;
+  if (diff < -Math.PI) diff += 2 * Math.PI;
+  return a + diff * t;
+}
+
+// ── Color Helpers ─────────────────────────────────────────
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function getLeafColors(anthocyanin) {
+  var t = anthocyanin / 100;
+  return {
+    center: 'rgb(' + Math.round(lerp(28,128,t)) + ',' + Math.round(lerp(78,26,t)) + ',' + Math.round(lerp(18,26,t)) + ')',
+    mid:    'rgb(' + Math.round(lerp(52,153,t)) + ',' + Math.round(lerp(102,51,t)) + ',' + Math.round(lerp(24,38,t)) + ')',
+    edge:   'rgb(' + Math.round(lerp(85,178,t)) + ',' + Math.round(lerp(128,64,t)) + ',' + Math.round(lerp(29,51,t)) + ')'
+  };
+}
+
+function getVeinColors(anthocyanin) {
+  var t = anthocyanin / 100;
+  return {
+    main:      'rgb(' + Math.round(lerp(90,200,t)) + ',' + Math.round(lerp(115,80,t)) + ',' + Math.round(lerp(40,50,t)) + ')',
+    secondary: 'rgba(' + Math.round(lerp(75,180,t)) + ',' + Math.round(lerp(100,70,t)) + ',' + Math.round(lerp(35,45,t)) + ',0.65)',
+    tertiary:  'rgba(' + Math.round(lerp(60,160,t)) + ',' + Math.round(lerp(85,60,t)) + ',' + Math.round(lerp(30,40,t)) + ',0.32)',
+    glow:      'rgba(' + Math.round(lerp(100,200,t)) + ',' + Math.round(lerp(140,80,t)) + ',' + Math.round(lerp(50,50,t)) + ',0.4)'
+  };
+}
+
+// ── Background Particles ──────────────────────────────────
+function createBgParticles() {
+  bgParticles = [];
+  var vw = paper.view.size.width, vh = paper.view.size.height;
+  for (var i = 0; i < 28; i++) {
+    var p = new paper.Path.Circle({
+      center: [Math.random() * vw, Math.random() * vh],
+      radius: Math.random() * 2.2 + 0.4,
+      fillColor: new paper.Color(0.75, 0.85, 0.55, 0.04 + Math.random() * 0.06)
+    });
+    p.data = {
+      vx: (Math.random() - 0.5) * 0.18,
+      vy: (Math.random() - 0.5) * 0.12 - 0.04,
+      phase: Math.random() * Math.PI * 2
+    };
+    bgParticles.push(p);
+  }
+}
+
+function updateBgParticles(event) {
+  var vw = paper.view.size.width, vh = paper.view.size.height;
+  for (var i = 0; i < bgParticles.length; i++) {
+    var p = bgParticles[i];
+    p.position.x += p.data.vx;
+    p.position.y += p.data.vy + Math.sin(event.time + p.data.phase) * 0.12;
+    if (p.position.x < -10) p.position.x = vw + 10;
+    if (p.position.x > vw + 10) p.position.x = -10;
+    if (p.position.y < -10) p.position.y = vh + 10;
+    if (p.position.y > vh + 10) p.position.y = -10;
+  }
+}
+
+// ── Render ────────────────────────────────────────────────
+function render() {
+  paper.project.activeLayer.removeChildren();
+  bgParticles = [];
+
+  var vw = paper.view.size.width, vh = paper.view.size.height;
+  var cx = vw / 2, cy = vh / 2;
+  var scale = Math.min(vw, vh) * 0.33;
+
+  // Background particles (bottom layer)
+  if (P.showParticles) createBgParticles();
+
+  // ── Petiole (stem) ──
+  var petiolePt = leafPoint(Math.PI, P, cx, cy, scale);
+  var petW = scale * 0.022;
+  var petLen = scale * 0.16;
+  var petEnd = new paper.Point(petiolePt.x, petiolePt.y + petLen);
+  var petiolePath = new paper.Path({
+    segments: [
+      new paper.Point(petiolePt.x - petW, petiolePt.y),
+      new paper.Point(petiolePt.x + petW, petiolePt.y),
+      new paper.Point(petiolePt.x + petW * 0.55, petEnd.y),
+      new paper.Point(petiolePt.x - petW * 0.55, petEnd.y)
+    ],
+    closed: true
+  });
+  petiolePath.fillColor = {
+    gradient: { stops: ['#6b5b3a', '#3a2a1a'] },
+    origin: petiolePt, destination: petEnd
+  };
+  petiolePath.shadowColor = new paper.Color(0, 0, 0, 0.3);
+  petiolePath.shadowBlur = 8;
+  petiolePath.shadowOffset = new paper.Point(3, 5);
+
+  // ── Leaf Blade ──
+  var N = 360;
+  var segments = [];
+  for (var i = 0; i < N; i++) {
+    var theta = (i / N) * 2 * Math.PI;
+    segments.push(leafPoint(theta, P, cx, cy, scale));
+  }
+  var leafPath = new paper.Path({ segments: segments, closed: true });
+
+  var colors = getLeafColors(P.anthocyanin);
+  leafPath.fillColor = {
+    gradient: { stops: [colors.center, colors.mid, colors.edge], radial: true },
+    origin: new paper.Point(cx, cy - scale * 0.08),
+    destination: new paper.Point(cx + scale * 0.95, cy)
+  };
+  leafPath.strokeColor = new paper.Color(0.1, 0.15, 0.06, 0.5);
+  leafPath.strokeWidth = 0.6;
+  leafPath.shadowColor = new paper.Color(0, 0, 0, 0.5);
+  leafPath.shadowBlur = 24;
+  leafPath.shadowOffset = new paper.Point(5, 9);
+
+  // ── Veins ──
+  var veinPaths = [];
+  if (P.showVeins) {
+    var veinColors = getVeinColors(P.anthocyanin);
+    var nLobes = P.lobeCount;
+
+    // Compute lobe tips and sinus tips
+    var lobeTips = [], sinusTips = [];
+    for (var i = 0; i < nLobes; i++) {
+      var lobeTheta = (i / nLobes) * 2 * Math.PI;
+      lobeTips.push({ pt: leafPoint(lobeTheta, P, cx, cy, scale), theta: lobeTheta });
+      var sinusTheta = ((i + 0.5) / nLobes) * 2 * Math.PI;
+      sinusTips.push({ pt: leafPoint(sinusTheta, P, cx, cy, scale), theta: sinusTheta });
+    }
+
+    // Main veins: petiole → lobe tips (slightly curved)
+    for (var i = 0; i < nLobes; i++) {
+      var tip = lobeTips[i].pt;
+      var dir = tip.subtract(petiolePt);
+      var mid = petiolePt.add(dir.divide(2));
+      var perp = dir.rotate(90).normalize().multiply(dir.length * 0.07);
+      var ctrl = mid.add(perp);
+
+      var vein = new paper.Path({ segments: [petiolePt, ctrl, tip], strokeColor: veinColors.main, strokeWidth: 2.5, strokeCap: 'round' });
+      vein.smooth();
+      vein.shadowColor = veinColors.glow;
+      vein.shadowBlur = 3;
+      veinPaths.push(vein);
+
+      // Secondary veins: branch from 35% along main vein → adjacent sinus tips
+      var branchPt = petiolePt.add(dir.multiply(0.38));
+      var sinusIdxs = [(i - 1 + nLobes) % nLobes, i];
+      for (var si = 0; si < sinusIdxs.length; si++) {
+        var sinus = sinusTips[sinusIdxs[si]];
+        var secDir = sinus.pt.subtract(branchPt);
+        var secMid = branchPt.add(secDir.divide(2));
+        var secPerp = secDir.rotate(90).normalize().multiply(secDir.length * 0.05);
+        var secCtrl = secMid.add(secPerp);
+
+        var secVein = new paper.Path({ segments: [branchPt, secCtrl, sinus.pt], strokeColor: veinColors.secondary, strokeWidth: 1.4, strokeCap: 'round' });
+        secVein.smooth();
+        veinPaths.push(secVein);
+
+        // Tertiary veins: short lines from secondary vein → margin
+        for (var k = 1; k <= 2; k++) {
+          var t = k / 3;
+          var tertStart = branchPt.add(secDir.multiply(t));
+          var marginTheta = lerpAngle(lobeTips[i].theta, sinus.theta, t);
+          var marginPt = leafPoint(marginTheta, P, cx, cy, scale);
+          var tertVein = new paper.Path({ segments: [tertStart, marginPt], strokeColor: veinColors.tertiary, strokeWidth: 0.7, strokeCap: 'round' });
+          veinPaths.push(tertVein);
+        }
+      }
+
+      // Cross-connections between adjacent branch points
+      var nextBranchPt = petiolePt.add(lobeTips[(i+1)%nLobes].pt.subtract(petiolePt).multiply(0.38));
+      var cross = new paper.Path({ segments: [branchPt, nextBranchPt], strokeColor: veinColors.tertiary, strokeWidth: 0.6, opacity: 0.4 });
+      veinPaths.push(cross);
+    }
+  }
+
+  // ── Group for animation ──
+  leafGroup = new paper.Group();
+  leafGroup.addChild(petiolePath);
+  leafGroup.addChild(leafPath);
+  for (var i = 0; i < veinPaths.length; i++) leafGroup.addChild(veinPaths[i]);
+
+  // Metrics
+  updateMetrics(leafPath);
+  paper.view.draw();
+}
+
+// ── Metrics ───────────────────────────────────────────────
+function updateMetrics(leafPath) {
+  document.getElementById('m-lobes').textContent = P.lobeCount;
+  document.getElementById('m-variety').textContent = (activePreset === 'custom') ? 'Custom' : (PRESET_NAMES[activePreset] || 'Custom');
+
+  if (leafPath) {
+    var area = Math.abs(leafPath.area);
+    var perim = leafPath.length;
+    document.getElementById('m-area').textContent = (area / 100).toFixed(1) + ' cm²';
+    document.getElementById('m-perimeter').textContent = (perim / 10).toFixed(1) + ' cm';
+  }
+
+  // Shape classification
+  var shape;
+  if (P.aspectRatio < 0.85) shape = 'Reniform (wide)';
+  else if (P.aspectRatio > 1.15) shape = 'Cordate (tall)';
+  else shape = 'Orbicular (round)';
+  document.getElementById('m-shape').textContent = shape;
+
+  // Sinus type
+  var sinus;
+  if (P.petiolarDepth < 25 && P.petiolarWidth < 40) sinus = 'Closed V';
+  else if (P.petiolarDepth < 25 && P.petiolarWidth >= 40) sinus = 'Open V';
+  else if (P.petiolarDepth >= 25 && P.petiolarWidth < 50) sinus = 'Closed U';
+  else sinus = 'Open U';
+  document.getElementById('m-sinus').textContent = sinus;
+
+  // Margin
+  var margin;
+  if (P.serration < 15) margin = 'Entire (smooth)';
+  else if (P.serration < 50) margin = 'Serrulate (fine)';
+  else margin = 'Dentate (coarse)';
+  document.getElementById('m-margin').textContent = margin;
+
+  // Pigmentation
+  var pigment;
+  if (P.anthocyanin < 10) pigment = 'Green';
+  else if (P.anthocyanin < 30) pigment = 'Bronze-green';
+  else if (P.anthocyanin < 60) pigment = 'Red-tinged';
+  else pigment = 'Crimson';
+  document.getElementById('m-pigmentation').textContent = pigment;
+}
+
+// ── Animation ─────────────────────────────────────────────
+paper.view.onFrame = function(event) {
+  animTime += event.delta;
+  updateBgParticles(event);
+  if (leafGroup) {
+    leafGroup.rotation = 2.5 * Math.sin(animTime * 0.35);
+    leafGroup.scaling = 1 + 0.018 * Math.sin(animTime * 0.55);
+  }
+};
+
+// ── Resize ─────────────────────────────────────────────────
+var resizeTimer = null;
+window.addEventListener('resize', function() {
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function() {
+    var s = getContainerSize();
+    canvas.width = s.w; canvas.height = s.h;
+    paper.view.viewSize = new paper.Size(s.w, s.h);
+    render();
+  }, 100);
+});
+
+// ── Controls ──────────────────────────────────────────────
+var sliderIds = ['lobeCount','lobeDepth','petiolarDepth','petiolarWidth','aspectRatio','serration','anthocyanin'];
+
+function formatVal(id, val) {
+  if (id === 'lobeCount') return String(val);
+  if (id === 'aspectRatio') return val.toFixed(2);
+  if (id === 'petiolarWidth') return val.toFixed(0) + '°';
+  return val.toFixed(0) + '%';
+}
+
+sliderIds.forEach(function(id) {
+  var sl = document.getElementById('slider-' + id);
+  var vl = document.getElementById('val-' + id);
+  sl.addEventListener('input', function() {
+    P[id] = (id === 'lobeCount') ? parseInt(sl.value) : parseFloat(sl.value);
+    vl.textContent = formatVal(id, P[id]);
+    activePreset = 'custom';
+    updatePresetButtons();
+    render();
+  });
+});
+
+// Checkboxes
+document.getElementById('cb-veins').addEventListener('change', function(e) {
+  P.showVeins = e.target.checked; render();
+});
+document.getElementById('cb-particles').addEventListener('change', function(e) {
+  P.showParticles = e.target.checked; render();
+});
+
+// Preset buttons
+document.querySelectorAll('.preset-btn[data-preset]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    applyPreset(btn.getAttribute('data-preset'));
+  });
+});
+
+function applyPreset(name) {
+  var preset = PRESETS[name];
+  if (!preset) return;
+  for (var k in preset) P[k] = preset[k];
+  activePreset = name;
+  updateSlidersFromParams();
+  updatePresetButtons();
+  render();
+}
+
+function updateSlidersFromParams() {
+  sliderIds.forEach(function(id) {
+    var sl = document.getElementById('slider-' + id);
+    var vl = document.getElementById('val-' + id);
+    sl.value = P[id];
+    vl.textContent = formatVal(id, P[id]);
+  });
+}
+
+function updatePresetButtons() {
+  document.querySelectorAll('.preset-btn[data-preset]').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-preset') === activePreset);
+  });
+}
+
+// Random button
+document.getElementById('btn-random').addEventListener('click', function() {
+  P.lobeCount = Math.floor(Math.random() * 5) + 3;
+  P.lobeDepth = Math.floor(Math.random() * 60) + 20;
+  P.petiolarDepth = Math.floor(Math.random() * 60) + 20;
+  P.petiolarWidth = Math.floor(Math.random() * 60) + 20;
+  P.aspectRatio = 0.8 + Math.random() * 0.4;
+  P.serration = Math.floor(Math.random() * 60) + 10;
+  P.anthocyanin = Math.floor(Math.random() * 40) + 5;
+  activePreset = 'custom';
+  updateSlidersFromParams();
+  updatePresetButtons();
+  render();
+});
+
+// ── Init ──────────────────────────────────────────────────
+render();
+
+})();
+</script>
+</body>
+</html>
