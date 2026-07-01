@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vineyard Soil Profile & Terroir Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{ background:#0c0a08; color:#d4c4a8; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; overflow:hidden; }
+
+  .disclaimer{ background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060; padding:0.75rem 1rem; text-align:center; font-size:0.85rem; position:sticky; top:0; z-index:100; }
+  .disclaimer strong{ font-weight:600; }
+
+  #canvas-container{ position:fixed; inset:0; z-index:0; background:radial-gradient(ellipse at 50% 30%, #1a1410 0%, #0c0a08 70%); }
+  #soil-svg{ width:100%; height:100%; display:block; }
+
+  #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+
+  #header{ position:absolute; top:0; left:0; right:0; pointer-events:auto; padding:0.75rem 1rem; text-align:center; }
+  #header h1{ font-size:clamp(1.1rem,4vw,1.6rem); color:#c9a060; text-shadow:0 2px 8px rgba(0,0,0,0.6); letter-spacing:0.02em; }
+  #header p{ font-size:0.78rem; color:#8a7a5a; margin-top:0.15rem; }
+
+  #controls{
+    position:absolute; top:70px; left:12px; width:280px; max-height:calc(100vh - 90px); overflow-y:auto;
+    pointer-events:auto; background:rgba(18,14,10,0.88); border:1px solid #3a3020; border-radius:10px;
+    padding:0.85rem; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  #controls h3{ font-size:0.8rem; color:#c9a060; margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid #2a2410; padding-bottom:0.3rem; }
+  #controls label{ display:block; font-size:0.72rem; color:#8a7a5a; margin-top:0.6rem; margin-bottom:0.2rem; }
+  #controls input[type=range]{ width:100%; accent-color:#c9a060; height:4px; }
+  .ctrl-value{ font-size:0.7rem; color:#d4c4a8; float:right; }
+  .section-divider{ height:1px; background:#2a2410; margin:0.75rem 0; }
+
+  #region-chips{ display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.5rem; }
+  .chip{ font-size:0.68rem; padding:0.2rem 0.5rem; border-radius:6px; background:#1a1610; border:1px solid #2a2410; color:#8a7a5a; cursor:pointer; pointer-events:auto; transition:all 0.2s; user-select:none; }
+  .chip.active{ background:#2a2410; border-color:#c9a060; color:#c9a060; }
+  .chip:hover{ border-color:#5a4a30; color:#d4c4a8; }
+
+  #metrics{
+    position:absolute; top:70px; right:12px; width:240px;
+    pointer-events:auto; background:rgba(18,14,10,0.88); border:1px solid #3a3020; border-radius:10px;
+    padding:0.85rem; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  #metrics h3{ font-size:0.8rem; color:#c9a060; margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid #2a2410; padding-bottom:0.3rem; }
+  .metric-row{ display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; margin:0.35rem 0; }
+  .metric-label{ color:#8a7a5a; }
+  .metric-value{ color:#d4c4a8; font-weight:600; font-variant-numeric:tabular-nums; }
+  .metric-bar-bg{ width:100%; height:3px; background:#1a1610; border-radius:2px; margin-top:0.15rem; overflow:hidden; }
+  .metric-bar-fill{ height:100%; border-radius:2px; transition:width 0.3s ease; }
+
+  #mineral-panel{
+    position:absolute; bottom:12px; right:12px; width:240px;
+    pointer-events:auto; background:rgba(18,14,10,0.88); border:1px solid #3a3020; border-radius:10px;
+    padding:0.75rem; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  #mineral-panel h3{ font-size:0.75rem; color:#c9a060; margin-bottom:0.4rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .mineral-row{ display:flex; align-items:center; gap:0.4rem; margin:0.25rem 0; }
+  .mineral-name{ font-size:0.68rem; color:#8a7a5a; width:70px; flex-shrink:0; }
+  .mineral-bar-bg{ flex:1; height:8px; background:#1a1610; border-radius:4px; overflow:hidden; position:relative; }
+  .mineral-bar-fill{ height:100%; border-radius:4px; width:0%; }
+  .mineral-pct{ font-size:0.62rem; color:#d4c4a8; width:32px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums; }
+
+  #water-panel{
+    position:absolute; bottom:12px; left:12px; width:260px;
+    pointer-events:auto; background:rgba(18,14,10,0.88); border:1px solid #3a3020; border-radius:10px;
+    padding:0.75rem; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  #water-panel h3{ font-size:0.75rem; color:#c9a060; margin-bottom:0.4rem; text-transform:uppercase; letter-spacing:0.05em; }
+  #water-svg{ width:100%; height:110px; display:block; }
+  #water-legend{ font-size:0.62rem; color:#8a7a5a; display:flex; justify-content:space-between; margin-top:0.3rem; }
+
+  #info-panel{
+    position:absolute; bottom:12px; left:50%; transform:translateX(-50%); width:min(360px,calc(100vw - 24px));
+    pointer-events:auto; background:rgba(18,14,10,0.88); border:1px solid #3a3020; border-radius:10px;
+    padding:0.6rem 0.85rem; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); text-align:center;
+  }
+  #info-panel .region-name{ font-size:0.85rem; color:#c9a060; font-weight:700; }
+  #info-panel .region-desc{ font-size:0.68rem; color:#8a7a5a; margin-top:0.2rem; line-height:1.4; }
+
+  @media (max-width:768px){
+    html,body{ overflow-y:auto; height:auto; }
+    #canvas-container{
+      position:relative !important; width:100% !important; height:42vh !important;
+      min-height:280px; max-height:400px; inset:auto !important; z-index:0;
+    }
+    #soil-svg{ width:100% !important; height:100% !important; }
+    #ui-layer{ position:relative !important; inset:auto !important; pointer-events:auto; }
+    #header{ position:relative !important; padding:0.5rem; }
+    #controls{
+      position:relative !important; top:auto !important; left:auto !important;
+      width:auto !important; max-height:none !important; margin:0;
+      border-radius:0; border-left:none; border-right:none;
+    }
+    #metrics{
+      position:relative !important; top:auto !important; right:auto !important;
+      width:auto !important; margin:0; border-radius:0; border-left:none; border-right:none;
+    }
+    #mineral-panel{
+      position:relative !important; bottom:auto !important; right:auto !important;
+      width:auto !important; margin:0; border-radius:0; border-left:none; border-right:none;
+    }
+    #water-panel{
+      position:relative !important; bottom:auto !important; left:auto !important;
+      width:auto !important; margin:0; border-radius:0; border-left:none; border-right:none;
+    }
+    #info-panel{
+      position:relative !important; bottom:auto !important; transform:none !important;
+      left:auto !important; width:auto !important; margin:0; border-radius:0; border-left:none; border-right:none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <svg id="soil-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#1a1410"/>
+        <stop offset="100%" stop-color="#2a1e14"/>
+      </linearGradient>
+      <linearGradient id="vine-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4a3a20"/>
+        <stop offset="100%" stop-color="#2a2010"/>
+      </linearGradient>
+      <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+
+    <!-- Sky background -->
+    <rect x="0" y="0" width="800" height="120" fill="url(#sky-grad)"/>
+
+    <!-- Sun glow -->
+    <circle id="sun" cx="650" cy="50" r="18" fill="#c9a060" opacity="0.15" filter="url(#glow)"/>
+
+    <!-- Soil layers will be drawn here dynamically -->
+    <g id="soil-layers"></g>
+
+    <!-- Water table line -->
+    <path id="water-table" d="" fill="none" stroke="#4a8aaa" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+
+    <!-- Vine trunk -->
+    <g id="vine-trunk">
+      <path id="trunk-path" d="M400,120 Q398,100 400,80" stroke="url(#vine-grad)" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <g id="canopy">
+        <ellipse cx="400" cy="65" rx="45" ry="25" fill="#2a3a18" opacity="0.85"/>
+        <ellipse cx="385" cy="55" rx="30" ry="18" fill="#3a4a22" opacity="0.7"/>
+        <ellipse cx="415" cy="58" rx="28" ry="16" fill="#3a4a22" opacity="0.7"/>
+        <ellipse cx="400" cy="48" rx="22" ry="14" fill="#4a5a28" opacity="0.6"/>
+      </g>
+    </g>
+
+    <!-- Root system -->
+    <g id="root-system"></g>
+
+    <!-- Layer labels -->
+    <g id="layer-labels"></g>
+  </svg>
+</div>
+
+<div id="ui-layer">
+  <div id="header">
+    <h1>🌱 Vineyard Soil Profile & Terroir Explorer</h1>
+    <p>GSAP-animated SVG soil cross-sections from world-class wine regions</p>
+  </div>
+
+  <div id="controls">
+    <h3>Region</h3>
+    <div id="region-chips"></div>
+
+    <div class="section-divider"></div>
+    <h3>Parameters</h3>
+    <label>Root Depth <span class="ctrl-value" id="root-val">60%</span></label>
+    <input type="range" id="root-depth" min="20" max="95" value="60">
+
+    <label>Water Table <span class="ctrl-value" id="wt-val">70%</span></label>
+    <input type="range" id="water-table-slider" min="15" max="90" value="70">
+
+    <label>Soil Temperature <span class="ctrl-value" id="temp-val">14°C</span></label>
+    <input type="range" id="soil-temp" min="4" max="28" value="14">
+
+    <label>Organic Matter <span class="ctrl-value" id="om-val">3.2%</span></label>
+    <input type="range" id="organic-matter" min="0.5" max="8" step="0.1" value="3.2">
+
+    <div class="section-divider"></div>
+    <label>Vine Age <span class="ctrl-value" id="age-val">15 yr</span></label>
+    <input type="range" id="vine-age" min="1" max="50" value="15">
+
+    <div class="section-divider"></div>
+    <button id="animate-btn" style="width:100%;padding:0.5rem;background:#2a2410;border:1px solid #c9a060;color:#c9a060;border-radius:6px;cursor:pointer;font-size:0.8rem;pointer-events:auto;">▶ Regrow Roots</button>
+  </div>
+
+  <div id="metrics">
+    <h3>Soil Metrics</h3>
+    <div class="metric-row"><span class="metric-label">Drainage Rate</span><span class="metric-value" id="m-drainage">—</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill" id="b-drainage" style="background:#4a8aaa;"></div></div>
+    <div class="metric-row"><span class="metric-label">Water Holding Cap.</span><span class="metric-value" id="m-whc">—</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill" id="b-whc" style="background:#6a9a4a;"></div></div>
+    <div class="metric-row"><span class="metric-label">pH (H₂O)</span><span class="metric-value" id="m-ph">—</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill" id="b-ph" style="background:#c9a060;"></div></div>
+    <div class="metric-row"><span class="metric-label">CEC (cmol/kg)</span><span class="metric-value" id="m-cec">—</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill" id="b-cec" style="background:#a06a4a;"></div></div>
+    <div class="metric-row"><span class="metric-label">Stress Index</span><span class="metric-value" id="m-stress">—</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill" id="b-stress" style="background:#c94a4a;"></div></div>
+    <div class="metric-row"><span class="metric-label">Vigor Potential</span><span class="metric-value" id="m-vigor">—</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill" id="b-vigor" style="background:#8aaa4a;"></div></div>
+  </div>
+
+  <div id="water-panel">
+    <h3>💧 Water Retention Curve</h3>
+    <svg id="water-svg" viewBox="0 0 240 110" preserveAspectRatio="none">
+      <line x1="30" y1="95" x2="230" y2="95" stroke="#2a2410" stroke-width="1"/>
+      <line x1="30" y1="10" x2="30" y2="95" stroke="#2a2410" stroke-width="1"/>
+      <text x="30" y="106" fill="#5a4a30" font-size="7" text-anchor="middle">0</text>
+      <text x="130" y="106" fill="#5a4a30" font-size="7" text-anchor="middle">pF 2.5</text>
+      <text x="225" y="106" fill="#5a4a30" font-size="7" text-anchor="middle">4.2</text>
+      <text x="10" y="15" fill="#5a4a30" font-size="7" transform="rotate(-90 10,15)">θ %</text>
+      <path id="water-curve" d="" fill="none" stroke="#4a8aaa" stroke-width="2"/>
+      <path id="water-fill" d="" fill="#4a8aaa" opacity="0.12"/>
+      <circle id="water-marker" cx="130" cy="50" r="3" fill="#c9a060"/>
+    </svg>
+    <div id="water-legend"><span>Field Cap.</span><span>Wilting Pt.</span></div>
+  </div>
+
+  <div id="mineral-panel">
+    <h3> Mineral Composition</h3>
+    <div id="mineral-bars"></div>
+  </div>
+
+  <div id="info-panel">
+    <div class="region-name" id="info-name">Médoc, Bordeaux</div>
+    <div class="region-desc" id="info-desc">Deep gravel beds over clay subsoil — the classic Left Bank terroir. Excellent drainage forces roots deep for water and nutrients, producing structured Cabernet Sauvignon.</div>
+  </div>
+</div>
+
+<script>
+const REGIONS = [
+  {
+    id:'medoc', name:'Médoc, Bordeaux', country:'France',
+    desc:'Deep gravel beds over clay subsoil — the classic Left Bank terroir. Excellent drainage forces roots deep for water and nutrients, producing structured Cabernet Sauvignon.',
+    layers:[
+      {name:'Gravelly Topsoil', depth:25, color:'#6a5a48', texture:'gravel'},
+      {name:'Deep Gravel Bed', depth:50, color:'#5a4a38', texture:'gravel'},
+      {name:'Clay Subsoil', depth:20, color:'#4a3828', texture:'clay'},
+      {name:'Limestone Bedrock', depth:10, color:'#5a5040', texture:'rock'}
+    ],
+    minerals:{Sand:55, Silt:15, Clay:20, Gravel:35, Organic:4, Calcium:12, Iron:5},
+    drainage:85, whc:35, ph:7.8, cec:12, stress:30, vigor:65
+  },
+  {
+    id:'cotedenuits', name:'Côte de Nuits, Burgundy', country:'France',
+    desc:'Thin marl and limestone soils on the escarpment. Calcareous clay with high active limestone — the source of the world\'s finest Pinot Noir. Shallow topsoil forces roots into fractured bedrock.',
+    layers:[
+      {name:'Marl Topsoil', depth:15, color:'#5a4838', texture:'marl'},
+      {name:'Oxfordian Limestone', depth:30, color:'#7a6a50', texture:'limestone'},
+      {name:'Bajocian Marly Clay', depth:25, color:'#5a4030', texture:'clay'},
+      {name:'Hard Limestone', depth:35, color:'#6a5a42', texture:'rock'}
+    ],
+    minerals:{Sand:20, Silt:30, Clay:35, Gravel:5, Organic:5, Calcium:40, Iron:3},
+    drainage:45, whc:60, ph:8.1, cec:22, stress:45, vigor:55
+  },
+  {
+    id:'mosel', name:'Mosel Valley', country:'Germany',
+    desc:'Devonian blue slate on steep slopes above the river. Heat-retentive dark slate fragments drain rapidly and radiate warmth at night — the foundation of Riesling\'s tension and minerality.',
+    layers:[
+      {name:'Slate Fragments', depth:20, color:'#3a3548', texture:'slate'},
+      {name:'Weathered Slate', depth:35, color:'#2a2538', texture:'slate'},
+      {name:'Blue Slate Bedrock', depth:50, color:'#1a1530', texture:'rock'}
+    ],
+    minerals:{Sand:30, Silt:25, Clay:10, Gravel:30, Organic:3, Calcium:5, Iron:4},
+    drainage:90, whc:20, ph:6.5, cec:8, stress:50, vigor:45
+  },
+  {
+    id:'barolo', name:'Barolo, Piedmont', country:'Italy',
+    desc:'Helvetian and Tortonian marl — calcareous clay-marl alternating with sandstone. Compact blue-grey marl gives Nebbiolo its signature tannin structure and tar-rose aroma profile.',
+    layers:[
+      {name:'Sandy Marl', depth:20, color:'#5a5048', texture:'marl'},
+      {name:'Blue-grey Marl', depth:45, color:'#4a4558', texture:'marl'},
+      {name:'Sandstone Interbed', depth:15, color:'#6a5a48', texture:'sand'},
+      {name:'Compact Marl', depth:25, color:'#3a3848', texture:'rock'}
+    ],
+    minerals:{Sand:30, Silt:25, Clay:30, Gravel:5, Organic:4, Calcium:25, Iron:6},
+    drainage:50, whc:55, ph:7.9, cec:20, stress:40, vigor:60
+  },
+  {
+    id:'napa', name:'Napa Valley, California', country:'USA',
+    desc:'Volcanic alluvial fans — Bennett Peak gravelly clay and tuff. Diverse volcanic soils with good drainage and mineral richness produce powerful, fruit-forward Cabernet Sauvignon.',
+    layers:[
+      {name:'Volcanic Topsoil', depth:20, color:'#5a3828', texture:'volcanic'},
+      {name:'Gravelly Clay', depth:35, color:'#4a2820', texture:'clay'},
+      {name:'Volcanic Tuff', depth:30, color:'#6a3820', texture:'volcanic'},
+      {name:'Basalt Bedrock', depth:20, color:'#3a2018', texture:'rock'}
+    ],
+    minerals:{Sand:40, Silt:20, Clay:20, Gravel:20, Organic:3, Calcium:8, Iron:12},
+    drainage:70, whc:45, ph:6.8, cec:15, stress:25, vigor:75
+  },
+  {
+    id:'champagne', name:'Champagne', country:'France',
+    desc:'Belemnita plena chalk — pure soft Cretaceous limestone. Shallow topsoil over deep chalk provides excellent drainage and mineral complexity for Chardonnay, Pinot Noir, and Pinot Meunier.',
+    layers:[
+      {name:'Thin Topsoil', depth:10, color:'#5a4838', texture:'loam'},
+      {name:'Belemnita Chalk', depth:55, color:'#8a8068', texture:'chalk'},
+      {name:'Micraster Chalk', depth:40, color:'#7a7060', texture:'chalk'}
+    ],
+    minerals:{Sand:10, Silt:20, Clay:15, Gravel:5, Organic:3, Calcium:50, Iron:2},
+    drainage:80, whc:40, ph:8.3, cec:18, stress:35, vigor:50
+  },
+  {
+    id:'starkenberg', name:'Stellenbosch, South Africa', country:'South Africa',
+    desc:'Decomposed granite (grus) on rolling hills. Old, weathered granite soils with excellent drainage and distinctive mineral character — the backbone of South African Chenin Blanc and Bordeaux blends.',
+    layers:[
+      {name:'Sandy Loam', depth:18, color:'#6a5a40', texture:'sand'},
+      {name:'Decomposed Granite', depth:40, color:'#7a6a48', texture:'gravel'},
+      {name:'Weathered Granite', depth:30, color:'#6a5a40', texture:'gravel'},
+      {name:'Granite Bedrock', depth:17, color:'#5a4a38', texture:'rock'}
+    ],
+    minerals:{Sand:45, Silt:20, Clay:15, Gravel:25, Organic:3, Calcium:6, Iron:8},
+    drainage:75, whc:38, ph:6.2, cec:10, stress:35, vigor:65
+  },
+  {
+    id:'douro', name:'Douro Valley, Portugal', country:'Portugal',
+    desc:'Schist terraces on steep valley walls. Fragile metamorphic rock shattered into thin soils — vines push roots through cracks in the schist to find water, producing concentrated Port and dry Douro wines.',
+    layers:[
+      {name:'Schist Soil', depth:15, color:'#4a3830', texture:'schist'},
+      {name:'Fractured Schist', depth:40, color:'#3a2820', texture:'schist'},
+      {name:'Weathered Schist', depth:25, color:'#2a1810', texture:'schist'},
+      {name:'Hard Schist', depth:25, color:'#1a1008', texture:'rock'}
+    ],
+    minerals:{Sand:25, Silt:20, Clay:20, Gravel:30, Organic:2, Calcium:4, Iron:7},
+    drainage:70, whc:30, ph:7.0, cec:9, stress:55, vigor:50
+  }
+];
+
+const MINERAL_COLORS = {
+  Sand:'#a08a60', Silt:'#8a7a5a', Clay:'#6a5a48', Gravel:'#5a4a38',
+  Organic:'#3a4a20', Calcium:'#c9b088', Iron:'#8a4a30'
+};
+
+let currentRegion = REGIONS[0];
+let rootDepthPct = 60;
+let waterTablePct = 70;
+let soilTemp = 14;
+let organicMatter = 3.2;
+let vineAge = 15;
+
+// SVG namespace
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function buildRegionChips(){
+  const container = document.getElementById('region-chips');
+  container.innerHTML = '';
+  REGIONS.forEach((r,i) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (i===0?' active':'');
+    chip.textContent = r.name.split(',')[0];
+    chip.dataset.idx = i;
+    chip.addEventListener('click', () => selectRegion(i));
+    container.appendChild(chip);
+  });
+}
+
+function selectRegion(idx){
+  currentRegion = REGIONS[idx];
+  document.querySelectorAll('.chip').forEach((c,i) => c.classList.toggle('active', i===idx));
+  renderSoil();
+  renderRoots();
+  renderMinerals();
+  updateMetrics();
+  drawWaterCurve();
+  updateInfoPanel();
+  gsap.fromTo('#soil-layers', {opacity:0.3}, {opacity:1, duration:0.6, ease:'power2.out'});
+  gsap.fromTo('#root-system', {opacity:0}, {opacity:1, duration:0.8, delay:0.3, ease:'power2.out'});
+}
+
+function renderSoil(){
+  const g = document.getElementById('soil-layers');
+  g.innerHTML = '';
+  const labels = document.getElementById('layer-labels');
+  labels.innerHTML = '';
+
+  const totalSVGHeight = 380; // y=120 (ground) to y=500
+  let y = 120;
+  const layerFractions = currentRegion.layers.map(l => l.depth);
+  const totalDepth = layerFractions.reduce((a,b) => a+b, 0);
+
+  currentRegion.layers.forEach((layer, i) => {
+    const h = (layer.depth / totalDepth) * totalSVGHeight;
+    const rect = document.createElementNS(SVGNS, 'rect');
+    rect.setAttribute('x', 50);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', 700);
+    rect.setAttribute('height', h);
+    rect.setAttribute('fill', layer.color);
+    g.appendChild(rect);
+
+    // Texture particles
+    drawTexture(g, 50, y, 700, h, layer.texture, layer.color, i);
+
+    // Layer separator line
+    const sep = document.createElementNS(SVGNS, 'line');
+    sep.setAttribute('x1', 50); sep.setAttribute('y1', y);
+    sep.setAttribute('x2', 750); sep.setAttribute('y2', y);
+    sep.setAttribute('stroke', '#0a0806'); sep.setAttribute('stroke-width', '1.5');
+    sep.setAttribute('opacity', '0.5');
+    g.appendChild(sep);
+
+    // Label
+    const label = document.createElementNS(SVGNS, 'text');
+    label.setAttribute('x', 60); label.setAttribute('y', y + 16);
+    label.setAttribute('fill', '#c9a060'); label.setAttribute('font-size', '9');
+    label.setAttribute('font-family', 'system-ui, sans-serif');
+    label.setAttribute('opacity', '0.8');
+    label.textContent = layer.name;
+    labels.appendChild(label);
+
+    // Depth label on right
+    const dLabel = document.createElementNS(SVGNS, 'text');
+    dLabel.setAttribute('x', 735); dLabel.setAttribute('y', y + 16);
+    dLabel.setAttribute('fill', '#5a4a30'); dLabel.setAttribute('font-size', '7');
+    dLabel.setAttribute('text-anchor', 'end');
+    dLabel.textContent = layer.depth + 'cm';
+    labels.appendChild(dLabel);
+
+    y += h;
+  });
+
+  // Water table line
+  const wtY = 120 + ((100 - waterTablePct) / 100) * totalSVGHeight;
+  const wtPath = document.getElementById('water-table');
+  wtPath.setAttribute('d', 'M 50 ' + wtY + ' L 750 ' + wtY);
+
+  gsap.fromTo('#soil-layers > *', {scaleY:0, transformOrigin:'top'}, {scaleY:1, duration:0.5, stagger:0.08, ease:'power2.out'});
+}
+
+function drawTexture(parent, x, y, w, h, texture, baseColor, seed){
+  const count = texture === 'rock' ? 8 : texture === 'chalk' ? 25 : texture === 'clay' ? 15 : 20;
+  const rng = mulberry32(seed * 1000 + 42);
+
+  for(let i=0; i<count; i++){
+    const px = x + rng()*w;
+    const py = y + rng()*h;
+    let el;
+
+    if(texture === 'gravel' || texture === 'schist'){
+      el = document.createElementNS(SVGNS, 'ellipse');
+      el.setAttribute('cx', px); el.setAttribute('cy', py);
+      el.setAttribute('rx', 2+rng()*3); el.setAttribute('ry', 1.5+rng()*2.5);
+      const c = adjustColor(baseColor, rng()*20-10);
+      el.setAttribute('fill', c);
+      el.setAttribute('opacity', 0.6+rng()*0.3);
+    } else if(texture === 'slate'){
+      el = document.createElementNS(SVGNS, 'rect');
+      el.setAttribute('x', px); el.setAttribute('y', py);
+      el.setAttribute('width', 1+rng()*3); el.setAttribute('height', 1+rng()*2);
+      el.setAttribute('fill', adjustColor(baseColor, rng()*30-15));
+      el.setAttribute('opacity', 0.5+rng()*0.3);
+    } else if(texture === 'limestone' || texture === 'chalk'){
+      el = document.createElementNS(SVGNS, 'circle');
+      el.setAttribute('cx', px); el.setAttribute('cy', py);
+      el.setAttribute('r', 1+rng()*2.5);
+      el.setAttribute('fill', adjustColor(baseColor, rng()*25-10));
+      el.setAttribute('opacity', 0.4+rng()*0.4);
+    } else if(texture === 'marl' || texture === 'clay'){
+      el = document.createElementNS(SVGNS, 'circle');
+      el.setAttribute('cx', px); el.setAttribute('cy', py);
+      el.setAttribute('r', 1+rng()*1.5);
+      el.setAttribute('fill', adjustColor(baseColor, rng()*15-5));
+      el.setAttribute('opacity', 0.3+rng()*0.3);
+    } else if(texture === 'volcanic'){
+      el = document.createElementNS(SVGNS, 'ellipse');
+      el.setAttribute('cx', px); el.setAttribute('cy', py);
+      el.setAttribute('rx', 1+rng()*2); el.setAttribute('ry', 1+rng()*2);
+      el.setAttribute('fill', adjustColor(baseColor, rng()*40-20));
+      el.setAttribute('opacity', 0.5+rng()*0.3);
+    } else if(texture === 'rock'){
+      el = document.createElementNS(SVGNS, 'path');
+      const s = 4+rng()*8;
+      el.setAttribute('d', `M${px},${py} l${s*0.3},${-s*0.4} l${s*0.6},${-s*0.1} l${s*0.2},${s*0.5} l${-s*0.4},${s*0.3} z`);
+      el.setAttribute('fill', adjustColor(baseColor, rng()*20-10));
+      el.setAttribute('opacity', 0.4+rng()*0.3);
+    } else {
+      el = document.createElementNS(SVGNS, 'circle');
+      el.setAttribute('cx', px); el.setAttribute('cy', py);
+      el.setAttribute('r', 1+rng()*1);
+      el.setAttribute('fill', adjustColor(baseColor, rng()*15-5));
+      el.setAttribute('opacity', 0.3+rng()*0.2);
+    }
+    parent.appendChild(el);
+  }
+}
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function adjustColor(hex, delta){
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  const adj = (c) => Math.max(0, Math.min(255, c + delta));
+  return '#' + adj(r).toString(16).padStart(2,'0') + adj(g).toString(16).padStart(2,'0') + adj(b).toString(16).padStart(2,'0');
+}
+
+function renderRoots(){
+  const g = document.getElementById('root-system');
+  g.innerHTML = '';
+
+  const startX = 400;
+  const groundY = 120;
+  const maxDepth = 380; // total soil depth in SVG units
+  const rootReach = (rootDepthPct / 100) * maxDepth;
+  const rootEndY = groundY + rootReach;
+  const ageFactor = Math.min(1, vineAge / 30 + 0.2);
+
+  // Main taproot
+  const tapPath = `M ${startX} ${groundY} Q ${startX - 5} ${(groundY + rootEndY)/2} ${startX} ${rootEndY}`;
+  const tap = document.createElementNS(SVGNS, 'path');
+  tap.setAttribute('d', tapPath);
+  tap.setAttribute('stroke', '#3a2a18');
+  tap.setAttribute('stroke-width', '3');
+  tap.setAttribute('fill', 'none');
+  tap.setAttribute('stroke-linecap', 'round');
+  g.appendChild(tap);
+
+  // Lateral roots - branching
+  const numLaterals = Math.floor(8 * ageFactor);
+  for(let i = 0; i < numLaterals; i++){
+    const t = (i + 1) / (numLaterals + 1);
+    const branchY = groundY + rootReach * t;
+    const side = i % 2 === 0 ? -1 : 1;
+    const angle = 30 + (i % 3) * 15; // degrees from vertical
+    const length = (40 + (i % 4) * 20) * ageFactor * (1 - t * 0.3);
+
+    const endX = startX + side * length * Math.cos(angle * Math.PI / 180);
+    const endY = branchY + length * Math.sin(angle * Math.PI / 180);
+    const ctrlX = startX + side * length * 0.5 * Math.cos(angle * Math.PI / 180);
+    const ctrlY = branchY + 8 + length * 0.3;
+
+    const branchPath = `M ${startX} ${branchY} Q ${ctrlX} ${ctrlY} ${endX} ${endY}`;
+    const branch = document.createElementNS(SVGNS, 'path');
+    branch.setAttribute('d', branchPath);
+    branch.setAttribute('stroke', '#3a2a18');
+    branch.setAttribute('stroke-width', String(Math.max(1, 2.5 - t * 1.5)));
+    branch.setAttribute('fill', 'none');
+    branch.setAttribute('stroke-linecap', 'round');
+    branch.setAttribute('opacity', '0.85');
+    g.appendChild(branch);
+
+    // Fine root hairs
+    if(i > 1 && i < numLaterals - 1){
+      const numHairs = 2 + (i % 3);
+      for(let j = 0; j < numHairs; j++){
+        const ht = j / (numHairs + 1);
+        const hx = startX + side * length * ht * Math.cos(angle * Math.PI / 180);
+        const hy = branchY + length * ht * Math.sin(angle * Math.PI / 180) + 5 * ht;
+        const hairLen = 8 + (j % 2) * 6;
+        const hairAngle = angle + (j % 2 ? 1 : -1) * 20;
+        const hEndX = hx + side * hairLen * Math.cos(hairAngle * Math.PI / 180);
+        const hEndY = hy + hairLen * Math.sin(hairAngle * Math.PI / 180);
+
+        const hair = document.createElementNS(SVGNS, 'path');
+        hair.setAttribute('d', `M ${hx} ${hy} L ${hEndX} ${hEndY}`);
+        hair.setAttribute('stroke', '#2a2010');
+        hair.setAttribute('stroke-width', '0.8');
+        hair.setAttribute('fill', 'none');
+        hair.setAttribute('opacity', '0.5');
+        g.appendChild(hair);
+      }
+    }
+  }
+
+  // Animate root growth
+  const rootPaths = g.querySelectorAll('path');
+  gsap.set(rootPaths, {drawSVG: 0});
+  gsap.fromTo(rootPaths, {scaleY:0, transformOrigin:'top center'}, {scaleY:1, duration:0.6, stagger:0.04, ease:'power2.out'});
+  gsap.fromTo(rootPaths, {opacity:0}, {opacity:1, duration:0.4, stagger:0.04, ease:'power2.out'});
+}
+
+function renderMinerals(){
+  const container = document.getElementById('mineral-bars');
+  container.innerHTML = '';
+  const entries = Object.entries(currentRegion.minerals).sort((a,b) => b[1] - a[1]);
+
+  entries.forEach(([name, pct]) => {
+    const row = document.createElement('div');
+    row.className = 'mineral-row';
+    row.innerHTML = `
+      <span class="mineral-name">${name}</span>
+      <div class="mineral-bar-bg"><div class="mineral-bar-fill" style="background:${MINERAL_COLORS[name]||'#5a4a30'};"></div></div>
+      <span class="mineral-pct">${pct}%</span>
+    `;
+    container.appendChild(row);
+    const fill = row.querySelector('.mineral-bar-fill');
+    gsap.to(fill, {width: Math.min(100, pct) + '%', duration: 0.6, delay: 0.1 + entries.indexOf([name,pct]) * 0.05, ease:'power2.out'});
+  });
+}
+
+function updateMetrics(){
+  const tempFactor = 1 + (soilTemp - 14) * 0.03;
+  const omFactor = 1 + (organicMatter - 3.2) * 0.08;
+
+  let drainage = currentRegion.drainage * (1 - (waterTablePct - 70) * 0.005);
+  let whc = currentRegion.whc * omFactor;
+  let ph = currentRegion.ph + (organicMatter - 3.2) * (-0.03);
+  let cec = currentRegion.cec * omFactor;
+  let stress = currentRegion.stress + Math.abs(soilTemp - 14) * 0.8 + Math.abs(waterTablePct - 60) * 0.2;
+  let vigor = currentRegion.vigor * tempFactor * (rootDepthPct / 60) - stress * 0.3;
+
+  drainage = Math.max(0, Math.min(100, drainage));
+  whc = Math.max(0, Math.min(100, whc));
+  ph = Math.max(4, Math.min(9, ph));
+  cec = Math.max(0, Math.min(40, cec));
+  stress = Math.max(0, Math.min(100, stress));
+  vigor = Math.max(0, Math.min(100, vigor));
+
+  document.getElementById('m-drainage').textContent = drainage.toFixed(0) + '%';
+  document.getElementById('m-whc').textContent = whc.toFixed(0) + '%';
+  document.getElementById('m-ph').textContent = ph.toFixed(1);
+  document.getElementById('m-cec').textContent = cec.toFixed(1);
+  document.getElementById('m-stress').textContent = stress.toFixed(0) + '%';
+  document.getElementById('m-vigor').textContent = vigor.toFixed(0) + '%';
+
+  gsap.to('#b-drainage', {width: drainage + '%', duration: 0.4, ease:'power2.out'});
+  gsap.to('#b-whc', {width: whc + '%', duration: 0.4, ease:'power2.out'});
+  gsap.to('#b-ph', {width: ((ph - 4) / 5 * 100) + '%', duration: 0.4, ease:'power2.out'});
+  gsap.to('#b-cec', {width: (cec / 40 * 100) + '%', duration: 0.4, ease:'power2.out'});
+  gsap.to('#b-stress', {width: stress + '%', duration: 0.4, ease:'power2.out'});
+  gsap.to('#b-vigor', {width: vigor + '%', duration: 0.4, ease:'power2.out'});
+}
+
+function drawWaterCurve(){
+  const svg = document.getElementById('water-svg');
+  const curve = document.getElementById('water-curve');
+  const fill = document.getElementById('water-fill');
+  const marker = document.getElementById('water-marker');
+
+  // Generate water retention curve: θ vs pF (matric potential)
+  const points = [];
+  const sat = Math.min(60, currentRegion.whc * 0.8 + 15);
+  const fc = currentRegion.whc * 0.7;
+  const wp = Math.max(3, currentRegion.whc * 0.2);
+
+  for(let i = 0; i <= 50; i++){
+    const pF = 0 + (i / 50) * 4.2;
+    // Van Genuchten-like curve
+    const theta = wp + (sat - wp) / Math.pow(1 + Math.pow(pF / 2.5, 3), 0.4);
+    const x = 30 + (i / 50) * 200;
+    const y = 95 - (theta / 60) * 85;
+    points.push({x, y});
+  }
+
+  const pathD = points.map((p,i) => (i===0?'M':'L') + ' ' + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+  curve.setAttribute('d', pathD);
+  fill.setAttribute('d', pathD + ' L 230 95 L 30 95 Z');
+
+  // Marker at current water table position
+  const wtPf = (waterTablePct / 100) * 4.2;
+  const theta = wp + (sat - wp) / Math.pow(1 + Math.pow(wtPf / 2.5, 3), 0.4);
+  const mx = 30 + (wtPf / 4.2) * 200;
+  const my = 95 - (theta / 60) * 85;
+  gsap.to(marker, {attr:{cx:mx, cy:my}, duration:0.4, ease:'power2.out'});
+
+  // Animate curve draw
+  const pathLen = curve.getTotalLength();
+  gsap.fromTo(curve, {strokeDasharray: pathLen, strokeDashoffset: pathLen}, {strokeDashoffset: 0, duration: 0.8, ease:'power2.out'});
+  gsap.fromTo(fill, {opacity:0}, {opacity:0.12, duration:0.8, delay:0.3});
+}
+
+function updateInfoPanel(){
+  document.getElementById('info-name').textContent = currentRegion.name;
+  document.getElementById('info-desc').textContent = currentRegion.desc;
+  gsap.fromTo('#info-panel', {y:10, opacity:0.5}, {y:0, opacity:1, duration:0.4, ease:'power2.out'});
+}
+
+// Controls
+document.getElementById('root-depth').addEventListener('input', e => {
+  rootDepthPct = parseFloat(e.target.value);
+  document.getElementById('root-val').textContent = rootDepthPct + '%';
+  renderRoots();
+  updateMetrics();
+});
+document.getElementById('water-table-slider').addEventListener('input', e => {
+  waterTablePct = parseFloat(e.target.value);
+  document.getElementById('wt-val').textContent = waterTablePct + '%';
+  const wtY = 120 + ((100 - waterTablePct) / 100) * 380;
+  document.getElementById('water-table').setAttribute('d', 'M 50 ' + wtY + ' L 750 ' + wtY);
+  drawWaterCurve();
+  updateMetrics();
+});
+document.getElementById('soil-temp').addEventListener('input', e => {
+  soilTemp = parseFloat(e.target.value);
+  document.getElementById('temp-val').textContent = soilTemp + '°C';
+  updateMetrics();
+});
+document.getElementById('organic-matter').addEventListener('input', e => {
+  organicMatter = parseFloat(e.target.value);
+  document.getElementById('om-val').textContent = organicMatter.toFixed(1) + '%';
+  updateMetrics();
+});
+document.getElementById('vine-age').addEventListener('input', e => {
+  vineAge = parseFloat(e.target.value);
+  document.getElementById('age-val').textContent = vineAge + ' yr';
+  renderRoots();
+});
+document.getElementById('animate-btn').addEventListener('click', () => {
+  renderRoots();
+  gsap.fromTo('#root-system path', {opacity:0}, {opacity:1, duration:0.5, stagger:0.03, ease:'power2.out'});
+});
+
+// Init
+buildRegionChips();
+renderSoil();
+renderRoots();
+renderMinerals();
+updateMetrics();
+drawWaterCurve();
+updateInfoPanel();
+
+// Entrance animation
+gsap.fromTo('#header', {y:-20, opacity:0}, {y:0, opacity:1, duration:0.6, delay:0.1, ease:'power2.out'});
+gsap.fromTo('#controls', {x:-30, opacity:0}, {x:0, opacity:1, duration:0.6, delay:0.2, ease:'power2.out'});
+gsap.fromTo('#metrics', {x:30, opacity:0}, {x:0, opacity:1, duration:0.6, delay:0.3, ease:'power2.out'});
+gsap.fromTo('#mineral-panel', {y:30, opacity:0}, {y:0, opacity:1, duration:0.6, delay:0.4, ease:'power2.out'});
+gsap.fromTo('#water-panel', {y:30, opacity:0}, {y:0, opacity:1, duration:0.6, delay:0.5, ease:'power2.out'});
+gsap.fromTo('#info-panel', {y:20, opacity:0}, {y:0, opacity:1, duration:0.6, delay:0.6, ease:'power2.out'});
+</script>
+</body>
+</html>
