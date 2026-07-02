@@ -128,6 +128,7 @@ const VIDEOS = [
 
 ];
 const APPS = [
+  {date: "2026-07-03", title: "Vineyard Sun Path & Canopy Shadow 3D Simulator", description: "Interactive Three.js 3D vineyard scene with real-time sun position tracking, dynamic shadow casting, and sky color transitions. NREL solar position model with day-of-year, latitude, row orientation, spacing, canopy height/width controls. Live sun elevation, azimuth, solar irradiance, day length, canopy interception, fruit-zone PAR, shadow length, sunrise/sunset times, and animated sun-arc diagram with Bordeaux, Napa, Mosel, and Barossa presets.", url: "./apps/2026-07-03/vineyard-sun-path-3d.html"},
   {date: "2026-07-02", title: "Vineyard Soil Profile & Terroir Explorer", description: "Interactive GSAP + SVG soil cross-section explorer for 8 world-class wine regions — Médoc, Côte de Nuits, Mosel, Barolo, Napa, Champagne, Stellenbosch, and Douro. Animated soil layers, root system growth, water retention curves, mineral composition bars, and live soil metrics (drainage, WHC, pH, CEC, stress, vigor). Adjust root depth, water table, soil temperature, organic matter, and vine age.", url: "./apps/2026-07-02/vineyard-soil-terroir-explorer.html"},
   {date: "2026-07-01", title: "Vine Leaf Morphology — Paper.js Ampelography", description: "Interactive Paper.js ampelographic leaf explorer — parametric grapevine leaf modelling with adjustable lobe count, lobe depth, petiolar sinus, aspect ratio, margin serration, and anthocyanin pigmentation. Palmate vein network with main, secondary, and tertiary veins. Live leaf area, perimeter, shape classification, sinus type, margin, and pigmentation metrics. Seven variety presets: Cabernet Sauvignon, Pinot Noir, Chardonnay, Syrah, Merlot, Riesling, and Sangiovese.", url: "./apps/2026-07-01/vine-leaf-morphology.html"},
   {date: "2026-06-29", title: "Cellar Fermentation Live Dashboard", description: "Interactive Chart.js real-time winery cellar dashboard — three parallel tank simulators with Monod + Arrhenius kinetics drive live Brix traces, bar temperatures, CO₂ evolution, energy-split doughnut, and fermentation-health radar. Adjust ambient cellar temperature, time scale, target temp, initial Brix, and YAN with Red warm, White cool, Sparkling, and Stuck risk presets.", url: "./apps/2026-06-29/cellar-fermentation-dashboard.html"},
@@ -220,7 +221,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById("last-updated").textContent="2026-07-02";
+document.getElementById("last-updated").textContent="2026-07-03";
 render();
 </script>
 </body>
