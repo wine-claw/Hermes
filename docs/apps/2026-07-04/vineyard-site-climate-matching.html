@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vineyard Site Climate Matching Explorer</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root{
+    --bg:#0a1410; --surface:#102018; --surface2:#162a20; --border:#1f3a2a; --text:#d8e8de; --muted:#8aa898;
+    --accent:#6ec88a; --accent2:#c8a46e; --warn:#d04040; --ok:#5dd88a;
+    --grid:rgba(120,200,150,0.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;}
+
+  /* Disclaimer — exact text, theme-adapted colors */
+  .disclaimer{background:#1a1610;border-bottom:1px solid #3a3020;color:#c9a060;padding:0.75rem 1rem;text-align:center;font-size:0.85rem;font-family:system-ui,sans-serif;position:sticky;top:0;z-index:100;}
+  .disclaimer strong{font-weight:600;}
+
+  header{text-align:center;padding:0.7rem 1rem 0.4rem;border-bottom:1px solid var(--border);}
+  header h1{font-size:clamp(1.05rem,3vw,1.4rem);font-weight:700;letter-spacing:0.02em;color:var(--accent);}
+  header p{color:var(--muted);font-size:0.78rem;margin-top:0.15rem;}
+
+  #canvas-container{position:fixed;inset:0;z-index:0;}
+  canvas{width:100%;height:100%;display:block;}
+
+  #ui-layer{position:absolute;inset:0;pointer-events:none;z-index:10;display:flex;}
+
+  /* Desktop: floating panels */
+  #controls{
+    pointer-events:auto;position:absolute;top:70px;left:12px;width:300px;
+    background:rgba(16,32,24,0.93);border:1px solid var(--border);border-radius:12px;
+    padding:0.7rem 0.85rem 0.85rem;backdrop-filter:blur(10px);max-height:calc(100vh - 90px);overflow-y:auto;
+  }
+  #metrics{
+    pointer-events:auto;position:absolute;top:70px;right:12px;width:340px;
+    background:rgba(16,32,24,0.93);border:1px solid var(--border);border-radius:12px;
+    padding:0.7rem 0.85rem 0.85rem;backdrop-filter:blur(10px);max-height:calc(100vh - 90px);overflow-y:auto;
+  }
+  .panel-title{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent2);margin-bottom:0.45rem;padding-bottom:0.3rem;border-bottom:1px solid var(--border);}
+  .panel-sub{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.6rem;margin-bottom:0.25rem;}
+
+  /* Sliders */
+  .slider-row{margin-bottom:0.5rem;}
+  .slider-row .lab{display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text);margin-bottom:0.15rem;}
+  .slider-row .lab span:last-child{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;}
+  input[type=range]{width:100%;height:18px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--text);border:2px solid var(--accent);border-radius:50%;margin-top:-5px;box-shadow:0 0 4px rgba(110,200,138,0.6);}
+  input[type=range]::-moz-range-track{height:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--text);border:2px solid var(--accent);border-radius:50%;box-shadow:0 0 4px rgba(110,200,138,0.6);}
+
+  select,button{
+    width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:0.35rem 0.5rem;font-size:0.78rem;font-family:inherit;margin-top:0.2rem;cursor:pointer;
+  }
+  select:hover,button:hover{border-color:var(--accent);}
+  button.primary{background:linear-gradient(135deg,#1a3a28,#0a2818);font-weight:600;}
+
+  .preset-row{display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;}
+  .preset-row button{width:100%;margin:0;font-size:0.72rem;padding:0.3rem 0.3rem;}
+
+  /* Metrics */
+  .match-row{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;padding:0.3rem 0.35rem;border-radius:6px;background:rgba(255,255,255,0.02);}
+  .match-row .bar-wrap{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;}
+  .match-row .bar{height:100%;border-radius:3px;transition:width 0.25s;}
+  .match-row .name{font-size:0.72rem;font-weight:600;width:84px;}
+  .match-row .score{font-size:0.72rem;font-variant-numeric:tabular-nums;font-weight:700;width:32px;text-align:right;}
+
+  #radar-wrap,#heatmap-wrap{background:rgba(255,255,255,0.02);border-radius:8px;padding:0.35rem;margin-top:0.3rem;}
+  #radar-svg,#heatmap-svg{width:100%;display:block;}
+  .axis-label{font-size:8px;fill:var(--muted);}
+  .radar-axis{stroke:rgba(120,200,150,0.18);stroke-width:1;}
+  .radar-grid{stroke:rgba(120,200,150,0.08);fill:none;}
+  .radar-path{fill-opacity:0.18;stroke-width:1.8;}
+
+  .legend-row{display:flex;align-items:center;gap:0.4rem;font-size:0.7rem;margin-top:0.4rem;color:var(--muted);}
+  .legend-swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0;}
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; display:block; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<header>
+  <h1>Vineyard Site Climate Matching Explorer</h1>
+  <p>Score candidate vineyard sites against grape varietal suitability envelopes — D3.js radar, heatmap & match gauges</p>
+</header>
+
+<div id="canvas-container">
+  <canvas id="bg-canvas"></canvas>
+</div>
+
+<div id="ui-layer">
+  <div id="controls">
+    <div class="panel-title">Site Parameters</div>
+    <div class="slider-row"><div class="lab"><span>GDD (Apr–Oct, °C·d, base 10°C)</span><span id="v-gdd">1450</span></div><input type="range" id="s-gdd" min="800" max="2200" step="10" value="1450"></div>
+    <div class="slider-row"><div class="lab"><span>Mean July Temp (°C)</span><span id="v-jul">19.5</span></div><input type="range" id="s-jul" min="13" max="27" step="0.1" value="19.5"></div>
+    <div class="slider-row"><div class="lab"><span>Diurnal Range (°C, Jul)</span><span id="v-diu">12.0</span></div><input type="range" id="s-diu" min="5" max="20" step="0.2" value="12.0"></div>
+    <div class="slider-row"><div class="lab"><span>Mean Annual Precip (mm)</span><span id="v-map">720</span></div><input type="range" id="s-map" min="250" max="1400" step="10" value="720"></div>
+    <div class="slider-row"><div class="lab"><span>Sunshine Hours (yr)</span><span id="v-sun">1900</span></div><input type="range" id="s-sun" min="1100" max="2600" step="10" value="1900"></div>
+    <div class="slider-row"><div class="lab"><span>Latitude (°)</span><span id="v-lat">44.5</span></div><input type="range" id="s-lat" min="32" max="52" step="0.1" value="44.5"></div>
+    <div class="slider-row"><div class="lab"><span>Elevation (m)</span><span id="v-elev">180</span></div><input type="range" id="s-elev" min="0" max="900" step="10" value="180"></div>
+    <div class="slider-row"><div class="lab"><span>Frost Risk (days/yr, spring)</span><span id="v-fr">14</span></div><input type="range" id="s-fr" min="0" max="45" step="1" value="14"></div>
+    <div class="panel-sub">Region Presets</div>
+    <div class="preset-row">
+      <button data-preset="bordeaux">Bordeaux (Médoc)</button>
+      <button data-preset="burgundy">Burgundy (Côte d'Or)</button>
+      <button data-preset="napa">Napa Valley</button>
+      <button data-preset="mosel">Mosel (Germany)</button>
+      <button data-preset="barossa">Barossa (AU)</button>
+      <button data-preset="mendoza">Mendoza (AR)</button>
+      <button data-preset="marlborough">Marlborough (NZ)</button>
+      <button data-preset="willamette">Willamette (OR)</button>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <div class="panel-title">Varietal Suitability</div>
+    <div id="match-list"></div>
+
+    <div class="panel-sub">Suitability Radar — <span id="radar-var">Best Match</span></div>
+    <div id="radar-wrap"><svg id="radar-svg" viewBox="0 0 240 240"></svg></div>
+    <div class="legend-row">
+      <span class="legend-swatch" style="background:#6ec88a;"></span><span id="leg-site">Site</span>
+      <span class="legend-swatch" style="background:#c8a46e;margin-left:0.6rem;"></span>Varietal Envelope
+    </div>
+
+    <div class="panel-sub">8-Parameter Climate Heatmap</div>
+    <div id="heatmap-wrap"><svg id="heatmap-svg" viewBox="0 0 300 270"></svg></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  Vineyard Site Climate Matching Explorer
+//  Compares a vineyard site's climate signature against
+//  published optimum ranges for 10 benchmark grape varietals.
+//  Scoring uses Gaussian membership over each parameter's
+//  ideal range, then averages across the parameter suite.
+//  Data ranges synthesized from extension viticulture literature
+//  (e.g., UC ANR, AWRI, INRA, Geisenheim regional suitability tables).
+// ============================================================
+
+// ---- Varietal suitability envelopes ----
+// Each parameter: [ideal_low, ideal_high, absolute_min, absolute_max]
+// Varietals ordered roughly cool-climate → warm-climate
+const VARIETALS = [
+  {key:'riesling', name:'Riesling', color:'#a8c8e0',
+    gdd:[1000,1380,800,1700], jul:[16,19.5,13,23], diu:[10,16,6,20], map:[500,800,250,1100], sun:[1500,1900,1200,2300], lat:[44,51,38,54], elev:[100,350,0,700], fr:[10,22,0,35]},
+  {key:'pinot', name:'Pinot Noir', color:'#c8a0d0',
+    gdd:[1100,1450,850,1700], jul:[17,20.5,14,23], diu:[10,15,6,20], map:[550,850,300,1200], sun:[1600,2000,1200,2300], lat:[43,51,38,53], elev:[80,350,0,700], fr:[8,20,0,32]},
+  {key:'chard', name:'Chardonnay', color:'#e8d8a0',
+    gdd:[1200,1550,900,1800], jul:[17.5,21,14,24], diu:[9,14,5,19], map:[500,820,280,1200], sun:[1600,2050,1200,2400], lat:[42,50,36,53], elev:[60,350,0,650], fr:[6,18,0,30]},
+  {key:'sauvblanc', name:'Sauvignon Blanc', color:'#b8e8a8',
+    gdd:[1250,1600,950,1850], jul:[18,21.5,15,24], diu:[9,14,5,19], map:[480,800,260,1200], sun:[1700,2100,1300,2400], lat:[40,49,35,52], elev:[30,300,0,650], fr:[4,14,0,28]},
+  {key:'cs', name:'Cabernet Sauvignon', color:'#4060c8',
+    gdd:[1500,1850,1200,2100], jul:[20,24,17,27], diu:[10,16,6,20], map:[450,750,250,1100], sun:[1800,2300,1400,2550], lat:[38,46,32,50], elev:[30,300,0,600], fr:[1,8,0,20]},
+  {key:'merlot', name:'Merlot', color:'#6048c8',
+    gdd:[1450,1780,1150,2050], jul:[19.5,23.5,16.5,26.5], diu:[9,15,5,19], map:[480,780,260,1150], sun:[1750,2250,1350,2500], lat:[39,47,33,51], elev:[30,320,0,620], fr:[2,10,0,22]},
+  {key:'syrah', name:'Syrah / Shiraz', color:'#a04060',
+    gdd:[1600,2000,1300,2200], jul:[21,25,18,28], diu:[10,16,6,20], map:[400,700,200,1050], sun:[1850,2400,1450,2600], lat:[36,45,30,49], elev:[20,300,0,650], fr:[0,6,0,18]},
+  {key:'tempr', name:'Tempranillo', color:'#c86040',
+    gdd:[1550,1950,1250,2150], jul:[20.5,24.5,17.5,27], diu:[10,16,6,20], map:[350,650,200,1000], sun:[1800,2400,1400,2580], lat:[37,45,31,49], elev:[20,350,0,700], fr:[0,7,0,18]},
+  {key:'grenache', name:'Grenache', color:'#e08040',
+    gdd:[1700,2050,1400,2200], jul:[22,26,19,28.5], diu:[10,16,6,20], map:[300,600,180,950], sun:[1900,2450,1500,2600], lat:[35,44,29,48], elev:[10,300,0,650], fr:[0,4,0,14]},
+  {key:'nebbiolo', name:'Nebbiolo', color:'#c85850',
+    gdd:[1500,1850,1200,2100], jul:[20,23.5,17,26], diu:[10,15,6,19], map:[600,950,350,1300], sun:[1700,2200,1300,2450], lat:[41,47,36,50], elev:[80,400,0,750], fr:[3,12,0,24]},
+];
+
+// Parameter metadata for display / scaling
+const PARAMS = [
+  {key:'gdd',  name:'GDD',        unit:'°C·d',  min:800,  max:2200, step:10,  display:v=>v.toFixed(0)},
+  {key:'jul',  name:'July T',     unit:'°C',    min:13,   max:27,   step:0.1, display:v=>v.toFixed(1)},
+  {key:'diu',  name:'Diurnal',    unit:'°C',    min:5,    max:20,   step:0.2, display:v=>v.toFixed(1)},
+  {key:'map',  name:'Precip',     unit:'mm',    min:250,  max:1400, step:10,  display:v=>v.toFixed(0)},
+  {key:'sun',  name:'Sunshine',   unit:'h/yr',  min:1100, max:2600, step:10,  display:v=>v.toFixed(0)},
+  {key:'lat',  name:'Latitude',   unit:'°',     min:32,   max:52,   step:0.1, display:v=>v.toFixed(1)},
+  {key:'elev', name:'Elevation',  unit:'m',    min:0,    max:900,  step:10,  display:v=>v.toFixed(0)},
+  {key:'fr',   name:'Frost Risk', unit:'days',  min:0,    max:45,   step:1,   display:v=>v.toFixed(0)},
+];
+
+// Region presets
+const PRESETS = {
+  bordeaux:    {gdd:1450, jul:19.8, diu:11.5, map:750,  sun:1950, lat:45.0, elev:25,  fr:14},
+  burgundy:    {gdd:1250, jul:19.0, diu:12.5, map:780,  sun:1750, lat:47.2, elev:260, fr:20},
+  napa:        {gdd:1750, jul:22.5, diu:14.0, map:950,  sun:2400, lat:38.5, elev:60,  fr:2},
+  mosel:       {gdd:1100, jul:17.5, diu:10.5, map:650,  sun:1550, lat:49.9, elev:130, fr:24},
+  barossa:     {gdd:1850, jul:23.0, diu:13.5, map:500,  sun:2200, lat:34.5, elev:270, fr:0},
+  mendoza:     {gdd:1700, jul:23.5, diu:16.0, map:220,  sun:2400, lat:33.0, elev:700, fr:4},
+  marlborough: {gdd:1300, jul:17.5, diu:12.0, map:800,  sun:1900, lat:41.5, elev:40,  fr:6},
+  willamette:  {gdd:1250, jul:19.0, diu:13.0, map:1050, sun:1800, lat:45.3, elev:120, fr:18},
+};
+
+// ---- State ----
+let site = {...PRESETS.bordeaux};
+
+// ---- Gaussian membership scoring ----
+// Returns 0..1: 1.0 inside ideal [lo,hi], Gaussian decay outside down to abs bounds.
+function scoreParam(value, env) {
+  const [lo, hi, aMin, aMax] = env;
+  // Inside ideal range → full match
+  if (value >= lo && value <= hi) return 1.0;
+  // Below ideal: decay from 1 at lo to 0 at aMin
+  if (value < lo) {
+    if (value <= aMin) return 0;
+    // normalized 0..1 within [aMin, lo]
+    const t = (value - aMin) / (lo - aMin);
+    // raised-cosine shape for natural feel
+    return 0.5 * (1 - Math.cos(Math.PI * t));
+  }
+  // Above ideal: decay from 1 at hi to 0 at aMax
+  if (value > hi) {
+    if (value >= aMax) return 0;
+    const t = (aMax - value) / (aMax - hi);
+    return 0.5 * (1 - Math.cos(Math.PI * t));
+  }
+  return 0;
+}
+
+// Overall match: geometric mean across all params (penalizes any hard miss)
+function scoreVarietal(v, s) {
+  const scores = PARAMS.map(p => scoreParam(s[p.key], v[p.key]));
+  // geometric mean but allow a single zero to survive softly (min 0.02 floor)
+  const floored = scores.map(x => Math.max(x, 0.02));
+  const gm = Math.pow(floored.reduce((a,b)=>a*b,1), 1/floored.length);
+  // Arithmetic mean as secondary signal
+  const am = scores.reduce((a,b)=>a+b,0) / scores.length;
+  // Blend: 60% geometric (strict), 40% arithmetic (lenient)
+  return 0.6 * gm + 0.4 * am;
+}
+
+// ---- Radar chart ----
+const radarKeys = ['gdd','jul','diu','map','sun','lat','elev','fr'];
+const radarLabels = ['GDD','July T','Diurnal','Precip','Sun','Lat','Elev','Frost'];
+const radarSvg = d3.select('#radar-svg');
+const radarCx = 120, radarCy = 120, radarR = 78;
+
+function radarNorm(key, value) {
+  const p = PARAMS.find(pp => pp.key === key);
+  return (value - p.min) / (p.max - p.min);
+}
+
+function drawRadar(varietal) {
+  radarSvg.selectAll('*').remove();
+  const n = radarKeys.length;
+  const angle = i => (i / n) * 2 * Math.PI - Math.PI / 2;
+
+  // Grid rings
+  [0.25,0.5,0.75,1.0].forEach(r => {
+    const pts = d3.range(n).map(i => [radarCx + Math.cos(angle(i))*radarR*r, radarCy + Math.sin(angle(i))*radarR*r]);
+    radarSvg.append('polygon').attr('points', pts.map(p=>p.join(',')).join(' '))
+      .attr('class','radar-grid');
+  });
+  // Spokes
+  d3.range(n).forEach(i => {
+    radarSvg.append('line').attr('class','radar-axis')
+      .attr('x1',radarCx).attr('y1',radarCy)
+      .attr('x2',radarCx + Math.cos(angle(i))*radarR)
+      .attr('y2',radarCy + Math.sin(angle(i))*radarR);
+  });
+  // Labels
+  d3.range(n).forEach(i => {
+    const lx = radarCx + Math.cos(angle(i))*(radarR+12);
+    const ly = radarCy + Math.sin(angle(i))*(radarR+12) + 3;
+    radarSvg.append('text').attr('class','axis-label')
+      .attr('x',lx).attr('y',ly).attr('text-anchor','middle')
+      .text(radarLabels[i]);
+  });
+
+  // Varietal envelope polygon (ideal low–high band as centroid)
+  const envPts = radarKeys.map((k,i) => {
+    const env = varietal[k];
+    const mid = (env[0] + env[1]) / 2;
+    return [radarCx + Math.cos(angle(i))*radarR*radarNorm(k, mid), radarCy + Math.sin(angle(i))*radarR*radarNorm(k, mid)];
+  });
+  radarSvg.append('polygon').attr('points', envPts.map(p=>p.join(',')).join(' '))
+    .attr('fill','rgba(200,164,110,0.18)').attr('stroke','#c8a46e').attr('stroke-width',1.5).attr('stroke-dasharray','3 3');
+
+  // Site polygon
+  const sitePts = radarKeys.map((k,i) => [radarCx + Math.cos(angle(i))*radarR*radarNorm(k, site[k]), radarCy + Math.sin(angle(i))*radarR*radarNorm(k, site[k])]);
+  radarSvg.append('polygon').attr('points', sitePts.map(p=>p.join(',')).join(' '))
+    .attr('class','radar-path').attr('fill','rgba(110,200,138,0.22)').attr('stroke','#6ec88a').attr('stroke-width',2);
+
+  // Site points
+  sitePts.forEach(p => {
+    radarSvg.append('circle').attr('cx',p[0]).attr('cy',p[1]).attr('r',2.2).attr('fill','#6ec88a');
+  });
+}
+
+// ---- Heatmap: parameters (rows) × varietals (cols) ----
+const hmSvg = d3.select('#heatmap-svg');
+const HM_LEFT = 70, HM_TOP = 6, HM_CELL_W = 22, HM_CELL_H = 26;
+
+function drawHeatmap(scores) {
+  hmSvg.selectAll('*').remove();
+  const nV = VARIETALS.length;
+  const nP = PARAMS.length;
+
+  // Color scale
+  const color = d3.scaleLinear().domain([0,0.5,0.8,1.0]).range(['#3a1a1a','#7a3a20','#c8a040','#5dd88a']);
+
+  // Row labels (params)
+  PARAMS.forEach((p, i) => {
+    hmSvg.append('text').attr('x',HM_LEFT-6).attr('y',HM_TOP+i*HM_CELL_H+HM_CELL_H/2+3).attr('text-anchor','end')
+      .attr('fill','#8aa898').attr('font-size','8px').text(p.name);
+  });
+  // Col labels (varietals) rotated
+  VARIETALS.forEach((v, j) => {
+    hmSvg.append('g').attr('transform',`translate(${HM_LEFT+j*HM_CELL_W+HM_CELL_W/2},${HM_TOP-2}) rotate(-60)`)
+      .append('text').attr('text-anchor','end').attr('fill','#a8b8a8').attr('font-size','8px').text(v.name);
+  });
+
+  // Cells
+  VARIETALS.forEach((v, j) => {
+    PARAMS.forEach((p, i) => {
+      const s = scoreParam(site[p.key], v[p.key]);
+      hmSvg.append('rect')
+        .attr('x', HM_LEFT + j*HM_CELL_W + 1)
+        .attr('y', HM_TOP + i*HM_CELL_H + 1)
+        .attr('width', HM_CELL_W - 2)
+        .attr('height', HM_CELL_H - 2)
+        .attr('fill', color(s))
+        .attr('rx', 2);
+      if (s >= 0.8) {
+        hmSvg.append('text').attr('x', HM_LEFT+j*HM_CELL_W+HM_CELL_W/2).attr('y', HM_TOP+i*HM_CELL_H+HM_CELL_H/2+2.5)
+          .attr('text-anchor','middle').attr('fill','#0a1410').attr('font-size','7px').attr('font-weight','700').text('●');
+      }
+    });
+  });
+
+  // Overall score row at bottom
+  const overallY = HM_TOP + nP*HM_CELL_H + 4;
+  hmSvg.append('text').attr('x',HM_LEFT-6).attr('y',overallY+HM_CELL_H/2+3).attr('text-anchor','end')
+    .attr('fill','#6ec88a').attr('font-size','8px').attr('font-weight','700').text('Overall');
+  VARIETALS.forEach((v, j) => {
+    const sc = scores[v.key];
+    hmSvg.append('rect')
+      .attr('x', HM_LEFT + j*HM_CELL_W + 1).attr('y', overallY)
+      .attr('width', HM_CELL_W - 2).attr('height', 10)
+      .attr('fill', color(sc)).attr('rx',2);
+    hmSvg.append('text').attr('x', HM_LEFT+j*HM_CELL_W+HM_CELL_W/2).attr('y', overallY+24)
+      .attr('text-anchor','middle').attr('fill','#d8e8de').attr('font-size','8px').attr('font-weight','700')
+      .attr('font-variant-numeric','tabular-nums').text(Math.round(sc*100));
+  });
+}
+
+// ---- Match list bars ----
+function drawMatchList(scores) {
+  const sorted = VARIETALS.map(v => ({...v, score: scores[v.key]})).sort((a,b) => b.score - a.score);
+  const list = d3.select('#match-list');
+  list.selectAll('*').remove();
+  sorted.forEach(v => {
+    const row = list.append('div').attr('class','match-row');
+    row.append('div').attr('class','name').style('color', v.color).text(v.name);
+    const bw = row.append('div').attr('class','bar-wrap');
+    bw.append('div').attr('class','bar')
+      .style('width', (v.score*100).toFixed(0) + '%')
+      .style('background', v.score >= 0.7 ? '#5dd88a' : v.score >= 0.45 ? '#c8a040' : '#d04040');
+    row.append('div').attr('class','score')
+      .style('color', v.score >= 0.7 ? '#5dd88a' : v.score >= 0.45 ? '#c8a040' : '#d04040')
+      .text(Math.round(v.score*100));
+  });
+  return sorted[0];
+}
+
+// ---- Update all ----
+function update() {
+  const scores = {};
+  VARIETALS.forEach(v => { scores[v.key] = scoreVarietal(v, site); });
+  const best = drawMatchList(scores);
+  drawRadar(best);
+  drawHeatmap(scores);
+  document.getElementById('radar-var').textContent = best.name + ' (' + Math.round(best.score*100) + ')';
+  document.getElementById('leg-site').textContent = 'Site';
+}
+
+// ---- Slider wiring ----
+PARAMS.forEach(p => {
+  const s = document.getElementById('s-' + p.key);
+  const v = document.getElementById('v-' + p.key);
+  s.addEventListener('input', () => {
+    site[p.key] = parseFloat(s.value);
+    v.textContent = p.display(site[p.key]);
+    update();
+  });
+});
+
+// ---- Preset wiring ----
+document.querySelectorAll('.preset-row button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = PRESETS[btn.dataset.preset];
+    Object.assign(site, preset);
+    PARAMS.forEach(p => {
+      document.getElementById('s-' + p.key).value = site[p.key];
+      document.getElementById('v-' + p.key).textContent = p.display(site[p.key]);
+    });
+    update();
+  });
+});
+
+// ============================================================
+//  Animated background: a viticultural "climate tapestry"
+//  Soft particle field + slow drift suggesting seasonal wind
+//  Canvas 2D (decorative only — the app logic is pure D3)
+// ============================================================
+(function bgCanvas(){
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let dpr = 1, W = 0, H = 0, particles = [];
+
+  function resize(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(rect.width, 1);
+    H = Math.max(rect.height, 1);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    initParticles();
+  }
+
+  function initParticles(){
+    const count = Math.max(40, Math.min(120, Math.floor(W*H/14000)));
+    particles = d3.range(count).map(() => ({
+      x: Math.random()*W, y: Math.random()*H,
+      r: 0.6 + Math.random()*2.4,
+      vx: -0.15 + Math.random()*0.3,
+      vy: -0.05 + Math.random()*0.2,
+      hue: 110 + Math.random()*60,  // green→gold band
+      a: 0.15 + Math.random()*0.4,
+      pulse: Math.random()*Math.PI*2
+    }));
+  }
+
+  function draw(){
+    // soft wash background
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'#0a1410');
+    grad.addColorStop(0.55,'#0c1c14');
+    grad.addColorStop(1,'#0a1812');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,W,H);
+
+    // subtle vignette
+    const vg = ctx.createRadialGradient(W/2,H*0.45,Math.min(W,H)*0.1,W/2,H*0.45,Math.max(W,H)*0.7);
+    vg.addColorStop(0,'rgba(40,80,55,0.10)');
+    vg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0,0,W,H);
+
+    const t = performance.now() * 0.0008;
+    particles.forEach(p => {
+      p.x += p.vx + Math.sin(t + p.pulse)*0.15;
+      p.y += p.vy + Math.cos(t*0.6 + p.pulse)*0.08;
+      if (p.x < -10) p.x = W + 10;
+      if (p.x > W + 10) p.x = -10;
+      if (p.y < -10) p.y = H + 10;
+      if (p.y > H + 10) p.y = -10;
+      const r = Math.max(0.3, p.r * (1 + 0.25*Math.sin(t*2 + p.pulse)));
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r*3);
+      g.addColorStop(0, `hsla(${p.hue},65%,65%,${p.a})`);
+      g.addColorStop(1, `hsla(${p.hue},65%,65%,0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r*3, 0, Math.PI*2);
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  draw();
+})();
+
+// Initial render
+update();
+</script>
+</body>
+</html>
