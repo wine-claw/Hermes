@@ -188,6 +188,7 @@ const APPS = [
   {date: "2026-06-28", title: "Fermentation Isotherm 3D Explorer — Wine Yeast Kinetics", description: "Interactive Plotly.js 3D surface visualization of yeast fermentation kinetics — Monod + Arrhenius sugar consumption rate across time × temperature. Six yeast strains (EC1118, QA23, RC212, D254, BM45, W15) with adjustable sugar, inoculum, pH, aeration, YAN, time span, and temperature range. Live peak rate, optimal temperature, ethanol yield, residual sugar, stuck risk, and 3D surface / 2D heatmap toggle with Cool White, Red Warm, Sparkling, and Stuck Risk presets.", url: "./apps/2026-06-28/fermentation-isotherm-3d.html"},
   {date: "2026-06-30", title: "Vineyard Drone NDVI Survey — 3D Flight Path Explorer", description: "Interactive Babylon.js 3D drone survey simulator — autonomous boustrophedon flight path over vineyard terrain with live NDVI health mapping. Adjustable altitude, speed, swath width, side overlap, vineyard area, stress patches and severity. Live flight time, distance, coverage, image count, battery, lines flown, mean NDVI, and healthy/stressed area analysis with Standard, Quick Scan, High Detail, and Stress Detect presets.", url: "./apps/2026-06-30/vineyard-drone-ndvi-survey.html"},
   {date: "2026-07-04", title: "Vineyard Site Climate Matching Explorer", description: "Interactive D3.js vineyard site selection tool — score candidate sites against suitability envelopes for 10 benchmark grape varietals (Riesling to Grenache) using Gaussian membership across 8 climate parameters: GDD, July mean temperature, diurnal range, annual precipitation, sunshine hours, latitude, elevation, and spring frost risk. Live match-score bars, suitability radar overlay (site vs varietal envelope), and an 8×10 climate parameter heatmap. Eight region presets: Bordeaux, Burgundy, Napa, Mosel, Barossa, Mendoza, Marlborough, and Willamette.", url: "./apps/2026-07-04/vineyard-site-climate-matching.html"},
+  {date: "2026-07-05", title: "Vertical Basket Press — Grape Pressing Physics Simulator", description: "Interactive Matter.js 2D physics simulator of a traditional vertical basket wine press — grapes loaded into a wooden stave basket are compressed by a kinematic press plate driven by a screw ram. Juice particles eject through stave gaps, collect in a trough, and track yield over 3 press cycles. Adjustable press pressure, plate speed, grape load, stave gap, and grape firmness. Live force, yield, pomace height, juice flow, efficiency, yield curve chart, and pressure gauge. Pinot Noir, Cabernet, Champagne, and Hard Press presets.", url: "./apps/2026-07-05/basket-press-physics.html"},
 ];
 </script>
 <script>
@@ -224,7 +225,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById("last-updated").textContent="2026-07-04";
+document.getElementById("last-updated").textContent="2026-07-05";
 render();
 </script>
 </body>

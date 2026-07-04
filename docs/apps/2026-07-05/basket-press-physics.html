@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vertical Basket Press — Grape Pressing Physics Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; }
+  body {
+    background: #1a1208;
+    color: #d8c9a8;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* Disclaimer */
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  /* Desktop layout */
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  canvas { display: block; }
+
+  #ui-layer {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #title-bar {
+    position: absolute;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    text-align: center;
+  }
+  #title-bar h1 {
+    font-size: 1.1rem;
+    color: #e8d4a8;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+    letter-spacing: 0.02em;
+  }
+  #title-bar p {
+    font-size: 0.72rem;
+    color: #9a8868;
+    margin-top: 2px;
+  }
+
+  #controls {
+    position: absolute;
+    top: 12px; left: 12px;
+    width: 280px;
+    background: rgba(26, 18, 8, 0.93);
+    border: 1px solid #4a3a20;
+    border-radius: 12px;
+    padding: 14px 16px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+  #controls h2 {
+    font-size: 0.9rem;
+    color: #d4a050;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #4a3a20;
+    padding-bottom: 6px;
+  }
+  .ctrl-group { margin-bottom: 12px; }
+  .ctrl-group label {
+    display: flex; justify-content: space-between;
+    font-size: 0.78rem; color: #b8a880;
+    margin-bottom: 4px;
+  }
+  .ctrl-group label span { color: #e8c878; font-weight: 600; }
+  .ctrl-group input[type="range"] {
+    width: 100%; height: 4px;
+    -webkit-appearance: none; appearance: none;
+    background: #3a2a18; border-radius: 2px; outline: none;
+  }
+  .ctrl-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #d4a050; cursor: pointer;
+    border: 2px solid #1a1208;
+  }
+  .ctrl-group input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #d4a050; cursor: pointer; border: 2px solid #1a1208;
+  }
+  .preset-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px;
+  }
+  .preset-btn {
+    background: #2a1f10; color: #c9a868; border: 1px solid #4a3a20;
+    border-radius: 6px; padding: 6px 8px; font-size: 0.72rem; cursor: pointer;
+    pointer-events: auto; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .preset-btn:hover { background: #3a2a18; border-color: #d4a050; }
+  .preset-btn.active { background: #4a3a20; border-color: #d4a050; color: #e8c878; }
+  .action-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;
+  }
+  .action-btn {
+    background: #5a3a18; color: #f0d8a0; border: 1px solid #8a5a28;
+    border-radius: 6px; padding: 8px; font-size: 0.78rem; font-weight: 600;
+    cursor: pointer; pointer-events: auto; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .action-btn:hover { background: #6a4a20; }
+  .action-btn.secondary { background: #2a1f10; color: #c9a868; border-color: #4a3a20; }
+  .action-btn.secondary:hover { background: #3a2a18; }
+
+  #metrics {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 230px;
+    background: rgba(26, 18, 8, 0.93);
+    border: 1px solid #4a3a20;
+    border-radius: 12px;
+    padding: 14px 16px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+  }
+  #metrics h2 {
+    font-size: 0.85rem; color: #d4a050;
+    margin-bottom: 8px; border-bottom: 1px solid #4a3a20; padding-bottom: 5px;
+  }
+  .metric-row {
+    display: flex; justify-content: space-between;
+    font-size: 0.76rem; margin-bottom: 5px;
+  }
+  .metric-row .label { color: #9a8868; }
+  .metric-row .val { color: #e8c878; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .metric-bar-bg {
+    width: 100%; height: 6px; background: #2a1f10;
+    border-radius: 3px; margin: 2px 0 8px; overflow: hidden;
+  }
+  .metric-bar-fill {
+    height: 100%; background: linear-gradient(90deg, #d4a050, #e8c878);
+    border-radius: 3px; transition: width 0.3s;
+  }
+  .metric-bar-fill.juice { background: linear-gradient(90deg, #8a2a1a, #c84a2a); }
+  .metric-bar-fill.press { background: linear-gradient(90deg, #c8a040, #e85820); }
+  #yield-chart {
+    width: 100%; height: 56px; margin-top: 6px;
+    background: #1a1208; border-radius: 6px; border: 1px solid #3a2a18;
+  }
+  .status-pill {
+    display: inline-block; font-size: 0.65rem; padding: 2px 8px;
+    border-radius: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .status-idle { background: #2a2a18; color: #8a8868; }
+  .status-pressing { background: #4a2a10; color: #e8a050; }
+  .status-done { background: #1a3a1a; color: #6ac86a; }
+  .status-retract { background: #2a2a3a; color: #8a8ac8; }
+
+  /* Mobile layout */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #title-bar { position: relative !important; top: auto !important; left: auto !important; transform: none !important; padding: 8px 12px 4px; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<div id="canvas-container"><canvas id="press-canvas"></canvas></div>
+<div id="ui-layer">
+  <div id="title-bar">
+    <h1>Vertical Basket Press</h1>
+    <p>Grape Pressing Physics · Matter.js</p>
+  </div>
+  <div id="controls">
+    <h2>Press Controls</h2>
+    <div class="preset-row">
+      <button class="preset-btn" data-preset="pinot">Pinot Noir</button>
+      <button class="preset-btn" data-preset="cabernet">Cabernet</button>
+      <button class="preset-btn" data-preset="champagne">Champagne</button>
+      <button class="preset-btn" data-preset="hard">Hard Press</button>
+    </div>
+    <div class="ctrl-group">
+      <label>Press Pressure <span id="v-pressure">65%</span></label>
+      <input type="range" id="s-pressure" min="10" max="100" value="65">
+    </div>
+    <div class="ctrl-group">
+      <label>Plate Speed <span id="v-speed">0.8×</span></label>
+      <input type="range" id="s-speed" min="2" max="30" value="8">
+    </div>
+    <div class="ctrl-group">
+      <label>Grape Load <span id="v-load">120</span></label>
+      <input type="range" id="s-load" min="40" max="200" value="120">
+    </div>
+    <div class="ctrl-group">
+      <label>Stave Gap <span id="v-gap">6 px</span></label>
+      <input type="range" id="s-gap" min="4" max="12" value="6">
+    </div>
+    <div class="ctrl-group">
+      <label>Grape Firmness <span id="v-firm">0.30</span></label>
+      <input type="range" id="s-firm" min="10" max="80" value="30">
+    </div>
+    <div class="action-row">
+      <button class="action-btn" id="btn-start">Start Press</button>
+      <button class="action-btn secondary" id="btn-reset">Reset</button>
+    </div>
+  </div>
+  <div id="metrics">
+    <h2>Press Telemetry</h2>
+    <div class="metric-row"><span class="label">Status</span><span class="val"><span class="status-pill status-idle" id="m-status">Idle</span></span></div>
+    <div class="metric-row"><span class="label">Press Force</span><span class="val" id="m-force">0.0 kN</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill press" id="bar-force" style="width:0%"></div></div>
+    <div class="metric-row"><span class="label">Must Yield</span><span class="val" id="m-yield">0.0 L</span></div>
+    <div class="metric-bar-bg"><div class="metric-bar-fill juice" id="bar-yield" style="width:0%"></div></div>
+    <div class="metric-row"><span class="label">Pomace Height</span><span class="val" id="m-pomace">0.0 cm</span></div>
+    <div class="metric-row"><span class="label">Juice Flow</span><span class="val" id="m-flow">0 mL/s</span></div>
+    <div class="metric-row"><span class="label">Efficiency</span><span class="val" id="m-eff">0%</span></div>
+    <div class="metric-row"><span class="label">Cycle</span><span class="val" id="m-cycle">1 / 3</span></div>
+    <canvas id="yield-chart"></canvas>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- Matter.js aliases ----
+  var Engine = Matter.Engine, World = Matter.World, Bodies = Matter.Bodies,
+      Body = Matter.Body, Composite = Matter.Composite, Events = Matter.Events,
+      Vector = Matter.Vector, Sleeping = Matter.Sleeping;
+
+  // ---- Canvas setup ----
+  var canvas = document.getElementById('press-canvas');
+  var ctx = canvas.getContext('2d');
+  var container = document.getElementById('canvas-container');
+  var DPR = window.devicePixelRatio || 1;
+  var W = 0, H = 0;
+
+  function resizeCanvas() {
+    var cw = container.clientWidth;
+    var ch = container.clientHeight;
+    W = cw; H = ch;
+    canvas.width = cw * DPR;
+    canvas.height = ch * DPR;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  // ---- Physics engine ----
+  var engine = Engine.create();
+  engine.gravity.y = 1.0;
+  engine.world.friction = 0.4;
+
+  // ---- Shared geometry variables (physics + drawing use SAME values) ----
+  var P = {
+    pressure: 65,      // press force percentage
+    speed: 8,          // plate descent speed (px/sec * 0.1)
+    load: 120,         // grape count
+    gap: 6,            // stave gap (px) — juice escape channels
+    firmness: 30,      // grape firmness (restitution inverse)
+  };
+
+  // Geometry — computed from canvas size
+  var G = {};
+  function computeGeometry() {
+    G.scale = Math.min(W / 700, H / 600);
+    G.scale = Math.max(0.5, Math.min(1.4, G.scale));
+    G.basketW = 240 * G.scale;
+    G.basketH = 300 * G.scale;
+    G.cx = W / 2;
+    G.basketBottom = H * 0.82;
+    G.basketTop = G.basketBottom - G.basketH;
+    G.staveThick = 10 * G.scale;
+    G.staveGap = P.gap * G.scale;
+    G.staveCount = 7; // segments per side
+    G.staveSegH = G.basketH / G.staveCount;
+    G.plateW = G.basketW - 8 * G.scale;
+    G.plateH = 18 * G.scale;
+    G.floorThick = 14 * G.scale;
+    G.grapeR = 9 * G.scale;
+    G.juiceR = 2.5 * G.scale;
+    G.troughY = G.basketBottom + 30 * G.scale;
+    G.troughH = 40 * G.scale;
+  }
+
+  // ---- Physics bodies ----
+  var grapes = [];
+  var juices = [];
+  var staveBodies = []; // visible walls
+  var pressPlate = null;
+  var floorBody = null;
+  var screwBodies = [];
+
+  // Plate state
+  var plateState = 'idle'; // idle, pressing, holding, retracting, done
+  var plateTargetY = 0;
+  var plateHoldTimer = 0;
+  var cycleNum = 1;
+  var maxCycles = 3;
+  var pressStartY = 0;
+  var pressMinY = 0; // lowest the plate can go
+
+  // Metrics
+  var totalYield = 0; // mL
+  var flowRate = 0;   // mL/s
+  var yieldHistory = [];
+  var maxExpectedYield = 0;
+
+  function clearWorld() {
+    World.clear(engine.world);
+    grapes = [];
+    juices = [];
+    staveBodies = [];
+    pressPlate = null;
+    floorBody = null;
+    screwBodies = [];
+  }
+
+  function buildScene() {
+    clearWorld();
+    computeGeometry();
+
+    var wallOpts = { isStatic: true, friction: 0.5, restitution: 0.1, label: 'wall' };
+    var staveColor = '#6a4a28';
+
+    // Floor (press base) — solid rectangle below basket
+    floorBody = Bodies.rectangle(G.cx, G.basketBottom + G.floorThick/2,
+      G.basketW + 80 * G.scale, G.floorThick, wallOpts);
+    floorBody.drawColor = '#3a2a18';
+    floorBody.drawKind = 'floor';
+    World.add(engine.world, floorBody);
+
+    // Stave walls — segmented with gaps for juice escape
+    // Left wall staves
+    for (var i = 0; i < G.staveCount; i++) {
+      var sy = G.basketTop + G.staveSegH * (i + 0.5);
+      var sx = G.cx - G.basketW/2 - G.staveThick/2;
+      var segH = G.staveSegH - G.staveGap;
+      if (segH < 4) segH = 4;
+      var b = Bodies.rectangle(sx, sy, G.staveThick, segH, wallOpts);
+      b.drawColor = staveColor;
+      b.drawKind = 'stave';
+      b.staveIndex = i;
+      staveBodies.push(b);
+      World.add(engine.world, b);
+    }
+    // Right wall staves
+    for (var i = 0; i < G.staveCount; i++) {
+      var sy = G.basketTop + G.staveSegH * (i + 0.5);
+      var sx = G.cx + G.basketW/2 + G.staveThick/2;
+      var segH = G.staveSegH - G.staveGap;
+      if (segH < 4) segH = 4;
+      var b = Bodies.rectangle(sx, sy, G.staveThick, segH, wallOpts);
+      b.drawColor = staveColor;
+      b.drawKind = 'stave';
+      b.staveIndex = i;
+      b.staveSide = 'right';
+      staveBodies.push(b);
+      World.add(engine.world, b);
+    }
+
+    // Bottom plate of basket (perforated — represented as solid for grapes, juice passes)
+    var basketFloor = Bodies.rectangle(G.cx, G.basketBottom - 3 * G.scale,
+      G.basketW - G.staveThick, 6 * G.scale, wallOpts);
+    basketFloor.drawColor = '#4a3a20';
+    basketFloor.drawKind = 'basketFloor';
+    staveBodies.push(basketFloor);
+    World.add(engine.world, basketFloor);
+
+    // Press plate (top) — dynamic, heavy, kinematically controlled
+    pressStartY = G.basketTop - G.plateH/2 - 10 * G.scale;
+    pressMinY = G.basketBottom - G.basketH * 0.35; // can press to 35% of basket height remaining
+    pressPlate = Bodies.rectangle(G.cx, pressStartY, G.plateW, G.plateH, {
+      friction: 0.8, restitution: 0.02, density: 50, label: 'plate',
+      isStatic: true // controlled kinematically
+    });
+    pressPlate.drawColor = '#8a6a38';
+    pressPlate.drawKind = 'plate';
+    World.add(engine.world, pressPlate);
+
+    // Spawn grapes
+    spawnGrapes(P.load);
+
+    // Juice collection trough (visual only, drawn but also a static body for juice to pool)
+    var troughLeft = Bodies.rectangle(G.cx - G.basketW/2 - 40*G.scale, G.troughY + G.troughH/2,
+      6*G.scale, G.troughH, wallOpts);
+    troughLeft.drawColor = '#2a1f10';
+    troughLeft.drawKind = 'trough';
+    var troughRight = Bodies.rectangle(G.cx + G.basketW/2 + 40*G.scale, G.troughY + G.troughH/2,
+      6*G.scale, G.troughH, wallOpts);
+    troughRight.drawColor = '#2a1f10';
+    troughRight.drawKind = 'trough';
+    var troughFloor = Bodies.rectangle(G.cx, G.troughY + G.troughH,
+      G.basketW + 86*G.scale, 6*G.scale, wallOpts);
+    troughFloor.drawColor = '#2a1f10';
+    troughFloor.drawKind = 'trough';
+    staveBodies.push(troughLeft, troughRight, troughFloor);
+    World.add(engine.world, [troughLeft, troughRight, troughFloor]);
+
+    maxExpectedYield = P.load * 0.6; // ~0.6 L per grape-unit, realistic basket press yield
+    plateState = 'idle';
+    cycleNum = 1;
+    totalYield = 0;
+    flowRate = 0;
+    yieldHistory = [];
+  }
+
+  function spawnGrapes(count) {
+    var colors = ['#6a1a3a', '#8a2a4a', '#4a0a2a', '#a83a5a', '#5a1a30'];
+    for (var i = 0; i < count; i++) {
+      var rx = G.cx + (Math.random() - 0.5) * (G.basketW - G.grapeR * 3);
+      var ry = G.basketTop + 20*G.scale + Math.random() * (G.basketH * 0.7);
+      var g = Bodies.circle(rx, ry, G.grapeR, {
+        friction: 0.3,
+        restitution: Math.max(0.02, 0.3 - P.firmness/100 * 0.28),
+        density: 0.8,
+        label: 'grape'
+      });
+      g.drawColor = colors[Math.floor(Math.random() * colors.length)];
+      g.drawKind = 'grape';
+      g.squeezed = 0;
+      g.juiceGiven = 0;
+      grapes.push(g);
+      World.add(engine.world, g);
+    }
+  }
+
+  // ---- Press plate kinematic control ----
+  var plateVelocity = 0; // tracks actual plate velocity for collision transfer
+  function updatePlate(dt) {
+    if (!pressPlate) return;
+    var speed = P.speed * 0.1 * G.scale * 60; // px per second
+    var prevY = pressPlate.position.y;
+
+    if (plateState === 'pressing') {
+      // Move plate down
+      var nextY = pressPlate.position.y + speed * dt;
+      if (nextY >= pressMinY) {
+        nextY = pressMinY;
+        plateState = 'holding';
+        plateHoldTimer = 1.5; // hold 1.5s
+      }
+      Body.setPosition(pressPlate, { x: G.cx, y: nextY });
+      plateVelocity = (nextY - prevY) / dt; // px/sec downward
+      // Push grapes that are in the plate's path
+      pushGrapesByPlate(prevY, nextY);
+    } else if (plateState === 'holding') {
+      plateVelocity = 0;
+      plateHoldTimer -= dt;
+      if (plateHoldTimer <= 0) {
+        if (cycleNum < maxCycles) {
+          plateState = 'retracting';
+        } else {
+          plateState = 'done';
+        }
+      }
+    } else if (plateState === 'retracting') {
+      var upY = pressPlate.position.y - speed * 1.5 * dt;
+      if (upY <= pressStartY) {
+        upY = pressStartY;
+        cycleNum++;
+        plateState = 'idle';
+        plateVelocity = 0;
+        // "break the cake" — give grapes a small upward impulse
+        for (var i = 0; i < grapes.length; i++) {
+          if (!grapes[i].removed) {
+            Body.applyForce(grapes[i], grapes[i].position, {
+              x: (Math.random()-0.5) * 0.003,
+              y: -0.004
+            });
+          }
+        }
+      } else {
+        plateVelocity = (upY - prevY) / dt; // negative = upward
+      }
+      Body.setPosition(pressPlate, { x: G.cx, y: upY });
+    } else if (plateState === 'done') {
+      plateVelocity = 0;
+    } else {
+      // idle
+      plateVelocity = 0;
+    }
+  }
+
+  // Manually push grapes that overlap with the press plate's descent path.
+  // Since the plate is static (isStatic: true), Matter.js won't generate collision
+  // impulses from a kinematically-moved static body. We detect overlap and apply
+  // downward velocity + position correction to simulate plate contact.
+  function pushGrapesByPlate(prevPlateY, newPlateY) {
+    var plateBottom = newPlateY + G.plateH / 2;
+    var plateLeft = G.cx - G.plateW / 2;
+    var plateRight = G.cx + G.plateW / 2;
+    for (var i = 0; i < grapes.length; i++) {
+      var g = grapes[i];
+      if (g.removed) continue;
+      // Check horizontal overlap
+      if (g.position.x + G.grapeR < plateLeft || g.position.x - G.grapeR > plateRight) continue;
+      // Check vertical overlap: grape top is above plate bottom
+      var grapeTop = g.position.y - G.grapeR * (g.shrunk ? 0.6 : 1);
+      if (grapeTop < plateBottom) {
+        // Push grape down to sit just below plate
+        var targetY = plateBottom + G.grapeR * (g.shrunk ? 0.6 : 1);
+        if (g.position.y < targetY) {
+          var dy = targetY - g.position.y;
+          Body.setPosition(g, { x: g.position.x, y: targetY });
+          Body.setVelocity(g, { x: g.velocity.x * 0.5, y: Math.max(g.velocity.y, plateVelocity * 0.8) });
+        }
+      }
+    }
+  }
+
+  // ---- Juice generation from compressed grapes ----
+  var juiceSpawnAccum = 0;
+  function updateJuiceGeneration(dt) {
+    if (!pressPlate) return;
+    var plateBottom = pressPlate.position.y + G.plateH/2;
+    var pressedThisFrame = 0;
+
+    for (var i = 0; i < grapes.length; i++) {
+      var g = grapes[i];
+      if (g.removed) continue;
+      // Grape is in press zone if plate bottom has reached the grape's top
+      var grapeTop = g.position.y - G.grapeR * (g.shrunk ? 0.6 : 1);
+      var grapeBottom = g.position.y + G.grapeR * (g.shrunk ? 0.6 : 1);
+      // Plate must be pressing down on the grape (plateBottom >= grapeTop)
+      // and grape must still be above the basket floor
+      var inPressZone = plateBottom >= grapeTop && grapeBottom < G.basketBottom;
+      if (inPressZone && (plateState === 'pressing' || plateState === 'holding')) {
+        // Compression: how far plate bottom has pushed past grape top, relative to grape diameter
+        var compression = (plateBottom - grapeTop) / (G.grapeR * 2 * (g.shrunk ? 0.6 : 1));
+        compression = Math.max(0, Math.min(1, compression));
+        g.squeezed = Math.max(g.squeezed, compression);
+
+        // Generate juice based on compression and remaining juice potential
+        var juicePotential = 1.0 - g.juiceGiven;
+        if (compression > 0.1 && juicePotential > 0.02) {
+          var juiceAmount = compression * juicePotential * P.pressure / 100 * 0.025;
+          g.juiceGiven += juiceAmount;
+          pressedThisFrame += juiceAmount;
+
+          // Spawn juice particle occasionally
+          juiceSpawnAccum += juiceAmount;
+          if (juiceSpawnAccum > 0.05 && juices.length < 350) {
+            juiceSpawnAccum = 0;
+            // Spawn at grape position, eject sideways toward stave gaps
+            var side = Math.random() < 0.5 ? -1 : 1;
+            var jx = g.position.x + side * G.grapeR * 0.8;
+            var jy = g.position.y + (Math.random() - 0.3) * G.grapeR;
+            var j = Bodies.circle(jx, jy, G.juiceR, {
+              friction: 0.1, restitution: 0.2, density: 0.5, label: 'juice'
+            });
+            j.drawColor = '#b83a1a';
+            j.drawKind = 'juice';
+            j.life = 8.0; // seconds before removal
+            Body.setVelocity(j, { x: side * (3 + Math.random()*4), y: -1 + Math.random()*2 });
+            juices.push(j);
+            World.add(engine.world, j);
+          }
+
+          // Shrink grape as it loses juice
+          if (g.juiceGiven > 0.5 && !g.shrunk) {
+            g.shrunk = true;
+            // Scale grape down
+            var newR = G.grapeR * 0.6;
+            Body.scale(g, newR / G.grapeR, newR / G.grapeR);
+            g.drawColor = '#3a0a1a'; // darker — pomace
+          }
+        }
+      }
+    }
+
+    // Convert pressed amount to L yield (scale to realistic basket press volumes)
+    var yieldL = pressedThisFrame * P.load * 0.08;
+    totalYield += yieldL;
+    flowRate = yieldL / Math.max(0.001, dt) * 1000; // mL/s for display
+
+    // Record yield history
+    if (yieldHistory.length === 0 || (yieldHistory.length > 0 && (yieldHistory[yieldHistory.length-1].t || 0) < performance.now() - 200)) {
+      yieldHistory.push({ t: performance.now(), y: totalYield });
+      if (yieldHistory.length > 80) yieldHistory.shift();
+    }
+  }
+
+  // ---- Juice particle lifecycle ----
+  function updateJuices(dt) {
+    for (var i = juices.length - 1; i >= 0; i--) {
+      var j = juices[i];
+      j.life -= dt;
+      // Remove if in trough (below basket, past troughY) — counts as collected yield
+      if (j.position.y > G.troughY + G.troughH * 0.3) {
+        World.remove(engine.world, j);
+        juices.splice(i, 1);
+        continue;
+      }
+      // Remove if expired
+      if (j.life <= 0 || j.position.y > H + 20 || j.position.x < -20 || j.position.x > W + 20) {
+        World.remove(engine.world, j);
+        juices.splice(i, 1);
+      }
+    }
+  }
+
+  // ---- Collision: juice passes through stave gaps (handled by gap geometry) ----
+  // Juice particles are small enough (juiceR=2.5*scale) to pass through stave gaps (gap*scale)
+
+  // ---- Rendering — every physics body drawn to match exactly ----
+  function drawScene() {
+    // Background gradient
+    var bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#2a1f10');
+    bg.addColorStop(0.5, '#1a1208');
+    bg.addColorStop(1, '#0e0a04');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Ambient lighting glow behind press
+    var glow = ctx.createRadialGradient(G.cx, G.basketTop + G.basketH*0.4, 20, G.cx, G.basketTop + G.basketH*0.4, G.basketW * 1.2);
+    glow.addColorStop(0, 'rgba(80, 50, 20, 0.35)');
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw juice trough (behind everything)
+    drawTrough();
+
+    // Draw staves (basket walls)
+    for (var i = 0; i < staveBodies.length; i++) {
+      drawBody(staveBodies[i]);
+    }
+
+    // Draw grapes
+    for (var i = 0; i < grapes.length; i++) {
+      if (!grapes[i].removed) drawBody(grapes[i]);
+    }
+
+    // Draw juice particles
+    for (var i = 0; i < juices.length; i++) {
+      drawBody(juices[i]);
+    }
+
+    // Draw press plate and screw mechanism
+    if (pressPlate) drawPressPlate();
+
+    // Draw juice stream effects (drips from stave gaps)
+    drawJuiceStreams();
+
+    // Draw pressure gauge
+    drawPressureGauge();
+  }
+
+  function drawBody(b) {
+    var x = b.position.x, y = b.position.y;
+    var a = b.angle;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(a);
+
+    switch (b.drawKind) {
+      case 'stave':
+        ctx.fillStyle = b.drawColor;
+        ctx.strokeStyle = '#3a2818';
+        ctx.lineWidth = 1;
+        var sw = G.staveThick, sh = G.staveSegH - G.staveGap;
+        if (sh < 4) sh = 4;
+        ctx.fillRect(-sw/2, -sh/2, sw, sh);
+        ctx.strokeRect(-sw/2, -sh/2, sw, sh);
+        // Wood grain
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(-sw/2 + 2, -sh/2);
+        ctx.lineTo(-sw/2 + 2, sh/2);
+        ctx.stroke();
+        break;
+
+      case 'basketFloor':
+        ctx.fillStyle = b.drawColor;
+        ctx.strokeStyle = '#2a1f10';
+        ctx.lineWidth = 1;
+        ctx.fillRect(-G.basketW/2 + G.staveThick/2, -3*G.scale, G.basketW - G.staveThick, 6*G.scale);
+        ctx.strokeRect(-G.basketW/2 + G.staveThick/2, -3*G.scale, G.basketW - G.staveThick, 6*G.scale);
+        // Perforation dots
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        for (var p = 0; p < 6; p++) {
+          var px = -G.basketW/2 + G.staveThick + (G.basketW - G.staveThick*2) * (p+0.5)/6;
+          ctx.beginPath();
+          ctx.arc(px, 0, 1.5*G.scale, 0, Math.PI*2);
+          ctx.fill();
+        }
+        break;
+
+      case 'floor':
+        ctx.fillStyle = b.drawColor;
+        ctx.strokeStyle = '#1a1008';
+        ctx.lineWidth = 1;
+        var fw = G.basketW + 80*G.scale, fh = G.floorThick;
+        ctx.fillRect(-fw/2, -fh/2, fw, fh);
+        ctx.strokeRect(-fw/2, -fh/2, fw, fh);
+        // Surface texture
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        for (var t = 0; t < 8; t++) {
+          ctx.fillRect(-fw/2 + t*fw/8 + 2, -fh/2, 2, fh);
+        }
+        break;
+
+      case 'plate':
+        ctx.fillStyle = b.drawColor;
+        ctx.strokeStyle = '#5a3a18';
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(-G.plateW/2, -G.plateH/2, G.plateW, G.plateH);
+        ctx.strokeRect(-G.plateW/2, -G.plateH/2, G.plateW, G.plateH);
+        // Plate rivets
+        ctx.fillStyle = '#5a3a18';
+        for (var r = 0; r < 4; r++) {
+          var rx = -G.plateW/2 + G.plateW * (r+0.5)/4;
+          ctx.beginPath();
+          ctx.arc(rx, 0, 2*G.scale, 0, Math.PI*2);
+          ctx.fill();
+        }
+        break;
+
+      case 'grape':
+        ctx.fillStyle = b.drawColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, G.grapeR * (b.shrunk ? 0.6 : 1), 0, Math.PI*2);
+        ctx.fill();
+        // Highlight
+        ctx.fillStyle = 'rgba(255,200,180,0.25)';
+        ctx.beginPath();
+        ctx.arc(-G.grapeR*0.3, -G.grapeR*0.3, G.grapeR*0.35, 0, Math.PI*2);
+        ctx.fill();
+        break;
+
+      case 'juice':
+        ctx.fillStyle = b.drawColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, G.juiceR, 0, Math.PI*2);
+        ctx.fill();
+        // Glow
+        ctx.fillStyle = 'rgba(200,80,40,0.3)';
+        ctx.beginPath();
+        ctx.arc(0, 0, G.juiceR*1.8, 0, Math.PI*2);
+        ctx.fill();
+        break;
+
+      case 'trough':
+        ctx.fillStyle = b.drawColor;
+        ctx.strokeStyle = '#1a1008';
+        ctx.lineWidth = 1;
+        var bounds = b.bounds;
+        var bw = bounds.max.x - bounds.min.x;
+        var bh = bounds.max.y - bounds.min.y;
+        ctx.fillRect(-bw/2, -bh/2, bw, bh);
+        ctx.strokeRect(-bw/2, -bh/2, bw, bh);
+        break;
+    }
+    ctx.restore();
+  }
+
+  function drawPressPlate() {
+    // Draw the screw/ram above the plate
+    var plateY = pressPlate.position.y - G.plateH/2;
+    var screwTop = Math.max(0, plateY - 120 * G.scale);
+    var screwW = 20 * G.scale;
+
+    // Ram shaft
+    ctx.fillStyle = '#5a4a28';
+    ctx.fillRect(G.cx - screwW/2, screwTop, screwW, plateY - screwTop);
+    ctx.strokeStyle = '#3a2a18';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(G.cx - screwW/2, screwTop, screwW, plateY - screwTop);
+
+    // Screw threads (diagonal lines)
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    for (var s = 0; s < 8; s++) {
+      var sy = screwTop + (plateY - screwTop) * s / 8;
+      ctx.beginPath();
+      ctx.moveTo(G.cx - screwW/2, sy);
+      ctx.lineTo(G.cx + screwW/2, sy + 4*G.scale);
+      ctx.stroke();
+    }
+
+    // Top crossbar (the lever)
+    ctx.fillStyle = '#6a4a28';
+    ctx.fillRect(G.cx - 80*G.scale, screwTop - 8*G.scale, 160*G.scale, 8*G.scale);
+    ctx.strokeStyle = '#3a2a18';
+    ctx.strokeRect(G.cx - 80*G.scale, screwTop - 8*G.scale, 160*G.scale, 8*G.scale);
+
+    // Pressure indicator on ram
+    if (plateState === 'pressing' || plateState === 'holding') {
+      ctx.fillStyle = 'rgba(232, 88, 32, ' + (0.3 + P.pressure/200) + ')';
+      ctx.fillRect(G.cx - screwW/2 + 2, screwTop + 4, screwW - 4, plateY - screwTop - 8);
+    }
+  }
+
+  function drawTrough() {
+    var tx = G.cx;
+    var ty = G.troughY;
+    var tw = G.basketW + 80*G.scale;
+    var th = G.troughH;
+
+    // Trough background
+    ctx.fillStyle = '#1a1008';
+    ctx.beginPath();
+    ctx.moveTo(tx - tw/2, ty);
+    ctx.lineTo(tx + tw/2, ty);
+    ctx.lineTo(tx + tw/2 - 6*G.scale, ty + th);
+    ctx.lineTo(tx - tw/2 + 6*G.scale, ty + th);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#3a2a18';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Juice level in trough (based on yield)
+    var fillRatio = Math.min(1, totalYield / maxExpectedYield);
+    if (fillRatio > 0.01) {
+      var fillH = th * fillRatio;
+      var grad = ctx.createLinearGradient(0, ty + th - fillH, 0, ty + th);
+      grad.addColorStop(0, '#c84a2a');
+      grad.addColorStop(1, '#8a2a1a');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(tx - tw/2 + 3*G.scale, ty + th - fillH);
+      ctx.lineTo(tx + tw/2 - 3*G.scale, ty + th - fillH);
+      ctx.lineTo(tx + tw/2 - 6*G.scale, ty + th);
+      ctx.lineTo(tx - tw/2 + 6*G.scale, ty + th);
+      ctx.closePath();
+      ctx.fill();
+
+      // Surface shimmer
+      ctx.fillStyle = 'rgba(255,180,100,0.3)';
+      ctx.fillRect(tx - tw/2 + 3*G.scale, ty + th - fillH, tw - 6*G.scale, 2);
+    }
+
+    // Label
+    ctx.fillStyle = '#6a5a38';
+    ctx.font = (10 * G.scale) + 'px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('JUICE TROUGH', tx, ty + th + 14*G.scale);
+  }
+
+  function drawJuiceStreams() {
+    // Draw dripping juice from stave gaps during pressing
+    if (plateState !== 'pressing' && plateState !== 'holding') return;
+    if (flowRate < 0.5) return;
+
+    ctx.strokeStyle = 'rgba(200, 74, 42, 0.6)';
+    ctx.lineWidth = 1.5 * G.scale;
+    var dripIntensity = Math.min(1, flowRate / 20);
+
+    for (var side = 0; side < 2; side++) {
+      var sgn = side === 0 ? -1 : 1;
+      var wallX = G.cx + sgn * (G.basketW/2 + G.staveThick/2);
+      for (var i = 0; i < G.staveCount; i++) {
+        if (Math.random() > dripIntensity * 0.3) continue;
+        var gapY = G.basketTop + G.staveSegH * (i + 1) - G.staveGap/2;
+        if (gapY > pressPlate.position.y + G.plateH/2) {
+          ctx.beginPath();
+          ctx.moveTo(wallX, gapY);
+          ctx.lineTo(wallX + sgn * (8 + Math.random()*12) * G.scale, gapY + (10 + Math.random()*20)*G.scale);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  function drawPressureGauge() {
+    var gx = G.cx + G.basketW/2 + 60*G.scale;
+    var gy = G.basketTop + 30*G.scale;
+    var gr = 22 * G.scale;
+
+    if (gx + gr > W - 10) return; // skip if off-screen
+
+    ctx.save();
+    // Gauge background
+    ctx.fillStyle = 'rgba(26,18,8,0.85)';
+    ctx.beginPath();
+    ctx.arc(gx, gy, gr, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#4a3a20';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Gauge ticks
+    ctx.strokeStyle = '#6a5a38';
+    ctx.lineWidth = 1;
+    for (var t = 0; t <= 10; t++) {
+      var ang = -Math.PI*0.75 + (Math.PI*1.5) * t/10;
+      ctx.beginPath();
+      ctx.moveTo(gx + Math.cos(ang)*(gr-4), gy + Math.sin(ang)*(gr-4));
+      ctx.lineTo(gx + Math.cos(ang)*(gr-1), gy + Math.sin(ang)*(gr-1));
+      ctx.stroke();
+    }
+
+    // Needle
+    var needleAng = -Math.PI*0.75 + (Math.PI*1.5) * (P.pressure/100);
+    ctx.strokeStyle = '#e85820';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy);
+    ctx.lineTo(gx + Math.cos(needleAng)*(gr-5), gy + Math.sin(needleAng)*(gr-5));
+    ctx.stroke();
+
+    // Center dot
+    ctx.fillStyle = '#d4a050';
+    ctx.beginPath();
+    ctx.arc(gx, gy, 2.5, 0, Math.PI*2);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = '#9a8868';
+    ctx.font = (8*G.scale) + 'px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('BAR', gx, gy + gr + 10*G.scale);
+    ctx.restore();
+  }
+
+  // ---- Yield chart ----
+  var chartCanvas = document.getElementById('yield-chart');
+  var chartCtx = chartCanvas.getContext('2d');
+  function drawYieldChart() {
+    var cw = chartCanvas.clientWidth;
+    var ch = chartCanvas.clientHeight;
+    chartCanvas.width = cw * DPR;
+    chartCanvas.height = ch * DPR;
+    chartCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    chartCtx.fillStyle = '#1a1208';
+    chartCtx.fillRect(0, 0, cw, ch);
+
+    if (yieldHistory.length < 2) {
+      chartCtx.fillStyle = '#4a3a20';
+      chartCtx.font = '9px system-ui';
+      chartCtx.textAlign = 'center';
+      chartCtx.fillText('Yield curve', cw/2, ch/2);
+      return;
+    }
+
+    var maxY = Math.max(maxExpectedYield, 1);
+    // Grid
+    chartCtx.strokeStyle = '#2a1f10';
+    chartCtx.lineWidth = 0.5;
+    for (var g = 0; g <= 4; g++) {
+      var gy = ch * g / 4;
+      chartCtx.beginPath();
+      chartCtx.moveTo(0, gy);
+      chartCtx.lineTo(cw, gy);
+      chartCtx.stroke();
+    }
+
+    // Fill
+    chartCtx.fillStyle = 'rgba(184, 58, 26, 0.3)';
+    chartCtx.beginPath();
+    chartCtx.moveTo(0, ch);
+    for (var i = 0; i < yieldHistory.length; i++) {
+      var px = (i / (yieldHistory.length-1)) * cw;
+      var py = ch - (yieldHistory[i].y / maxY) * ch;
+      chartCtx.lineTo(px, py);
+    }
+    chartCtx.lineTo(cw, ch);
+    chartCtx.closePath();
+    chartCtx.fill();
+
+    // Line
+    chartCtx.strokeStyle = '#e85820';
+    chartCtx.lineWidth = 1.5;
+    chartCtx.beginPath();
+    for (var i = 0; i < yieldHistory.length; i++) {
+      var px = (i / (yieldHistory.length-1)) * cw;
+      var py = ch - (yieldHistory[i].y / maxY) * ch;
+      if (i === 0) chartCtx.moveTo(px, py);
+      else chartCtx.lineTo(px, py);
+    }
+    chartCtx.stroke();
+  }
+
+  // ---- Metrics update ----
+  function updateMetrics() {
+    var forceKN = (P.pressure / 100) * 45 * (plateState === 'pressing' || plateState === 'holding' ? 1 : 0.3);
+    document.getElementById('m-force').textContent = forceKN.toFixed(1) + ' kN';
+    document.getElementById('bar-force').style.width = (forceKN / 50 * 100) + '%';
+
+    document.getElementById('m-yield').textContent = totalYield.toFixed(2) + ' L';
+    document.getElementById('bar-yield').style.width = Math.min(100, totalYield / maxExpectedYield * 100) + '%';
+
+    // Pomace height: measure highest non-removed grape near bottom
+    var pomaceH = 0;
+    for (var i = 0; i < grapes.length; i++) {
+      if (grapes[i].removed) continue;
+      if (grapes[i].position.y > G.basketBottom - G.basketH * 0.5) {
+        var h = G.basketBottom - grapes[i].position.y;
+        if (h > pomaceH) pomaceH = h;
+      }
+    }
+    document.getElementById('m-pomace').textContent = (pomaceH / G.scale * 0.1).toFixed(1) + ' cm';
+    document.getElementById('m-flow').textContent = flowRate.toFixed(1) + ' mL/s';
+
+    var eff = totalYield > 0 && maxExpectedYield > 0 ? (totalYield / maxExpectedYield * 100) : 0;
+    document.getElementById('m-eff').textContent = eff.toFixed(0) + '%';
+    document.getElementById('m-cycle').textContent = cycleNum + ' / ' + maxCycles;
+
+    var statusEl = document.getElementById('m-status');
+    var labels = { idle: 'Idle', pressing: 'Pressing', holding: 'Holding', retracting: 'Retract', done: 'Done' };
+    statusEl.textContent = labels[plateState] || 'Idle';
+    statusEl.className = 'status-pill status-' + plateState;
+  }
+
+  // ---- Main loop ----
+  var lastTime = performance.now();
+  function loop() {
+    var now = performance.now();
+    var dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    Engine.update(engine, 1000/60);
+    updatePlate(dt);
+    updateJuiceGeneration(dt);
+    updateJuices(dt);
+
+    drawScene();
+    drawYieldChart();
+    updateMetrics();
+
+    requestAnimationFrame(loop);
+  }
+
+  // ---- Controls ----
+  function bindSlider(id, key, displayId, fmt) {
+    var el = document.getElementById(id);
+    el.addEventListener('input', function() {
+      P[key] = parseFloat(el.value);
+      document.getElementById(displayId).textContent = fmt(P[key]);
+    });
+  }
+
+  bindSlider('s-pressure', 'pressure', 'v-pressure', function(v) { return v + '%'; });
+  bindSlider('s-speed', 'speed', 'v-speed', function(v) { return (v/10).toFixed(1) + '×'; });
+  bindSlider('s-load', 'load', 'v-load', function(v) { return Math.round(v); });
+  bindSlider('s-gap', 'gap', 'v-gap', function(v) { return v + ' px'; });
+  bindSlider('s-firm', 'firmness', 'v-firm', function(v) { return (v/100).toFixed(2); });
+
+  document.getElementById('btn-start').addEventListener('click', function() {
+    if (plateState === 'idle' || plateState === 'done') {
+      if (plateState === 'done') {
+        // Reset for new batch
+        buildScene();
+      }
+      plateState = 'pressing';
+    }
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', function() {
+    buildScene();
+  });
+
+  // Presets
+  var presets = {
+    pinot: { pressure: 30, speed: 4, load: 100, gap: 8, firmness: 15 },
+    cabernet: { pressure: 75, speed: 10, load: 160, gap: 5, firmness: 50 },
+    champagne: { pressure: 20, speed: 3, load: 140, gap: 7, firmness: 20 },
+    hard: { pressure: 100, speed: 20, load: 180, gap: 4, firmness: 70 }
+  };
+
+  document.querySelectorAll('.preset-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var key = btn.dataset.preset;
+      var ps = presets[key];
+      document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      P.pressure = ps.pressure; document.getElementById('s-pressure').value = ps.pressure;
+      document.getElementById('v-pressure').textContent = ps.pressure + '%';
+      P.speed = ps.speed; document.getElementById('s-speed').value = ps.speed;
+      document.getElementById('v-speed').textContent = (ps.speed/10).toFixed(1) + '×';
+      P.load = ps.load; document.getElementById('s-load').value = ps.load;
+      document.getElementById('v-load').textContent = ps.load;
+      P.gap = ps.gap; document.getElementById('s-gap').value = ps.gap;
+      document.getElementById('v-gap').textContent = ps.gap + ' px';
+      P.firmness = ps.firmness; document.getElementById('s-firm').value = ps.firmness;
+      document.getElementById('v-firm').textContent = (ps.firmness/100).toFixed(2);
+      buildScene();
+    });
+  });
+
+  // ---- Resize handling ----
+  var resizeTimer = null;
+  function handleResize() {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+      resizeCanvas();
+      buildScene();
+    }, 250);
+  }
+  window.addEventListener('resize', handleResize);
+
+  // ---- Init ----
+  resizeCanvas();
+  buildScene();
+  loop();
+})();
+</script>
+</body>
+</html>
