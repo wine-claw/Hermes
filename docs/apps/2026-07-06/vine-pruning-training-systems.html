@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="googlebot" content="noindex, nofollow">
+<title>Vine Pruning & Training Systems — SVG Explorer</title>
+<style>
+  :root {
+    --bg: #0d1612; --surface: #162420; --surface2: #1e3030; --border: #2a4a40;
+    --text: #d0e0d4; --muted: #7a9a8a; --accent: #5cba8f; --accent2: #c9a060;
+    --green: #4a9a5a; --green-l: #6bc07a; --brown: #6b4a2a; --brown-l: #8a6a3a;
+    --red: #c0504a; --orange: #e8a040; --purple: #a070b0; --sky: #5a9eb0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+  /* Disclaimer */
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  /* Layout */
+  header { text-align: center; padding: 1.5rem 1rem 1rem; }
+  header h1 { font-size: clamp(1.3rem, 5vw, 1.8rem); background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: inline-block; }
+  header p { color: var(--muted); margin-top: 0.3rem; font-size: 0.9rem; }
+
+  #canvas-container { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px; width: 290px; max-height: calc(100vh - 24px);
+    overflow-y: auto; background: rgba(22,36,32,0.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  #metrics {
+    position: absolute; top: 12px; right: 12px; width: 230px;
+    background: rgba(22,36,32,0.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  #legend {
+    position: absolute; bottom: 12px; left: 12px; width: 290px;
+    background: rgba(22,36,32,0.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px; pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  .panel-title { font-size: 0.72rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .panel-section { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(42,74,64,0.5); }
+  .panel-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+  .system-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+  .system-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 4px; border-radius: 6px; font-size: 0.78rem; cursor: pointer; text-align: center;
+    transition: all 0.2s; font-family: inherit; font-weight: 500;
+  }
+  .system-btn:hover { border-color: var(--accent); background: rgba(92,186,143,0.1); }
+  .system-btn.active { background: var(--accent); color: #0d1612; border-color: var(--accent); font-weight: 700; }
+
+  .slider-row { margin-bottom: 8px; }
+  .slider-row label { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--muted); margin-bottom: 3px; }
+  .slider-row label .val { color: var(--accent); font-weight: 600; }
+  input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: var(--border); border-radius: 2px; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--surface); }
+  input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--surface); }
+
+  .season-btns { display: flex; gap: 4px; margin-top: 4px; }
+  .season-btn { flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 5px; border-radius: 5px; font-size: 0.72rem; cursor: pointer; text-align: center; font-family: inherit; }
+  .season-btn:hover { border-color: var(--accent); }
+  .season-btn.active { background: var(--accent); color: #0d1612; font-weight: 700; border-color: var(--accent); }
+
+  .preset-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+  .preset-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); padding: 4px 8px; border-radius: 5px; font-size: 0.72rem; cursor: pointer; font-family: inherit; }
+  .preset-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .metric-row { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 5px; }
+  .metric-row .label { color: var(--muted); }
+  .metric-row .value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .metric-row .value.good { color: var(--green-l); }
+  .metric-row .value.warn { color: var(--orange); }
+  .metric-row .value.bad { color: var(--red); }
+
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+
+  /* SVG canvas styling */
+  #vine-svg { width: 100%; height: 100%; display: block; }
+
+  /* SVG animations */
+  .vine-cane { stroke: var(--brown-l); fill: none; stroke-linecap: round; }
+  .vine-trunk { stroke: var(--brown); fill: none; stroke-linecap: round; }
+  .vine-shoot { fill: none; stroke-linecap: round; }
+  .leaf { fill: var(--green); opacity: 0.85; }
+  .leaf-vein { stroke: var(--green-l); stroke-width: 0.5; opacity: 0.5; fill: none; }
+  .fruit-cluster { fill: var(--purple); opacity: 0.9; }
+  .wire { stroke: #6a6a6a; stroke-width: 1.5; fill: none; }
+  .post { stroke: #5a4a30; stroke-width: 4; stroke-linecap: round; fill: none; }
+  .ground { stroke: #3a4a3a; stroke-width: 2; fill: none; }
+
+  /* CSS keyframe animations */
+  @keyframes leafGrow {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 0.85; }
+  }
+  @keyframes shootGrow {
+    0% { stroke-dashoffset: 200; opacity: 0.3; }
+    100% { stroke-dashoffset: 0; opacity: 0.9; }
+  }
+  @keyframes fruitSwell {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(0.6); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 0.9; }
+  }
+  @keyframes sapFlow {
+    0% { stroke-dashoffset: 30; opacity: 0; }
+    30% { opacity: 1; }
+    100% { stroke-dashoffset: 0; opacity: 0; }
+  }
+  @keyframes gentleSway {
+    0%, 100% { transform: rotate(-0.5deg); }
+    50% { transform: rotate(0.5deg); }
+  }
+  @keyframes budBreak {
+    0% { r: 0; opacity: 0; }
+    100% { r: 3; opacity: 1; }
+  }
+  @keyframes sunGlow {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.6; }
+  }
+
+  .animate-leaf { transform-origin: center; animation: leafGrow 0.8s ease-out forwards; }
+  .animate-shoot { stroke-dasharray: 200; animation: shootGrow 1.2s ease-out forwards; }
+  .animate-fruit { transform-origin: center; animation: fruitSwell 1s ease-out forwards; }
+  .animate-sap { stroke-dasharray: 10 20; animation: sapFlow 2s linear infinite; }
+  .sway-group { animation: gentleSway 4s ease-in-out infinite; transform-origin: bottom center; }
+  .animate-bud { animation: budBreak 0.5s ease-out forwards; }
+  .sun-glow { animation: sunGlow 6s ease-in-out infinite; }
+
+  /* Info card */
+  #info-card {
+    position: absolute; bottom: 12px; right: 12px; width: 230px;
+    background: rgba(22,36,32,0.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px; pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  #info-card .ic-title { font-size: 0.85rem; font-weight: 700; color: var(--accent2); margin-bottom: 4px; }
+  #info-card .ic-desc { font-size: 0.75rem; color: var(--muted); line-height: 1.45; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #legend {
+      position: relative !important; bottom: auto !important; left: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #info-card {
+      position: relative !important; bottom: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<header>
+  <h1>Vine Pruning & Training Systems</h1>
+  <p>Interactive SVG explorer — 10 training systems with seasonal growth cycles</p>
+</header>
+
+<div id="canvas-container">
+  <svg id="vine-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <!-- Sky gradient -->
+      <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#1a2a3a" />
+        <stop offset="50%" stop-color="#2a3a4a" />
+        <stop offset="100%" stop-color="#3a4a3a" />
+      </linearGradient>
+      <!-- Ground gradient -->
+      <linearGradient id="ground-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#3a3a2a" />
+        <stop offset="100%" stop-color="#2a2a1a" />
+      </linearGradient>
+      <!-- Leaf gradient -->
+      <radialGradient id="leaf-grad" cx="0.3" cy="0.3" r="0.8">
+        <stop offset="0%" stop-color="#7bc08a" />
+        <stop offset="100%" stop-color="#3a7a4a" />
+      </radialGradient>
+      <!-- Fruit gradient -->
+      <radialGradient id="fruit-grad" cx="0.3" cy="0.3" r="0.8">
+        <stop offset="0%" stop-color="#b080c0" />
+        <stop offset="100%" stop-color="#604070" />
+      </radialGradient>
+      <!-- Trunk gradient -->
+      <linearGradient id="trunk-grad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#4a3520" />
+        <stop offset="50%" stop-color="#7a5a3a" />
+        <stop offset="100%" stop-color="#4a3520" />
+      </linearGradient>
+      <!-- Cane gradient -->
+      <linearGradient id="cane-grad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#6a4a2a" />
+        <stop offset="50%" stop-color="#9a7a4a" />
+        <stop offset="100%" stop-color="#6a4a2a" />
+      </linearGradient>
+      <!-- Sun glow -->
+      <radialGradient id="sun-grad" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0%" stop-color="#e8c060" stop-opacity="0.6" />
+        <stop offset="100%" stop-color="#e8c060" stop-opacity="0" />
+      </radialGradient>
+    </defs>
+
+    <!-- Sky background -->
+    <rect width="800" height="500" fill="url(#sky-grad)" />
+
+    <!-- Sun -->
+    <circle id="sun" cx="650" cy="80" r="60" fill="url(#sun-grad)" class="sun-glow" />
+
+    <!-- Distant hills -->
+    <path d="M0,350 Q100,300 200,320 Q300,310 400,330 Q500,305 600,325 Q700,320 800,340 L800,500 L0,500 Z" fill="#2a3a2a" opacity="0.5" />
+    <path d="M0,380 Q150,340 300,360 Q450,350 600,370 Q700,360 800,375 L800,500 L0,500 Z" fill="#1a2a1a" opacity="0.6" />
+
+    <!-- Ground -->
+    <rect y="420" width="800" height="80" fill="url(#ground-grad)" />
+    <line class="ground" x1="0" y1="420" x2="800" y2="420" />
+
+    <!-- Soil layer indicators -->
+    <line x1="0" y1="445" x2="800" y2="445" stroke="#3a3a2a" stroke-width="1" stroke-dasharray="4 4" opacity="0.3" />
+    <line x1="0" y1="470" x2="800" y2="470" stroke="#3a3a2a" stroke-width="1" stroke-dasharray="4 4" opacity="0.2" />
+
+    <!-- Trellis structure (rendered by JS) -->
+    <g id="trellis-layer"></g>
+
+    <!-- Vine structure (rendered by JS) -->
+    <g id="vine-layer"></g>
+
+    <!-- Seasonal overlay (rendered by JS) -->
+    <g id="season-layer"></g>
+
+    <!-- Annotation labels -->
+    <g id="annotation-layer"></g>
+  </svg>
+</div>
+
+<div id="ui-layer">
+  <div id="controls">
+    <div class="panel-title">Training System</div>
+    <div class="system-grid" id="system-grid"></div>
+
+    <div class="panel-section"></div>
+
+    <div class="panel-title">Season</div>
+    <div class="season-btns" id="season-btns">
+      <button class="season-btn" data-season="dormant">Dormant</button>
+      <button class="season-btn" data-season="budbreak">Budbreak</button>
+      <button class="season-btn active" data-season="active">Active</button>
+      <button class="season-btn" data-season="veraison">Veraison</button>
+      <button class="season-btn" data-season="leaf-fall">Fall</button>
+    </div>
+
+    <div class="panel-section"></div>
+
+    <div class="panel-title">Vine Parameters</div>
+    <div class="slider-row">
+      <label>Vine Age <span class="val" id="val-age">8 yr</span></label>
+      <input type="range" id="slider-age" min="2" max="30" value="8" step="1" />
+    </div>
+    <div class="slider-row">
+      <label>Cane Length <span class="val" id="val-cane">60%</span></label>
+      <input type="range" id="slider-cane" min="20" max="100" value="60" step="5" />
+    </div>
+    <div class="slider-row">
+      <label>Canopy Density <span class="val" id="val-density">70%</span></label>
+      <input type="range" id="slider-density" min="20" max="100" value="70" step="5" />
+    </div>
+    <div class="slider-row">
+      <label>Crop Load <span class="val" id="val-crop">50%</span></label>
+      <input type="range" id="slider-crop" min="0" max="100" value="50" step="5" />
+    </div>
+    <div class="slider-row">
+      <label>Row Spacing <span class="val" id="val-spacing">2.4 m</span></label>
+      <input type="range" id="slider-spacing" min="15" max="40" value="24" step="1" />
+    </div>
+
+    <div class="panel-section"></div>
+
+    <div class="panel-title">Variety Preset</div>
+    <div class="preset-btns" id="preset-btns">
+      <button class="preset-btn" data-preset="cabernet">Cabernet</button>
+      <button class="preset-btn" data-preset="pinot">Pinot Noir</button>
+      <button class="preset-btn" data-preset="chardonnay">Chardonnay</button>
+      <button class="preset-btn" data-preset="riesling">Riesling</button>
+      <button class="preset-btn" data-preset="syrah">Syrah</button>
+      <button class="preset-btn" data-preset="grenache">Grenache</button>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <div class="panel-title">Live Metrics</div>
+    <div class="metric-row"><span class="label">Pruning Method</span><span class="value" id="m-pruning">—</span></div>
+    <div class="metric-row"><span class="label">Buds Retained</span><span class="value" id="m-buds">—</span></div>
+    <div class="metric-row"><span class="label">Canopy Height</span><span class="value" id="m-height">—</span></div>
+    <div class="metric-row"><span class="label">Sun Exposure</span><span class="value" id="m-exposure">—</span></div>
+    <div class="metric-row"><span class="label">Airflow</span><span class="value" id="m-airflow">—</span></div>
+    <div class="metric-row"><span class="label">Yield Est.</span><span class="value" id="m-yield">—</span></div>
+    <div class="metric-row"><span class="label">Vigor Balance</span><span class="value" id="m-vigor">—</span></div>
+    <div class="metric-row"><span class="label">Disease Risk</span><span class="value" id="m-disease">—</span></div>
+    <div class="metric-row"><span class="label">Frost Risk</span><span class="value" id="m-frost">—</span></div>
+    <div class="metric-row"><span class="label">Pruning Effort</span><span class="value" id="m-effort">—</span></div>
+  </div>
+
+  <div id="legend">
+    <div class="panel-title">Legend</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--brown)"></div>Trunk (permanent wood)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--brown-l)"></div>Cane / spur (1-yr wood)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div>Shoots & leaves</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--purple)"></div>Fruit clusters</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#6a6a6a"></div>Trellis wire</div>
+  </div>
+
+  <div id="info-card">
+    <div class="ic-title" id="ic-title">Vertical Shoot Positioning (VSP)</div>
+    <div class="ic-desc" id="ic-desc">The most common training system for premium wine grapes. Canes pruned and tied to a single fruiting wire; shoots trained vertically between moveable foliage wires. Ideal for Cabernet, Pinot Noir, and other upright-growing varieties.</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// VINE PRUNING & TRAINING SYSTEMS — Pure SVG + CSS Animations
+// ============================================================
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// Training systems data
+const SYSTEMS = {
+  vsp: {
+    name: 'VSP',
+    fullName: 'Vertical Shoot Positioning',
+    desc: 'The most common training system for premium wine grapes. Canes pruned and tied to a single fruiting wire; shoots trained vertically between moveable foliage wires. Ideal for Cabernet, Pinot Noir, and other upright-growing varieties.',
+    pruning: 'Cane / spur pruned',
+    wireCount: 3,
+    wireY: [300, 250, 200],
+    posts: true,
+    budCount: 24,
+    height: '1.5–2.0 m',
+    exposure: 'High',
+    airflow: 'Good',
+    effort: 'Medium',
+    frostRisk: 'Medium'
+  },
+  guyot: {
+    name: 'Guyot',
+    fullName: 'Single Guyot (Cane)',
+    desc: 'Traditional French system with one cane (8-12 buds) arched and tied along a single wire. Replaced each year from a spur. Classic for Burgundy Pinot Noir and Côtes du Rhône. Low bud count controls vigor on fertile soils.',
+    pruning: 'Cane pruned',
+    wireCount: 1,
+    wireY: [310],
+    posts: true,
+    budCount: 10,
+    height: '0.8–1.2 m',
+    exposure: 'Very High',
+    airflow: 'Excellent',
+    effort: 'High',
+    frostRisk: 'High'
+  },
+  doubleGuyot: {
+    name: 'Double Guyot',
+    fullName: 'Double Guyot (Cane)',
+    desc: 'Two canes trained in opposite directions along the fruiting wire, each with 8-12 buds. More buds than single Guyot for higher yield. Standard in Bordeaux for Cabernet Sauvignon and Merlot. Better bud distribution than cordon.',
+    pruning: 'Cane pruned',
+    wireCount: 1,
+    wireY: [310],
+    posts: true,
+    budCount: 20,
+    height: '0.8–1.2 m',
+    exposure: 'Very High',
+    airflow: 'Excellent',
+    effort: 'High',
+    frostRisk: 'High'
+  },
+  cordon: {
+    name: 'Cordon',
+    fullName: 'Bilateral Cordon (Spur)',
+    desc: 'Permanent horizontal arms (cordons) trained along a wire. 2-bud spurs spaced every 10-15 cm. Permanent wood structure reduces annual pruning labor. Common in California and Australia for Cabernet, Syrah, and Zinfandel.',
+    pruning: 'Spur pruned',
+    wireCount: 2,
+    wireY: [310, 260],
+    posts: true,
+    budCount: 30,
+    height: '1.0–1.5 m',
+    exposure: 'High',
+    airflow: 'Good',
+    effort: 'Low',
+    frostRisk: 'Low'
+  },
+  pergola: {
+    name: 'Pergola',
+    fullName: 'Pergola / Tendone',
+    desc: 'Overhead canopy system common in hot climates (Italy, Portugal, Argentina). Vines trained up and over a high horizontal framework. Shades fruit from sunburn. Traditional for table grapes and some wine grapes in hot regions.',
+    pruning: 'Spur pruned',
+    wireCount: 4,
+    wireY: [200, 150, 150, 150],
+    posts: true,
+    budCount: 40,
+    height: '2.0–2.5 m',
+    exposure: 'Low',
+    airflow: 'Poor',
+    effort: 'Medium',
+    frostRisk: 'Low'
+  },
+  gobelet: {
+    name: 'Gobelet',
+    fullName: 'Gobelet (Bush Vine)',
+    desc: 'Free-standing bush vine with no trellis support. Head-trained and spur-pruned into a goblet shape. Ancient system used in Châteauneuf-du-Pape, Rhône Valley, and parts of Italy. Drought-resistant, ideal for low-vigor soils.',
+    pruning: 'Spur pruned',
+    wireCount: 0,
+    wireY: [],
+    posts: false,
+    budCount: 18,
+    height: '0.6–1.0 m',
+    exposure: 'Very High',
+    airflow: 'Excellent',
+    effort: 'Low',
+    frostRisk: 'Low'
+  },
+  lyre: {
+    name: 'Lyre',
+    fullName: 'Lyre (Open U)',
+    desc: 'Y-shaped trellis with two inclined fruiting wires forming a lyre/harp shape. Shoots grow outward into the open center. Excellent light interception and airflow. Used for vigorous varieties like Sauvignon Blanc and Semillon.',
+    pruning: 'Cane or spur',
+    wireCount: 2,
+    wireY: [290, 290],
+    posts: true,
+    budCount: 28,
+    height: '1.2–1.8 m',
+    exposure: 'Very High',
+    airflow: 'Excellent',
+    effort: 'Medium',
+    frostRisk: 'Medium'
+  },
+  scottHenry: {
+    name: 'Scott Henry',
+    fullName: 'Scott Henry (Canopy Divider)',
+    desc: 'Vertical canopy divided into upward and downward shoots from the same fruiting wire. Upper canopy gets more light, lower canopy shades fruit. Developed in Oregon for Pinot Noir to manage high vigor. Increases canopy surface area 50%.',
+    pruning: 'Cane pruned',
+    wireCount: 3,
+    wireY: [280, 240, 320],
+    posts: true,
+    budCount: 26,
+    height: '1.8–2.2 m',
+    exposure: 'Very High',
+    airflow: 'Good',
+    effort: 'High',
+    frostRisk: 'Medium'
+  },
+  smartDyson: {
+    name: 'Smart-Dyson',
+    fullName: 'Smart-Dyson (Vertical Divider)',
+    desc: 'Similar to Scott Henry but spur-pruned on a permanent cordon. Upward and downward shoots from the same spur positions. Designed by Dr. Richard Smart for high-vigor vineyards. Balanced light distribution without cane tying.',
+    pruning: 'Spur pruned',
+    wireCount: 3,
+    wireY: [280, 240, 320],
+    posts: true,
+    budCount: 30,
+    height: '1.8–2.2 m',
+    exposure: 'High',
+    airflow: 'Good',
+    effort: 'Medium',
+    frostRisk: 'Medium'
+  },
+  geneva: {
+    name: 'Geneva DC',
+    fullName: 'Geneva Double Curtain',
+    desc: 'Two parallel curtains of foliage on a single wide trellis. Each vine has two cordons trailing in opposite directions on separate wires. Maximizes light interception per vine. Used in high-vigor situations and for large-clustered varieties.',
+    pruning: 'Spur pruned',
+    wireCount: 2,
+    wireY: [260, 260],
+    posts: true,
+    budCount: 36,
+    height: '1.2–1.6 m',
+    exposure: 'Very High',
+    airflow: 'Good',
+    effort: 'Medium',
+    frostRisk: 'Medium'
+  }
+};
+
+// Variety presets
+const PRESETS = {
+  cabernet: { cane: 65, density: 75, crop: 55, spacing: 26, age: 10 },
+  pinot: { cane: 55, density: 60, crop: 45, spacing: 22, age: 8 },
+  chardonnay: { cane: 60, density: 70, crop: 50, spacing: 24, age: 9 },
+  riesling: { cane: 50, density: 65, crop: 60, spacing: 20, age: 12 },
+  syrah: { cane: 70, density: 80, crop: 60, spacing: 26, age: 7 },
+  grenache: { cane: 60, density: 65, crop: 45, spacing: 28, age: 15 }
+};
+
+// State
+let state = {
+  system: 'vsp',
+  season: 'active',
+  age: 8,
+  cane: 60,
+  density: 70,
+  crop: 50,
+  spacing: 24
+};
+
+const SEASON_COLORS = {
+  dormant: { leaf: '#8a7a4a', fruit: 'none', bg: '#1a2a3a', sun: 40 },
+  budbreak: { leaf: '#5cba6a', fruit: 'none', bg: '#1a3a2a', sun: 55 },
+  active: { leaf: '#4a9a5a', fruit: 'none', bg: '#2a3a4a', sun: 70 },
+  veraison: { leaf: '#5a8a4a', fruit: '#9a5060', bg: '#2a3a2a', sun: 65 },
+  'leaf-fall': { leaf: '#c08030', fruit: '#704050', bg: '#3a2a2a', sun: 50 }
+};
+
+// ============================================================
+// RENDERING
+// ============================================================
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function renderTrellis(sys) {
+  const layer = document.getElementById('trellis-layer');
+  layer.innerHTML = '';
+
+  const cx = 400;
+  const groundY = 420;
+
+  if (sys.posts && sys.wireCount > 0) {
+    // Draw posts
+    const postTopY = sys.wireY[0] - 40;
+    for (const px of [cx - 180, cx + 180]) {
+      layer.appendChild(svgEl('line', {
+        class: 'post', x1: px, y1: groundY, x2: px, y2: postTopY
+      }));
+    }
+
+    // Draw wires
+    sys.wireY.forEach((wy, i) => {
+      if (sys.name === 'Lyre') {
+        // Inclined wires forming a Y shape
+        const spread = 80 + i * 20;
+        layer.appendChild(svgEl('line', {
+          class: 'wire', x1: cx - spread, y1: wy, x2: cx + spread, y2: wy
+        }));
+      } else if (sys.name === 'Geneva DC') {
+        // Two parallel curtains
+        layer.appendChild(svgEl('line', {
+          class: 'wire', x1: cx - 120, y1: wy, x2: cx - 20, y2: wy
+        }));
+        layer.appendChild(svgEl('line', {
+          class: 'wire', x1: cx + 20, y1: wy, x2: cx + 120, y2: wy
+        }));
+      } else if (sys.name === 'Scott Henry' || sys.name === 'Smart-Dyson') {
+        // Three wires: upper, middle, lower
+        layer.appendChild(svgEl('line', { class: 'wire', x1: cx-160, y1: wy, x2: cx+160, y2: wy }));
+      } else if (sys.name === 'Pergola') {
+        // Overhead structure
+        if (i === 0) layer.appendChild(svgEl('line', { class: 'wire', x1: cx-180, y1: wy, x2: cx+180, y2: wy }));
+        if (i === 1) {
+          layer.appendChild(svgEl('line', { class: 'wire', x1: cx-180, y1: wy, x2: cx, y2: wy }));
+          layer.appendChild(svgEl('line', { class: 'wire', x1: cx, y1: wy, x2: cx+180, y2: wy }));
+        }
+      } else {
+        // Standard horizontal wire
+        layer.appendChild(svgEl('line', {
+          class: 'wire', x1: cx - 160, y1: wy, x2: cx + 160, y2: wy
+        }));
+      }
+    });
+  }
+}
+
+function renderVine(sys) {
+  const layer = document.getElementById('vine-layer');
+  layer.innerHTML = '';
+
+  const cx = 400;
+  const groundY = 420;
+  const ageF = Math.min(state.age / 15, 1); // age factor 0-1
+  const trunkH = 30 + ageF * (sys.wireY[0] !== undefined ? groundY - sys.wireY[0] - 10 : 100);
+  const trunkW = 4 + ageF * 6;
+  const caneLen = 80 + (state.cane / 100) * 120; // cane length in px
+  const density = state.density / 100;
+  const crop = state.crop / 100;
+  const seasonCol = SEASON_COLORS[state.season];
+
+  // Draw trunk
+  const trunkTop = groundY - trunkH;
+  layer.appendChild(svgEl('path', {
+    d: `M${cx-1},${groundY} L${cx-1},${trunkTop} L${cx+1},${trunkTop} L${cx+1},${groundY} Z`,
+    fill: 'url(#trunk-grad)',
+    stroke: '#4a3520',
+    'stroke-width': 1
+  }));
+
+  // Render based on system type (use sys.name = short key like 'VSP', 'Guyot', etc.)
+  switch (sys.name) {
+    case 'VSP':
+      renderVSP(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol);
+      break;
+    case 'Guyot':
+      renderGuyot(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol, false);
+      break;
+    case 'Double Guyot':
+      renderGuyot(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol, true);
+      break;
+    case 'Cordon':
+      renderCordon(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol);
+      break;
+    case 'Pergola':
+      renderPergola(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol);
+      break;
+    case 'Gobelet':
+      renderGobelet(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol);
+      break;
+    case 'Lyre':
+      renderLyre(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol);
+      break;
+    case 'Scott Henry':
+      renderScottHenry(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol, false);
+      break;
+    case 'Smart-Dyson':
+      renderScottHenry(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol, true);
+      break;
+    case 'Geneva DC':
+      renderGeneva(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol);
+      break;
+  }
+
+  // Sap flow animation (only in active/veraison seasons)
+  if (state.season === 'active' || state.season === 'budbreak' || state.season === 'veraison') {
+    const sap = svgEl('line', {
+      x1: cx, y1: groundY, x2: cx, y2: trunkTop,
+      stroke: '#6bc07a', 'stroke-width': 2, 'stroke-linecap': 'round',
+      class: 'animate-sap', opacity: 0.6
+    });
+    layer.appendChild(sap);
+  }
+}
+
+// VSP: vertical shoots from fruiting wire
+function renderVSP(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol) {
+  const wireY = sys.wireY[0];
+  // Cordons or canes along wire
+  for (const dir of [-1, 1]) {
+    const endX = cx + dir * caneLen;
+    layer.appendChild(svgEl('line', {
+      x1: cx, y1: wireY, x2: endX, y2: wireY,
+      stroke: 'url(#cane-grad)', 'stroke-width': 3, 'stroke-linecap': 'round'
+    }));
+  }
+
+  // Shoots growing upward
+  const numShoots = Math.floor(8 * density) + 4;
+  for (let i = -numShoots; i <= numShoots; i++) {
+    const sx = cx + i * (caneLen * 1.8 / numShoots);
+    const sy = wireY;
+    const shHeight = 40 + Math.random() * 30;
+    const isSeason = state.season !== 'dormant';
+
+    if (isSeason) {
+      // Shoot
+      const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+      shootG.appendChild(svgEl('path', {
+        d: `M${sx},${sy} Q${sx + Math.sin(i) * 5},${sy - shHeight/2} ${sx + Math.sin(i) * 8},${sy - shHeight}`,
+        stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none',
+        'stroke-linecap': 'round', class: 'animate-shoot'
+      }));
+
+      // Leaves
+      if (state.season !== 'dormant' && state.season !== 'budbreak') {
+        for (let j = 0; j < 3 + Math.floor(density * 3); j++) {
+          const ly = sy - (shHeight / 4) * (j + 1);
+          const lx = sx + Math.sin(i + j) * 8 + (j % 2 === 0 ? -12 : 12);
+          shootG.appendChild(svgEl('ellipse', {
+            cx: lx, cy: ly, rx: 8 * density + 4, ry: 5 * density + 3,
+            fill: 'url(#leaf-grad)', class: 'animate-leaf',
+            transform: `rotate(${j % 2 === 0 ? -30 : 30} ${lx} ${ly})`
+          }));
+        }
+      } else if (state.season === 'budbreak') {
+        // Buds
+        for (let j = 0; j < 2; j++) {
+          const by = sy - 8 - j * 10;
+          layer.appendChild(svgEl('circle', {
+            cx: sx, cy: by, r: 2.5, fill: '#7bc08a', class: 'animate-bud'
+          }));
+        }
+      }
+
+      // Fruit clusters
+      if (state.season === 'veraison' || state.season === 'leaf-fall') {
+        if (i % 3 === 0 && crop > 0.1) {
+          const fy = sy + 5;
+          shootG.appendChild(svgEl('circle', {
+            cx: sx - 4, cy: fy, r: 4 * crop + 2, fill: 'url(#fruit-grad)',
+            class: 'animate-fruit'
+          }));
+          shootG.appendChild(svgEl('circle', {
+            cx: sx + 4, cy: fy, r: 4 * crop + 2, fill: 'url(#fruit-grad)',
+            class: 'animate-fruit'
+          }));
+          shootG.appendChild(svgEl('circle', {
+            cx: sx, cy: fy + 6, r: 4 * crop + 2, fill: 'url(#fruit-grad)',
+            class: 'animate-fruit'
+          }));
+        }
+      }
+
+      layer.appendChild(shootG);
+    }
+  }
+
+  // Foliage wires (catch wires)
+  layer.appendChild(svgEl('line', { x1: cx - 160, y1: sys.wireY[1], x2: cx + 160, y2: sys.wireY[1], class: 'wire' }));
+  layer.appendChild(svgEl('line', { x1: cx - 160, y1: sys.wireY[2], x2: cx + 160, y2: sys.wireY[2], class: 'wire' }));
+}
+
+// Guyot: single or double cane along wire
+function renderGuyot(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol, isDouble) {
+  const wireY = sys.wireY[0];
+  const isSeason = state.season !== 'dormant';
+
+  // Trunk to wire
+  layer.appendChild(svgEl('line', {
+    x1: cx, y1: trunkTop, x2: cx, y2: wireY,
+    stroke: 'url(#trunk-grad)', 'stroke-width': 4
+  }));
+
+  if (isDouble) {
+    for (const dir of [-1, 1]) {
+      const endX = cx + dir * caneLen;
+      // Arched cane
+      layer.appendChild(svgEl('path', {
+        d: `M${cx},${wireY} Q${cx + dir * caneLen/2},${wireY + 10} ${endX},${wireY + 5}`,
+        stroke: 'url(#cane-grad)', 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round'
+      }));
+
+      if (isSeason) renderCaneShoots(layer, cx + dir * 20, wireY + 5, endX, wireY + 5, density, crop, seasonCol, dir);
+    }
+  } else {
+    const endX = cx + caneLen;
+    // Single arched cane
+    layer.appendChild(svgEl('path', {
+      d: `M${cx},${wireY} Q${cx + caneLen/2},${wireY + 15} ${endX},${wireY + 8}`,
+      stroke: 'url(#cane-grad)', 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round'
+    }));
+
+    if (isSeason) renderCaneShoots(layer, cx + 10, wireY + 5, endX, wireY + 8, density, crop, seasonCol, 1);
+  }
+
+  // Renewal spur (on opposite side for single)
+  if (!isDouble) {
+    layer.appendChild(svgEl('line', {
+      x1: cx, y1: wireY, x2: cx - 20, y2: wireY,
+      stroke: 'url(#cane-grad)', 'stroke-width': 3
+    }));
+  }
+}
+
+function renderCaneShoots(layer, x1, y1, x2, y2, density, crop, seasonCol, dir) {
+  const numShoots = Math.floor(6 * density) + 3;
+  for (let i = 0; i <= numShoots; i++) {
+    const t = i / numShoots;
+    const sx = x1 + (x2 - x1) * t;
+    const sy = y1 + (y2 - y1) * t;
+    const shHeight = 30 + Math.random() * 40;
+
+    const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+
+    if (state.season === 'dormant') continue;
+
+    // Shoot (upward and outward)
+    const ang = -90 + dir * 15 + Math.sin(i) * 10;
+    const rad = ang * Math.PI / 180;
+    const ex = sx + Math.cos(rad) * shHeight;
+    const ey = sy + Math.sin(rad) * shHeight;
+    shootG.appendChild(svgEl('path', {
+      d: `M${sx},${sy} Q${(sx+ex)/2 + Math.sin(i)*4},${(sy+ey)/2} ${ex},${ey}`,
+      stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round',
+      class: 'animate-shoot'
+    }));
+
+    // Leaves
+    if (state.season !== 'budbreak') {
+      for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+        const lt = (j + 1) / 4;
+        const lx = sx + (ex - sx) * lt + (j % 2 === 0 ? -10 : 10);
+        const ly = sy + (ey - sy) * lt;
+        shootG.appendChild(svgEl('ellipse', {
+          cx: lx, cy: ly, rx: 7 * density + 3, ry: 4 * density + 2,
+          fill: 'url(#leaf-grad)', class: 'animate-leaf',
+          transform: `rotate(${j % 2 === 0 ? -25 : 25} ${lx} ${ly})`
+        }));
+      }
+    } else {
+      // Buds
+      for (let j = 0; j < 2; j++) {
+        const bt = (j + 1) / 3;
+        const bx = sx + (ex - sx) * bt;
+        const by = sy + (ey - sy) * bt;
+        layer.appendChild(svgEl('circle', {
+          cx: bx, cy: by, r: 2, fill: '#7bc08a', class: 'animate-bud'
+        }));
+      }
+    }
+
+    // Fruit
+    if ((state.season === 'veraison' || state.season === 'leaf-fall') && i % 2 === 0 && crop > 0.1) {
+      const fy = sy + 8;
+      shootG.appendChild(svgEl('circle', {
+        cx: sx, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit'
+      }));
+      shootG.appendChild(svgEl('circle', {
+        cx: sx + 5, cy: fy + 3, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit'
+      }));
+    }
+
+    layer.appendChild(shootG);
+  }
+}
+
+// Cordon: permanent arms with spurs
+function renderCordon(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol) {
+  const wireY = sys.wireY[0];
+
+  // Trunk to wire
+  layer.appendChild(svgEl('line', {
+    x1: cx, y1: trunkTop, x2: cx, y2: wireY,
+    stroke: 'url(#trunk-grad)', 'stroke-width': 5
+  }));
+
+  // Permanent cordons
+  for (const dir of [-1, 1]) {
+    const endX = cx + dir * (caneLen + 20);
+    layer.appendChild(svgEl('line', {
+      x1: cx, y1: wireY, x2: endX, y2: wireY,
+      stroke: 'url(#trunk-grad)', 'stroke-width': 5, 'stroke-linecap': 'round'
+    }));
+
+    // Spurs
+    const numSpurs = Math.floor(caneLen / 25) + 3;
+    for (let i = 1; i <= numSpurs; i++) {
+      const sx = cx + dir * i * 25;
+      if (Math.abs(sx - cx) > caneLen + 20) break;
+
+      // 2-bud spur
+      layer.appendChild(svgEl('line', {
+        x1: sx, y1: wireY, x2: sx, y2: wireY - 8,
+        stroke: 'url(#cane-grad)', 'stroke-width': 3
+      }));
+
+      if (state.season === 'dormant') continue;
+
+      // Shoots from spur
+      const shHeight = 35 + Math.random() * 30;
+      const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+      const ang = -85 + dir * 10 + Math.sin(i) * 8;
+      const rad = ang * Math.PI / 180;
+      const ex = sx + Math.cos(rad) * shHeight;
+      const ey = wireY - 8 + Math.sin(rad) * shHeight;
+      shootG.appendChild(svgEl('path', {
+        d: `M${sx},${wireY-8} Q${(sx+ex)/2 + Math.sin(i)*4},${(wireY-8+ey)/2} ${ex},${ey}`,
+        stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round',
+        class: 'animate-shoot'
+      }));
+
+      // Leaves
+      if (state.season !== 'budbreak') {
+        for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+          const lt = (j + 1) / 4;
+          const lx = sx + (ex - sx) * lt + (j % 2 === 0 ? -9 : 9);
+          const ly = (wireY - 8) + (ey - (wireY - 8)) * lt;
+          shootG.appendChild(svgEl('ellipse', {
+            cx: lx, cy: ly, rx: 7 * density + 3, ry: 4 * density + 2,
+            fill: 'url(#leaf-grad)', class: 'animate-leaf',
+            transform: `rotate(${j % 2 === 0 ? -28 : 28} ${lx} ${ly})`
+          }));
+        }
+      } else {
+        layer.appendChild(svgEl('circle', { cx: sx, cy: wireY - 8, r: 2.5, fill: '#7bc08a', class: 'animate-bud' }));
+      }
+
+      // Fruit
+      if ((state.season === 'veraison' || state.season === 'leaf-fall') && i % 2 === 0 && crop > 0.1) {
+        const fy = wireY - 5;
+        shootG.appendChild(svgEl('circle', { cx: sx - 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+        shootG.appendChild(svgEl('circle', { cx: sx + 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+        shootG.appendChild(svgEl('circle', { cx: sx, cy: fy + 5, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+      }
+
+      layer.appendChild(shootG);
+    }
+  }
+}
+
+// Pergola: overhead canopy
+function renderPergola(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol) {
+  const topY = sys.wireY[0];
+
+  // Trunk up to top
+  layer.appendChild(svgEl('path', {
+    d: `M${cx-2},${trunkTop} L${cx-3},${topY} L${cx+3},${topY} L${cx+2},${trunkTop} Z`,
+    fill: 'url(#trunk-grad)', stroke: '#4a3520', 'stroke-width': 1
+  }));
+
+  // Horizontal cordons at top
+  for (const dir of [-1, 1]) {
+    const endX = cx + dir * 160;
+    layer.appendChild(svgEl('line', {
+      x1: cx, y1: topY, x2: endX, y2: topY,
+      stroke: 'url(#trunk-grad)', 'stroke-width': 4, 'stroke-linecap': 'round'
+    }));
+
+    if (state.season === 'dormant') continue;
+
+    // Hanging shoots
+    const numShoots = Math.floor(10 * density) + 4;
+    for (let i = 1; i <= numShoots; i++) {
+      const sx = cx + dir * (i / numShoots) * 160;
+      const shLen = 25 + Math.random() * 35;
+      const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+
+      // Hanging shoot (downward)
+      const ex = sx + Math.sin(i) * 8;
+      const ey = topY + shLen;
+      shootG.appendChild(svgEl('path', {
+        d: `M${sx},${topY} Q${(sx+ex)/2 + Math.sin(i)*4},${(topY+ey)/2} ${ex},${ey}`,
+        stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round',
+        class: 'animate-shoot'
+      }));
+
+      // Leaves
+      if (state.season !== 'budbreak') {
+        for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+          const lt = (j + 1) / 4;
+          const lx = sx + (ex - sx) * lt + (j % 2 === 0 ? -10 : 10);
+          const ly = topY + (ey - topY) * lt;
+          shootG.appendChild(svgEl('ellipse', {
+            cx: lx, cy: ly, rx: 8 * density + 3, ry: 5 * density + 2,
+            fill: 'url(#leaf-grad)', class: 'animate-leaf',
+            transform: `rotate(${j % 2 === 0 ? 30 : -30} ${lx} ${ly})`
+          }));
+        }
+      } else {
+        layer.appendChild(svgEl('circle', { cx: sx, cy: topY + 6, r: 2, fill: '#7bc08a', class: 'animate-bud' }));
+      }
+
+      // Fruit
+      if ((state.season === 'veraison' || state.season === 'leaf-fall') && i % 3 === 0 && crop > 0.1) {
+        shootG.appendChild(svgEl('circle', { cx: sx, cy: topY + 12, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+        shootG.appendChild(svgEl('circle', { cx: sx + 5, cy: topY + 16, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+      }
+
+      layer.appendChild(shootG);
+    }
+  }
+}
+
+// Gobelet: bush vine, no trellis
+function renderGobelet(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol) {
+  const headY = trunkTop;
+  const headR = 25 + state.cane * 0.2;
+
+  // Short thick trunk already drawn
+
+  // Spur arms radiating from head
+  const numArms = 5 + Math.floor(density * 3);
+  for (let i = 0; i < numArms; i++) {
+    const ang = (i / numArms) * 360 + 10;
+    const rad = ang * Math.PI / 180;
+    const armLen = (caneLen * 0.4) * (0.7 + Math.random() * 0.4);
+    const ex = cx + Math.cos(rad) * armLen;
+    const ey = headY + Math.sin(rad) * armLen * 0.7; // flatten the sphere
+
+    // Arm (cane)
+    layer.appendChild(svgEl('path', {
+      d: `M${cx},${headY} Q${cx + Math.cos(rad)*armLen*0.5},${headY + Math.sin(rad)*armLen*0.35} ${ex},${ey}`,
+      stroke: 'url(#cane-grad)', 'stroke-width': 3, fill: 'none', 'stroke-linecap': 'round'
+    }));
+
+    if (state.season === 'dormant') continue;
+
+    const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+    const shHeight = 20 + Math.random() * 30;
+    const sang = rad + (Math.random() - 0.5) * 0.5;
+    const sx = ex + Math.cos(sang) * shHeight;
+    const sy = ey + Math.sin(sang) * shHeight * 0.6;
+
+    shootG.appendChild(svgEl('path', {
+      d: `M${ex},${ey} Q${(ex+sx)/2 + Math.sin(i)*3},${(ey+sy)/2} ${sx},${sy}`,
+      stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round',
+      class: 'animate-shoot'
+    }));
+
+    // Leaves
+    if (state.season !== 'budbreak') {
+      for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+        const lt = (j + 1) / 4;
+        const lx = ex + (sx - ex) * lt + (j % 2 === 0 ? -9 : 9);
+        const ly = ey + (sy - ey) * lt;
+        shootG.appendChild(svgEl('ellipse', {
+          cx: lx, cy: ly, rx: 7 * density + 3, ry: 4 * density + 2,
+          fill: 'url(#leaf-grad)', class: 'animate-leaf',
+          transform: `rotate(${j % 2 === 0 ? -30 : 30} ${lx} ${ly})`
+        }));
+      }
+    } else {
+      layer.appendChild(svgEl('circle', { cx: ex, cy: ey, r: 2.5, fill: '#7bc08a', class: 'animate-bud' }));
+    }
+
+    // Fruit
+    if ((state.season === 'veraison' || state.season === 'leaf-fall') && i % 2 === 0 && crop > 0.1) {
+      const fy = ey + 8;
+      shootG.appendChild(svgEl('circle', { cx: ex - 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+      shootG.appendChild(svgEl('circle', { cx: ex + 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+    }
+
+    layer.appendChild(shootG);
+  }
+}
+
+// Lyre: Y-shaped open canopy
+function renderLyre(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol) {
+  const wireY = sys.wireY[0];
+
+  // Trunk
+  layer.appendChild(svgEl('line', {
+    x1: cx, y1: trunkTop, x2: cx, y2: wireY,
+    stroke: 'url(#trunk-grad)', 'stroke-width': 4
+  }));
+
+  // Two inclined cordons forming a V
+  for (const dir of [-1, 1]) {
+    const endX = cx + dir * (caneLen + 40);
+    const endY = wireY - 30; // inclined upward
+
+    layer.appendChild(svgEl('line', {
+      x1: cx, y1: wireY, x2: endX, y2: endY,
+      stroke: 'url(#cane-grad)', 'stroke-width': 4, 'stroke-linecap': 'round'
+    }));
+
+    if (state.season === 'dormant') continue;
+
+    // Shoots growing outward
+    const numShoots = Math.floor(6 * density) + 3;
+    for (let i = 1; i <= numShoots; i++) {
+      const t = i / numShoots;
+      const sx = cx + (endX - cx) * t;
+      const sy = wireY + (endY - wireY) * t;
+      const shHeight = 25 + Math.random() * 30;
+      const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+
+      const ang = dir > 0 ? -60 - Math.sin(i) * 20 : 60 + Math.sin(i) * 20;
+      const rad = ang * Math.PI / 180;
+      const ex = sx + Math.cos(rad) * shHeight;
+      const ey2 = sy + Math.sin(rad) * shHeight;
+
+      shootG.appendChild(svgEl('path', {
+        d: `M${sx},${sy} Q${(sx+ex)/2 + Math.sin(i)*4},${(sy+ey2)/2} ${ex},${ey2}`,
+        stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round',
+        class: 'animate-shoot'
+      }));
+
+      // Leaves
+      if (state.season !== 'budbreak') {
+        for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+          const lt = (j + 1) / 4;
+          const lx = sx + (ex - sx) * lt + (j % 2 === 0 ? -9 * dir : 9 * dir);
+          const ly = sy + (ey2 - sy) * lt;
+          shootG.appendChild(svgEl('ellipse', {
+            cx: lx, cy: ly, rx: 7 * density + 3, ry: 4 * density + 2,
+            fill: 'url(#leaf-grad)', class: 'animate-leaf',
+            transform: `rotate(${dir > 0 ? 30 : -30} ${lx} ${ly})`
+          }));
+        }
+      } else {
+        layer.appendChild(svgEl('circle', { cx: sx, cy: sy, r: 2.5, fill: '#7bc08a', class: 'animate-bud' }));
+      }
+
+      // Fruit
+      if ((state.season === 'veraison' || state.season === 'leaf-fall') && i % 2 === 0 && crop > 0.1) {
+        const fy = sy + 10;
+        shootG.appendChild(svgEl('circle', { cx: sx - 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+        shootG.appendChild(svgEl('circle', { cx: sx + 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+      }
+
+      layer.appendChild(shootG);
+    }
+  }
+}
+
+// Scott Henry / Smart-Dyson: upward + downward canopies
+function renderScottHenry(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol, isSpur) {
+  const midY = sys.wireY[0]; // 280
+
+  // Trunk
+  layer.appendChild(svgEl('line', {
+    x1: cx, y1: trunkTop, x2: cx, y2: midY,
+    stroke: 'url(#trunk-grad)', 'stroke-width': 4
+  }));
+
+  // Cordons along middle wire
+  for (const dir of [-1, 1]) {
+    const endX = cx + dir * caneLen;
+    layer.appendChild(svgEl('line', {
+      x1: cx, y1: midY, x2: endX, y2: midY,
+      stroke: isSpur ? 'url(#trunk-grad)' : 'url(#cane-grad)',
+      'stroke-width': isSpur ? 5 : 4, 'stroke-linecap': 'round'
+    }));
+
+    if (state.season === 'dormant') continue;
+
+    const numShoots = Math.floor(5 * density) + 3;
+
+    // Upward shoots
+    for (let i = 1; i <= numShoots; i++) {
+      const sx = cx + dir * (i / numShoots) * caneLen;
+      const shHeight = 40 + Math.random() * 25;
+      const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+      const ex = sx + Math.sin(i) * 6;
+      const ey = midY - shHeight;
+
+      shootG.appendChild(svgEl('path', {
+        d: `M${sx},${midY} Q${(sx+ex)/2 + Math.sin(i)*3},${(midY+ey)/2} ${ex},${ey}`,
+        stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round',
+        class: 'animate-shoot'
+      }));
+
+      if (state.season !== 'budbreak') {
+        for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+          const lt = (j + 1) / 4;
+          const lx = sx + (ex - sx) * lt + (j % 2 === 0 ? -9 : 9);
+          const ly = midY + (ey - midY) * lt;
+          shootG.appendChild(svgEl('ellipse', {
+            cx: lx, cy: ly, rx: 7 * density + 3, ry: 4 * density + 2,
+            fill: 'url(#leaf-grad)', class: 'animate-leaf',
+            transform: `rotate(${j % 2 === 0 ? -25 : 25} ${lx} ${ly})`
+          }));
+        }
+      } else {
+        layer.appendChild(svgEl('circle', { cx: sx, cy: midY - 5, r: 2.5, fill: '#7bc08a', class: 'animate-bud' }));
+      }
+
+      layer.appendChild(shootG);
+    }
+
+    // Downward shoots
+    for (let i = 1; i <= numShoots; i++) {
+      const sx = cx + dir * (i / numShoots) * caneLen + 10;
+      const shHeight = 35 + Math.random() * 25;
+      const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+      const ex = sx + Math.sin(i + 3) * 6;
+      const ey = midY + shHeight;
+
+      shootG.appendChild(svgEl('path', {
+        d: `M${sx},${midY} Q${(sx+ex)/2 + Math.sin(i+3)*3},${(midY+ey)/2} ${ex},${ey}`,
+        stroke: seasonCol.leaf, 'stroke-width': 1.8, fill: 'none', 'stroke-linecap': 'round',
+        class: 'animate-shoot', opacity: 0.8
+      }));
+
+      if (state.season !== 'budbreak') {
+        for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+          const lt = (j + 1) / 4;
+          const lx = sx + (ex - sx) * lt + (j % 2 === 0 ? -8 : 8);
+          const ly = midY + (ey - midY) * lt;
+          shootG.appendChild(svgEl('ellipse', {
+            cx: lx, cy: ly, rx: 6 * density + 2, ry: 3.5 * density + 2,
+            fill: 'url(#leaf-grad)', class: 'animate-leaf',
+            transform: `rotate(${j % 2 === 0 ? 25 : -25} ${lx} ${ly})`,
+            opacity: 0.8
+          }));
+        }
+      }
+
+      // Fruit (upper only for Scott Henry, both for Smart-Dyson)
+      if ((state.season === 'veraison' || state.season === 'leaf-fall') && i % 2 === 0 && crop > 0.1) {
+        if (isSpur || i % 4 === 0) {
+          shootG.appendChild(svgEl('circle', { cx: sx, cy: midY + 8, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+        }
+      }
+
+      layer.appendChild(shootG);
+    }
+  }
+}
+
+// Geneva Double Curtain: two parallel curtains
+function renderGeneva(layer, cx, trunkTop, sys, caneLen, density, crop, seasonCol) {
+  const wireY = sys.wireY[0];
+
+  // Trunk
+  layer.appendChild(svgEl('line', {
+    x1: cx, y1: trunkTop, x2: cx, y2: wireY,
+    stroke: 'url(#trunk-grad)', 'stroke-width': 4
+  }));
+
+  // Split at top into two cordons going to separate wires
+  for (const dir of [-1, 1]) {
+    const wireX = cx + dir * 80;
+    const endX = wireX + dir * caneLen;
+
+    // Junction
+    layer.appendChild(svgEl('line', {
+      x1: cx, y1: wireY, x2: wireX, y2: wireY,
+      stroke: 'url(#trunk-grad)', 'stroke-width': 4
+    }));
+
+    // Cordon along the wire
+    layer.appendChild(svgEl('line', {
+      x1: wireX, y1: wireY, x2: endX, y2: wireY,
+      stroke: 'url(#cane-grad)', 'stroke-width': 4, 'stroke-linecap': 'round'
+    }));
+
+    if (state.season === 'dormant') continue;
+
+    const numShoots = Math.floor(5 * density) + 3;
+    for (let i = 1; i <= numShoots; i++) {
+      const sx = wireX + dir * (i / numShoots) * caneLen;
+      const shHeight = 30 + Math.random() * 30;
+      const shootG = svgEl('g', { class: state.season === 'budbreak' ? '' : 'sway-group' });
+      const ex = sx + Math.sin(i) * 8;
+      const ey = wireY - shHeight;
+
+      shootG.appendChild(svgEl('path', {
+        d: `M${sx},${wireY} Q${(sx+ex)/2 + Math.sin(i)*4},${(wireY+ey)/2} ${ex},${ey}`,
+        stroke: seasonCol.leaf, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round',
+        class: 'animate-shoot'
+      }));
+
+      if (state.season !== 'budbreak') {
+        for (let j = 0; j < 3 + Math.floor(density * 2); j++) {
+          const lt = (j + 1) / 4;
+          const lx = sx + (ex - sx) * lt + (j % 2 === 0 ? -8 : 8);
+          const ly = wireY + (ey - wireY) * lt;
+          shootG.appendChild(svgEl('ellipse', {
+            cx: lx, cy: ly, rx: 7 * density + 3, ry: 4 * density + 2,
+            fill: 'url(#leaf-grad)', class: 'animate-leaf',
+            transform: `rotate(${j % 2 === 0 ? -28 : 28} ${lx} ${ly})`
+          }));
+        }
+      } else {
+        layer.appendChild(svgEl('circle', { cx: sx, cy: wireY - 5, r: 2.5, fill: '#7bc08a', class: 'animate-bud' }));
+      }
+
+      // Fruit
+      if ((state.season === 'veraison' || state.season === 'leaf-fall') && i % 2 === 0 && crop > 0.1) {
+        const fy = wireY + 5;
+        shootG.appendChild(svgEl('circle', { cx: sx - 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+        shootG.appendChild(svgEl('circle', { cx: sx + 3, cy: fy, r: 3 * crop + 2, fill: 'url(#fruit-grad)', class: 'animate-fruit' }));
+      }
+
+      layer.appendChild(shootG);
+    }
+  }
+}
+
+// ============================================================
+// SEASON OVERLAY
+// ============================================================
+
+function renderSeasonOverlay(season) {
+  const layer = document.getElementById('season-layer');
+  layer.innerHTML = '';
+
+  // Update sky gradient based on season
+  const skyGrad = document.getElementById('sky-grad');
+  const stops = skyGrad.querySelectorAll('stop');
+  const seasonCol = SEASON_COLORS[season];
+
+  const skyColors = {
+    dormant: ['#1a1a2a', '#2a2a3a', '#3a3a2a'],
+    budbreak: ['#2a3a4a', '#3a5a4a', '#4a5a3a'],
+    active: ['#1a2a3a', '#2a4a5a', '#3a5a3a'],
+    veraison: ['#2a3a2a', '#3a4a2a', '#4a4a2a'],
+    'leaf-fall': ['#3a2a1a', '#4a3a2a', '#5a3a1a']
+  };
+
+  const colors = skyColors[season] || skyColors.active;
+  stops[0].setAttribute('stop-color', colors[0]);
+  stops[1].setAttribute('stop-color', colors[1]);
+  stops[2].setAttribute('stop-color', colors[2]);
+
+  // Seasonal particles
+  if (season === 'dormant') {
+    // Snowflakes
+    for (let i = 0; i < 15; i++) {
+      const x = Math.random() * 800;
+      const y = Math.random() * 300;
+      layer.appendChild(svgEl('text', {
+        x: x, y: y, 'font-size': 10 + Math.random() * 6, fill: '#ddeeff',
+        opacity: 0.5 + Math.random() * 0.3, style: 'animation: gentleSway 3s ease-in-out infinite;'
+      })).textContent = '❄';
+    }
+  } else if (season === 'leaf-fall') {
+    // Falling leaves
+    for (let i = 0; i < 20; i++) {
+      const x = Math.random() * 800;
+      const y = 100 + Math.random() * 300;
+      const leaf = svgEl('ellipse', {
+        cx: x, cy: y, rx: 4, ry: 2.5,
+        fill: ['#c08030', '#d06030', '#a06020', '#e0a040'][Math.floor(Math.random()*4)],
+        opacity: 0.6 + Math.random() * 0.3,
+        transform: `rotate(${Math.random()*360} ${x} ${y})`,
+        style: 'animation: gentleSway 4s ease-in-out infinite;'
+      });
+      layer.appendChild(leaf);
+    }
+  } else if (season === 'active' || season === 'veraison') {
+    // Pollen / dust motes
+    for (let i = 0; i < 10; i++) {
+      const x = 100 + Math.random() * 600;
+      const y = 50 + Math.random() * 350;
+      layer.appendChild(svgEl('circle', {
+        cx: x, cy: y, r: 1.5 + Math.random(),
+        fill: '#e8c060', opacity: 0.3 + Math.random() * 0.3,
+        style: 'animation: sunGlow 4s ease-in-out infinite;'
+      }));
+    }
+  }
+}
+
+// ============================================================
+// ANNOTATIONS
+// ============================================================
+
+function renderAnnotations(sys) {
+  const layer = document.getElementById('annotation-layer');
+  layer.innerHTML = '';
+
+  const cx = 400;
+
+  // System name label
+  const nameText = svgEl('text', {
+    x: cx, y: 30, 'text-anchor': 'middle',
+    fill: 'var(--accent)', 'font-size': 14, 'font-weight': 700,
+    'font-family': 'system-ui, sans-serif', opacity: 0.8
+  });
+  nameText.textContent = sys.fullName;
+  layer.appendChild(nameText);
+
+  // Pruning type label
+  const pruneText = svgEl('text', {
+    x: cx, y: 48, 'text-anchor': 'middle',
+    fill: 'var(--muted)', 'font-size': 10,
+    'font-family': 'system-ui, sans-serif', opacity: 0.6
+  });
+  pruneText.textContent = sys.pruning + ' · ' + state.age + ' yr vine · ' + (state.spacing/10).toFixed(1) + 'm spacing';
+  layer.appendChild(pruneText);
+}
+
+// ============================================================
+// METRICS
+// ============================================================
+
+function updateMetrics() {
+  const sys = SYSTEMS[state.system];
+  const caneFactor = state.cane / 100;
+  const densityFactor = state.density / 100;
+  const cropFactor = state.crop / 100;
+  const ageFactor = Math.min(state.age / 20, 1);
+  const spacingFactor = state.spacing / 24; // relative to 2.4m
+
+  // Pruning method
+  document.getElementById('m-pruning').textContent = sys.pruning;
+
+  // Buds retained (balance formula: ~30 buds/kg of pruning wood)
+  const baseBuds = sys.budCount;
+  const adjustedBuds = Math.round(baseBuds * caneFactor * (0.5 + ageFactor * 0.5));
+  document.getElementById('m-buds').textContent = adjustedBuds + ' buds';
+
+  // Canopy height
+  const heightM = parseFloat(sys.height.match(/[\d.]+/)[0]);
+  const adjustedHeight = heightM * (0.7 + caneFactor * 0.3 + ageFactor * 0.1);
+  document.getElementById('m-height').textContent = adjustedHeight.toFixed(2) + ' m';
+
+  // Sun exposure
+  let exposureScore = sys.exposure === 'Very High' ? 95 : sys.exposure === 'High' ? 75 : sys.exposure === 'Low' ? 35 : 55;
+  exposureScore = Math.round(exposureScore * (0.6 + (1 - densityFactor) * 0.4));
+  const expEl = document.getElementById('m-exposure');
+  expEl.textContent = exposureScore + '%';
+  expEl.className = 'value ' + (exposureScore > 70 ? 'good' : exposureScore > 45 ? 'warn' : 'bad');
+
+  // Airflow
+  let airflowScore = sys.airflow === 'Excellent' ? 95 : sys.airflow === 'Good' ? 70 : 40;
+  airflowScore = Math.round(airflowScore * (0.5 + (1 - densityFactor) * 0.5));
+  const afEl = document.getElementById('m-airflow');
+  afEl.textContent = airflowScore + '%';
+  afEl.className = 'value ' + (airflowScore > 70 ? 'good' : airflowScore > 45 ? 'warn' : 'bad');
+
+  // Yield estimate (kg/vine)
+  const baseYield = adjustedBuds * 0.15 * cropFactor * spacingFactor;
+  const yieldKg = (baseYield * (0.8 + ageFactor * 0.4)).toFixed(1);
+  document.getElementById('m-yield').textContent = yieldKg + ' kg/vine';
+
+  // Vigor balance (pruning weight / yield ratio, ideal ~0.3-0.6 kg/kg)
+  const pruningWt = (caneFactor * 0.5 * (0.5 + ageFactor * 0.5)).toFixed(2);
+  const ratio = pruningWt / parseFloat(yieldKg);
+  const vigorRatio = ratio > 0.8 ? 'High vigor' : ratio < 0.2 ? 'Over-cropped' : 'Balanced';
+  const vigEl = document.getElementById('m-vigor');
+  vigEl.textContent = vigorRatio + ' (' + ratio.toFixed(2) + ')';
+  vigEl.className = 'value ' + (vigorRatio === 'Balanced' ? 'good' : 'warn');
+
+  // Disease risk
+  let diseaseRisk = (1 - airflowScore / 100) * 0.6 + densityFactor * 0.4;
+  const diseasePct = Math.round(diseaseRisk * 100);
+  const disEl = document.getElementById('m-disease');
+  disEl.textContent = diseasePct + '%';
+  disEl.className = 'value ' + (diseasePct < 30 ? 'good' : diseasePct < 55 ? 'warn' : 'bad');
+
+  // Frost risk
+  let frostBase = sys.frostRisk === 'High' ? 60 : sys.frostRisk === 'Medium' ? 35 : 15;
+  const frostPct = Math.round(frostBase * (0.5 + ageFactor * 0.5));
+  const frostEl = document.getElementById('m-frost');
+  frostEl.textContent = frostPct + '%';
+  frostEl.className = 'value ' + (frostPct < 30 ? 'good' : frostPct < 55 ? 'warn' : 'bad');
+
+  // Pruning effort
+  const effortMap = { 'Low': 25, 'Medium': 55, 'High': 85 };
+  let effortPct = effortMap[sys.effort] || 50;
+  effortPct = Math.round(effortPct * (0.7 + caneFactor * 0.3));
+  document.getElementById('m-effort').textContent = effortPct + '%';
+}
+
+// ============================================================
+// UI BUILD
+// ============================================================
+
+function buildSystemButtons() {
+  const grid = document.getElementById('system-grid');
+  grid.innerHTML = '';
+  for (const [key, sys] of Object.entries(SYSTEMS)) {
+    const btn = document.createElement('button');
+    btn.className = 'system-btn' + (key === state.system ? ' active' : '');
+    btn.textContent = sys.name;
+    btn.dataset.key = key;
+    btn.addEventListener('click', () => {
+      state.system = key;
+      document.querySelectorAll('.system-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateAll();
+    });
+    grid.appendChild(btn);
+  }
+}
+
+function buildSeasonButtons() {
+  document.querySelectorAll('.season-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.season = btn.dataset.season;
+      document.querySelectorAll('.season-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateAll();
+    });
+  });
+}
+
+function buildPresetButtons() {
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = PRESETS[btn.dataset.preset];
+      if (!p) return;
+      state.cane = p.cane;
+      state.density = p.density;
+      state.crop = p.crop;
+      state.spacing = p.spacing;
+      state.age = p.age;
+      document.getElementById('slider-age').value = p.age;
+      document.getElementById('slider-cane').value = p.cane;
+      document.getElementById('slider-density').value = p.density;
+      document.getElementById('slider-crop').value = p.crop;
+      document.getElementById('slider-spacing').value = p.spacing;
+      updateSliderLabels();
+      updateAll();
+    });
+  });
+}
+
+function buildSliders() {
+  const sliders = [
+    { id: 'slider-age', key: 'age', label: 'val-age', suffix: ' yr', round: true },
+    { id: 'slider-cane', key: 'cane', label: 'val-cane', suffix: '%', round: true },
+    { id: 'slider-density', key: 'density', label: 'val-density', suffix: '%', round: true },
+    { id: 'slider-crop', key: 'crop', label: 'val-crop', suffix: '%', round: true },
+    { id: 'slider-spacing', key: 'spacing', label: 'val-spacing', suffix: '', round: false }
+  ];
+
+  sliders.forEach(s => {
+    const el = document.getElementById(s.id);
+    el.addEventListener('input', () => {
+      state[s.key] = parseFloat(el.value);
+      updateSliderLabels();
+      updateAll();
+    });
+  });
+}
+
+function updateSliderLabels() {
+  document.getElementById('val-age').textContent = state.age + ' yr';
+  document.getElementById('val-cane').textContent = state.cane + '%';
+  document.getElementById('val-density').textContent = state.density + '%';
+  document.getElementById('val-crop').textContent = state.crop + '%';
+  document.getElementById('val-spacing').textContent = (state.spacing / 10).toFixed(1) + ' m';
+}
+
+function updateInfoCard() {
+  const sys = SYSTEMS[state.system];
+  document.getElementById('ic-title').textContent = sys.fullName;
+  document.getElementById('ic-desc').textContent = sys.desc;
+}
+
+function updateAll() {
+  const sys = SYSTEMS[state.system];
+  renderTrellis(sys);
+  renderVine(sys);
+  renderSeasonOverlay(state.season);
+  renderAnnotations(sys);
+  updateMetrics();
+  updateInfoCard();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+function init() {
+  buildSystemButtons();
+  buildSeasonButtons();
+  buildPresetButtons();
+  buildSliders();
+  updateSliderLabels();
+  updateAll();
+}
+
+// Start
+init();
+</script>
+</body>
+</html>
