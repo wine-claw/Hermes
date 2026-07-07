@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Pump-Over & Cap Management Simulator</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  :root{
+    --bg:#0d0f1a; --surface:#161b2e; --border:#2a3050; --text:#d0d8f0; --muted:#8a92b0;
+    --accent:#e8604f; --accent2:#f5a623; --wine:#7a1f3d; --juice:#a02848; --cap:#6b1a30;
+    --green:#4a9; --amber:#f5a623; --red:#e8604f; --blue:#58a6ff;
+  }
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;}
+  .disclaimer{background:#1a1610;border-bottom:1px solid #3a3020;color:#c9a060;padding:0.75rem 1rem;
+    text-align:center;font-size:0.85rem;font-family:system-ui,sans-serif;position:sticky;top:0;z-index:100;}
+  .disclaimer strong{font-weight:600;}
+
+  #canvas-container{position:fixed;inset:0;z-index:0;}
+  #ui-layer{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;}
+  #controls{position:absolute;top:12px;left:12px;width:300px;max-height:calc(100vh - 40px);
+    overflow-y:auto;background:rgba(16,20,38,0.88);border:1px solid var(--border);border-radius:14px;
+    padding:16px;backdrop-filter:blur(12px);pointer-events:auto;}
+  #metrics{position:absolute;top:12px;right:12px;width:250px;
+    background:rgba(16,20,38,0.88);border:1px solid var(--border);border-radius:14px;
+    padding:16px;backdrop-filter:blur(12px);pointer-events:auto;}
+  .ctrl-title{font-size:0.95rem;font-weight:700;color:var(--accent);margin-bottom:12px;
+    padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .ctrl-group{margin-bottom:14px;}
+  .ctrl-label{display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;
+    color:var(--muted);margin-bottom:5px;}
+  .ctrl-label .val{color:var(--accent2);font-weight:600;font-family:monospace;font-size:0.78rem;}
+  input[type=range]{width:100%;height:20px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;background:var(--border);border-radius:2px;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--accent);margin-top:-6px;border:2px solid var(--surface);}
+  input[type=range]::-moz-range-track{height:4px;background:var(--border);border-radius:2px;}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);
+    border:2px solid var(--surface);cursor:pointer;}
+  .method-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
+  .method-btn{padding:8px 6px;border:1px solid var(--border);background:var(--surface);color:var(--text);
+    border-radius:8px;font-size:0.75rem;cursor:pointer;text-align:center;transition:all .15s;}
+  .method-btn:hover{border-color:var(--accent2);}
+  .method-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
+  .preset-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .preset-btn{padding:5px 10px;border:1px solid var(--border);background:var(--surface);color:var(--text);
+    border-radius:6px;font-size:0.7rem;cursor:pointer;transition:all .15s;}
+  .preset-btn:hover{border-color:var(--blue);}
+  .preset-btn.active{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .action-btn{width:100%;padding:10px;border:none;border-radius:8px;font-size:0.85rem;font-weight:700;
+    cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
+    margin-bottom:6px;transition:opacity .15s;}
+  .action-btn:hover{opacity:0.88;}
+  .metric-title{font-size:0.95rem;font-weight:700;color:var(--accent2);margin-bottom:12px;
+    padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .metric-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;font-size:0.8rem;}
+  .metric-label{color:var(--muted);}
+  .metric-val{font-weight:600;font-family:monospace;font-size:0.82rem;}
+  .metric-val.good{color:var(--green);}
+  .metric-val.warn{color:var(--amber);}
+  .metric-val.bad{color:var(--red);}
+  .metric-val.blue{color:var(--blue);}
+  .bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:3px;margin-bottom:8px;}
+  .bar-fill{height:100%;border-radius:3px;transition:width .3s ease;}
+  .badge{display:inline-block;font-size:0.6rem;padding:2px 7px;border-radius:4px;font-weight:700;
+    text-transform:uppercase;letter-spacing:0.05em;}
+  .badge-active{background:#2a5a3a;color:#6fb;}
+  .badge-idle{background:#3a3a30;color:#aa8;}
+  .spark{width:100%;height:36px;margin-top:4px;border-radius:6px;background:rgba(0,0,0,0.3);
+    border:1px solid var(--border);}
+
+  @media(max-width:768px){
+    html,body{overflow-y:auto;height:auto;}
+    #canvas-container{position:relative !important;width:100% !important;height:42vh !important;
+      min-height:280px;max-height:400px;inset:auto !important;z-index:0;}
+    canvas{width:100% !important;height:100% !important;}
+    #ui-layer{position:relative !important;inset:auto !important;pointer-events:auto;}
+    #controls{position:relative !important;top:auto !important;left:auto !important;
+      width:auto !important;max-height:none !important;margin:0;border-radius:0;
+      border-left:none;border-right:none;}
+    #metrics{position:relative !important;top:auto !important;right:auto !important;
+      width:auto !important;margin:0;border-radius:0;border-left:none;border-right:none;}
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div id="controls">
+    <div class="ctrl-title">🍷 Pump-Over & Cap Management</div>
+
+    <div class="ctrl-group">
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:6px;font-weight:600;">Cap Management Method</div>
+      <div class="method-grid">
+        <button class="method-btn active" data-method="pumpover">Pump-Over</button>
+        <button class="method-btn" data-method="punchdown">Punch-Down</button>
+        <button class="method-btn" data-method="delestage">Délestage</button>
+        <button class="method-btn" data-method="none">None</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Cycle Frequency <span class="val" id="freq-val">2/hr</span></div>
+      <input type="range" id="freq" min="0" max="6" step="0.5" value="2">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Pump Flow Rate <span class="val" id="flow-val">3.0 tank-vol/hr</span></div>
+      <input type="range" id="flow" min="0.5" max="6" step="0.1" value="3.0">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Must Temperature <span class="val" id="temp-val">28°C</span></div>
+      <input type="range" id="temp" min="15" max="38" step="0.5" value="28">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Cap Temperature <span class="val" id="captemp-val">32°C</span></div>
+      <input type="range" id="captemp" min="15" max="45" step="0.5" value="32">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Initial Brix <span class="val" id="brix-val">24°Bx</span></div>
+      <input type="range" id="brix" min="18" max="30" step="0.5" value="24">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Cap Thickness <span class="val" id="capthick-val">25%</span></div>
+      <input type="range" id="capthick" min="10" max="40" step="1" value="25">
+    </div>
+
+    <div class="ctrl-group">
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:6px;font-weight:600;">Variety Preset</div>
+      <div class="preset-row">
+        <button class="preset-btn active" data-preset="cab">Cabernet</button>
+        <button class="preset-btn" data-preset="pinot">Pinot Noir</button>
+        <button class="preset-btn" data-preset="syrah">Syrah</button>
+        <button class="preset-btn" data-preset="light">Light Red</button>
+      </div>
+    </div>
+
+    <button class="action-btn" id="reset-btn">↻ Reset Simulation</button>
+    <button class="action-btn" id="play-btn" style="background:linear-gradient(135deg,#2a5a3a,#4a9);">⏸ Pause</button>
+  </div>
+
+  <div id="metrics">
+    <div class="metric-title">📊 Live Metrics</div>
+
+    <div class="metric-row">
+      <span class="metric-label">Fermentation</span>
+      <span class="metric-val" id="m-ferm">Active</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">Elapsed Time</span>
+      <span class="metric-val blue" id="m-time">0.0 h</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">Current Brix</span>
+      <span class="metric-val" id="m-brix">24.0 °Bx</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="bar-brix" style="background:var(--accent2);width:100%;"></div></div>
+
+    <div class="metric-row">
+      <span class="metric-label">Ethanol</span>
+      <span class="metric-val good" id="m-ethanol">0.0 % v/v</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="bar-ethanol" style="background:var(--green);width:0%;"></div></div>
+
+    <div class="metric-row">
+      <span class="metric-label">Cap Management</span>
+      <span class="metric-val" id="m-capstatus">Idle</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">Cycles Completed</span>
+      <span class="metric-val blue" id="m-cycles">0</span>
+    </div>
+
+    <div style="margin-top:14px;font-size:0.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Extraction</div>
+
+    <div class="metric-row">
+      <span class="metric-label">Anthocyanin</span>
+      <span class="metric-val" id="m-antho">0 mg/L</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="bar-antho" style="background:var(--wine);width:0%;"></div></div>
+
+    <div class="metric-row">
+      <span class="metric-label">Tannin</span>
+      <span class="metric-val" id="m-tannin">0 mg/L</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="bar-tannin" style="background:var(--cap);width:0%;"></div></div>
+
+    <div class="metric-row">
+      <span class="metric-label">Total Phenolics</span>
+      <span class="metric-val" id="m-phenol">0 AU</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="bar-phenol" style="background:var(--accent);width:0%;"></div></div>
+
+    <div style="margin-top:14px;font-size:0.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Extraction Rate History</div>
+    <canvas class="spark" id="spark" width="220" height="36"></canvas>
+
+    <div style="margin-top:10px;font-size:0.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Cap Health</div>
+    <div class="metric-row">
+      <span class="metric-label">Cap Temp Δ</span>
+      <span class="metric-val" id="m-capdelta">0°C</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Mixing Efficacy</span>
+      <span class="metric-val" id="m-mixeff">—</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Dryness Risk</span>
+      <span class="metric-val" id="m-dryness">Low</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/konva@9.3.6/konva.min.js"></script>
+<script>
+'use strict';
+
+/* ====== State & Parameters ====== */
+const P = {
+  method: 'pumpover',
+  freq: 2,        // cycles per hour
+  flow: 3.0,      // tank volumes per hour during pump-over
+  temp: 28,       // must temperature °C
+  capTemp: 32,    // cap temperature °C
+  initBrix: 24,
+  capThickness: 25, // percentage of tank height
+  preset: 'cab',
+};
+
+const PRESETS = {
+  cab:    { temp: 28, capTemp: 33, initBrix: 25, capThick: 28, freq: 2, flow: 3.0 },
+  pinot:  { temp: 24, capTemp: 28, initBrix: 22, capThick: 18, freq: 3, flow: 2.0 },
+  syrah:  { temp: 30, capTemp: 35, initBrix: 25, capThick: 30, freq: 2, flow: 3.5 },
+  light:  { temp: 20, capTemp: 24, initBrix: 21, capThick: 15, freq: 2.5, flow: 2.0 },
+};
+
+let running = true;
+let simTime = 0;       // hours
+let brix = P.initBrix;
+let ethanol = 0;
+let anthocyanin = 0;
+let tannin = 0;
+let phenolics = 0;
+let cycles = 0;
+let cycleProgress = 0;
+let isCycling = false;
+let cycleType = '';
+let capTempActual = P.capTemp;
+let mixEff = 0;
+let capRotation = 0;
+let lastCapActionTime = -100;
+let sparkData = [];
+const SPARK_MAX = 80;
+
+/* ====== Konva Setup ====== */
+const container = document.getElementById('canvas-container');
+let stage, tankLayer, particleLayer, uiLayer_k;
+let tankGroup, capGroup, juiceGroup, foamGroup;
+let pumpPipe, pumpStream;
+let punchTool;
+
+function initStage() {
+  const w = container.clientWidth || window.innerWidth;
+  const h = container.clientHeight || window.innerHeight;
+  stage = new Konva.Stage({ container: 'canvas-container', width: w, height: h });
+
+  tankLayer = new Konva.Layer();
+  particleLayer = new Konva.Layer();
+  stage.add(tankLayer);
+  stage.add(particleLayer);
+
+  buildTank(w, h);
+  buildParticles(w, h);
+  tankLayer.draw();
+}
+
+function buildTank(w, h) {
+  tankLayer.destroyChildren();
+  const tankW = Math.min(w * 0.42, 380);
+  const tankH = Math.min(h * 0.72, 520);
+  const tx = w / 2 - tankW / 2;
+  const ty = h / 2 - tankH / 2;
+
+  // Background gradient
+  const bgRect = new Konva.Rect({
+    x: 0, y: 0, width: w, height: h,
+    fillLinearGradientStartPoint: { x: 0, y: 0 },
+    fillLinearGradientEndPoint: { x: 0, y: h },
+    fillLinearGradientColorStops: [0, '#0d0f1a', 0.5, '#12152a', 1, '#0d0f1a'],
+    listening: false,
+  });
+  tankLayer.add(bgRect);
+
+  // Decorative floor shadow
+  const floorShadow = new Konva.Ellipse({
+    x: w / 2, y: ty + tankH + 8,
+    radiusX: tankW * 0.5, radiusY: 12,
+    fill: 'rgba(0,0,0,0.4)', listening: false,
+  });
+  tankLayer.add(floorShadow);
+
+  // Tank body (stainless steel)
+  const tankBody = new Konva.Rect({
+    x: tx, y: ty,
+    width: tankW, height: tankH,
+    fillLinearGradientStartPoint: { x: 0, y: 0 },
+    fillLinearGradientEndPoint: { x: tankW, y: 0 },
+    fillLinearGradientColorStops: [
+      0, '#3a4055', 0.15, '#5a6075', 0.3, '#6a7088',
+      0.7, '#6a7088', 0.85, '#5a6075', 1, '#3a4055'
+    ],
+    cornerRadius: 8,
+    shadowColor: '#000', shadowBlur: 20, shadowOpacity: 0.5,
+  });
+  tankLayer.add(tankBody);
+
+  // Tank inner must area
+  const innerPad = 6;
+  const juiceTop = ty + tankH * (P.capThickness / 100) + 6;
+  const juiceArea = new Konva.Rect({
+    x: tx + innerPad, y: juiceTop,
+    width: tankW - innerPad * 2, height: ty + tankH - juiceTop - innerPad,
+    fillLinearGradientStartPoint: { x: 0, y: 0 },
+    fillLinearGradientEndPoint: { x: 0, y: ty + tankH - juiceTop - innerPad },
+    fillLinearGradientColorStops: [
+      0, '#8a1f3a', 0.3, '#a02848', 0.6, '#8a1f3a', 1, '#6a1830'
+    ],
+    cornerRadius: 4,
+    listening: false,
+  });
+  tankLayer.add(juiceArea);
+
+  // Cap (grape skins floating on top)
+  const capH = tankH * (P.capThickness / 100);
+  const capY = ty + 6;
+  capGroup = new Konva.Group({ x: tx + innerPad, y: capY, width: tankW - innerPad*2, height: capH });
+
+  // Cap base (reddish-purple)
+  const capBase = new Konva.Rect({
+    x: 0, y: 0, width: tankW - innerPad * 2, height: capH,
+    fillLinearGradientStartPoint: { x: 0, y: 0 },
+    fillLinearGradientEndPoint: { x: 0, y: capH },
+    fillLinearGradientColorStops: [0, '#8a1f3a', 0.3, '#7a1a30', 0.6, '#6b1a30', 1, '#5a1530'],
+    cornerRadius: 4,
+  });
+  capGroup.add(capBase);
+
+  // Cap texture - scattered grape skin blobs
+  const capW = tankW - innerPad * 2;
+  for (let i = 0; i < 40; i++) {
+    const bx = (Math.sin(i * 7.3) * 0.5 + 0.5) * capW;
+    const by = (Math.cos(i * 3.1) * 0.5 + 0.5) * capH;
+    const br = 4 + (i % 4) * 2;
+    const blob = new Konva.Circle({
+      x: bx, y: by, radius: br,
+      fill: i % 3 === 0 ? '#4a1525' : i % 3 === 1 ? '#6b1a30' : '#5a1530',
+      opacity: 0.7,
+    });
+    capGroup.add(blob);
+  }
+  // Foam line at cap-juice interface
+  const foamLine = new Konva.Rect({
+    x: 0, y: capH - 4, width: capW, height: 4,
+    fill: '#c8a880', opacity: 0.5, cornerRadius: 2,
+  });
+  capGroup.add(foamLine);
+  tankLayer.add(capGroup);
+
+  // Pump pipe (left side, goes up and over to spray on cap)
+  const pipeColor = '#9099aa';
+  const pipeW = 8;
+  const pipePath = [
+    { x: tx - 22, y: ty + tankH - 20 },
+    { x: tx - 22, y: ty - 15 },
+    { x: tx + tankW * 0.35, y: ty - 15 },
+    { x: tx + tankW * 0.35, y: ty + 5 },
+  ];
+  const pipeLine = new Konva.Line({
+    points: pipePath.flatMap(p => [p.x, p.y]),
+    stroke: pipeColor, strokeWidth: pipeW, lineCap: 'round', lineJoin: 'round',
+    shadowColor: '#000', shadowBlur: 4, shadowOpacity: 0.3,
+  });
+  tankLayer.add(pipeLine);
+
+  // Pipe return valve at bottom
+  const valve = new Konva.Rect({
+    x: tx - 30, y: ty + tankH - 24, width: 16, height: 16,
+    fill: '#666', cornerRadius: 2, stroke: '#888', strokeWidth: 1,
+  });
+  tankLayer.add(valve);
+
+  // Pump spray head at top
+  pumpPipe = new Konva.Group({ x: tx + tankW * 0.35, y: ty + 5 });
+  const sprayHead = new Konva.Rect({
+    x: -12, y: -6, width: 24, height: 8, fill: '#7a8090', cornerRadius: 2,
+  });
+  pumpPipe.add(sprayHead);
+  pumpPipe.visible(false);
+  tankLayer.add(pumpPipe);
+
+  // Punch-down tool (for punch-down method)
+  punchTool = new Konva.Group({ x: tx + tankW / 2, y: ty - 40 });
+  const toolShaft = new Konva.Rect({
+    x: -4, y: 0, width: 8, height: 40, fill: '#8a90a0', cornerRadius: 2,
+  });
+  punchTool.add(toolShaft);
+  const toolPlate = new Konva.Rect({
+    x: -30, y: 38, width: 60, height: 10, fill: '#6a7080', cornerRadius: 4,
+  });
+  punchTool.add(toolPlate);
+  punchTool.visible(false);
+  tankLayer.add(punchTool);
+
+  // Temperature gauge on the right side of tank
+  const gaugeX = tx + tankW + 12;
+  const gaugeH = tankH * 0.5;
+  const gaugeY = ty + tankH * 0.25;
+  const gaugeBg = new Konva.Rect({
+    x: gaugeX, y: gaugeY, width: 14, height: gaugeH,
+    fill: '#2a3050', cornerRadius: 4,
+  });
+  tankLayer.add(gaugeBg);
+  const gaugeFill = new Konva.Rect({
+    id: 'gauge-fill',
+    x: gaugeX + 2, y: gaugeY + gaugeH - 10,
+    width: 10, height: 10, fill: '#e8604f', cornerRadius: 3,
+  });
+  tankLayer.add(gaugeFill);
+  const gaugeLabel = new Konva.Text({
+    x: gaugeX + 18, y: gaugeY + gaugeH / 2 - 10,
+    text: '°C', fontSize: 12, fill: '#8a92b0', fontFamily: 'monospace',
+  });
+  tankLayer.add(gaugeLabel);
+
+  // CO2 vent at top
+  const vent = new Konva.Rect({
+    x: tx + tankW / 2 - 15, y: ty - 10, width: 30, height: 6,
+    fill: '#555', cornerRadius: 2,
+  });
+  tankLayer.add(vent);
+
+  // Title text
+  const titleText = new Konva.Text({
+    x: 20, y: 10, text: 'Fermentation Tank', fontSize: 14, fill: '#8a92b0',
+    fontFamily: 'system-ui', listening: false,
+  });
+  // Only show title on wide screens
+  if (w > 700) tankLayer.add(titleText);
+
+  // Method label
+  const methodLabel = new Konva.Text({
+    id: 'method-label',
+    x: tx, y: ty + tankH + 16,
+    text: 'Pump-Over Active', fontSize: 13, fill: '#e8604f',
+    fontFamily: 'system-ui', width: tankW, align: 'center', fontStyle: 'bold',
+  });
+  tankLayer.add(methodLabel);
+
+  // Store refs for animation
+  stage._tank = { tx, ty, tankW, tankH, capY, capH, capW, juiceTop, innerPad };
+}
+
+/* ====== Particle System ====== */
+const particles = [];
+const MAX_PARTICLES = 200;
+
+function buildParticles(w, h) {
+  particleLayer.destroyChildren();
+}
+
+function spawnParticle(type, x, y, opts) {
+  if (particles.length >= MAX_PARTICLES) {
+    // reuse oldest
+    particles.shift();
+  }
+  const p = {
+    type, x, y,
+    vx: opts.vx || 0, vy: opts.vy || 0,
+    life: opts.life || 1.0, maxLife: opts.life || 1.0,
+    radius: opts.radius || 3,
+    color: opts.color || '#a02848',
+    opacity: opts.opacity || 1,
+  };
+  particles.push(p);
+}
+
+function updateParticles(dt, w, h) {
+  const t = stage._tank;
+  if (!t) return;
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+
+    // Gravity for juice droplets
+    if (p.type === 'droplet') {
+      p.vy += 200 * dt;
+      // Check if hit cap or juice
+      const capBottom = t.capY + t.capH;
+      if (p.y >= t.capY && p.y < capBottom && p.x > t.tx + t.innerPad && p.x < t.tx + t.tankW - t.innerPad) {
+        // absorbed by cap
+        particles.splice(i, 1);
+        continue;
+      }
+      if (p.y >= t.juiceTop) {
+        // splash in juice
+        spawnParticle('splash', p.x, t.juiceTop, {
+          vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 20,
+          life: 0.3, radius: 2, color: '#c8a080', opacity: 0.6,
+        });
+        particles.splice(i, 1);
+        continue;
+      }
+    }
+
+    // CO2 bubbles rise
+    if (p.type === 'bubble') {
+      p.vy -= 30 * dt * 10; // buoyancy
+      p.vx += (Math.random() - 0.5) * 20 * dt;
+      // wobble
+      p.x += Math.sin(p.life * 8) * 0.5;
+      // pop at surface
+      if (p.y < t.juiceTop) {
+        // foam burst
+        spawnParticle('foam', p.x, t.juiceTop - 2, {
+          vx: (Math.random() - 0.5) * 30, vy: -15 - Math.random() * 10,
+          life: 0.5, radius: 2, color: '#d8c8a8', opacity: 0.5,
+        });
+        particles.splice(i, 1);
+        continue;
+      }
+    }
+
+    // Splash particles
+    if (p.type === 'splash') {
+      p.vy += 300 * dt;
+      if (p.y >= t.juiceTop) {
+        particles.splice(i, 1);
+        continue;
+      }
+    }
+
+    // Foam particles float then fade
+    if (p.type === 'foam') {
+      p.vy += 20 * dt;
+      p.opacity = Math.max(0, p.opacity - dt * 0.8);
+      if (p.life <= 0 || p.opacity <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+    }
+
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
+function drawParticles() {
+  particleLayer.destroyChildren();
+  const w = stage.width();
+  const h = stage.height();
+
+  for (const p of particles) {
+    const alpha = Math.min(1, p.life / p.maxLife) * p.opacity;
+    let color = p.color;
+    if (p.type === 'bubble') color = '#c8d8e8';
+    if (p.type === 'foam') color = '#d8c8a8';
+    if (p.type === 'splash') color = '#b89868';
+
+    const shape = new Konva.Circle({
+      x: p.x, y: p.y, radius: p.radius,
+      fill: color, opacity: alpha,
+      listening: false,
+    });
+    particleLayer.add(shape);
+  }
+  particleLayer.draw();
+}
+
+/* ====== Simulation Logic ====== */
+function updateSim(dt) {
+  // dt in hours
+  if (!running) return;
+  simTime += dt;
+
+  // Fermentation kinetics: Monod + Arrhenius
+  const T = P.temp;
+  const tempFactor = Math.exp(-(35000 / 8.314) * (1 / (T + 273.15) - 1 / (28 + 273.15)));
+  const sugarConc = brix; // remaining sugar
+  const maxBrixConsumed = P.initBrix - 2; // stop near dry
+  const consumedSoFar = P.initBrix - brix;
+  const remainingFrac = Math.max(0, sugarConc / P.initBrix);
+  const monod = (remainingFrac * 4) / (remainingFrac * 4 + 0.5);
+
+  // Fermentation rate (Brix/hour)
+  const rate = 0.8 * tempFactor * monod;
+  const dBrix = rate * dt;
+  brix = Math.max(0, brix - dBrix);
+  ethanol = Math.min(14.5, (P.initBrix - brix) * 0.575);
+
+  // CO2 bubble generation rate (proportional to fermentation rate)
+  const co2Rate = rate * 3;
+
+  // Cap management cycle
+  const cycleInterval = P.freq > 0 ? 1 / P.freq : 999;
+  cycleProgress += dt;
+
+  if (!isCycling && cycleProgress >= cycleInterval && P.method !== 'none' && brix > 1.5) {
+    isCycling = true;
+    cycleType = P.method;
+    cycleProgress = 0;
+    cycles++;
+    lastCapActionTime = simTime;
+  }
+
+  // Handle cycle duration
+  if (isCycling) {
+    const cycleDur = cycleType === 'pumpover' ? 0.05 : cycleType === 'punchdown' ? 0.02 : 0.08;
+    const cycleElapsed = simTime - lastCapActionTime;
+    const frac = Math.min(1, cycleElapsed / cycleDur);
+
+    if (cycleType === 'pumpover') {
+      // Pump juice from bottom to top spray
+      pumpPipe.visible(true);
+      const t = stage._tank;
+      // Spawn droplets from spray head onto cap
+      if (Math.random() < P.flow * 0.8) {
+        const sx = pumpPipe.x() + (Math.random() - 0.5) * 20;
+        const sy = pumpPipe.y() + 5;
+        spawnParticle('droplet', sx, sy, {
+          vx: (Math.random() - 0.5) * 30,
+          vy: 60 + Math.random() * 40,
+          life: 1.5, radius: 2 + Math.random() * 2,
+          color: '#b04060', opacity: 0.9,
+        });
+      }
+      // Extraction boost during pump-over
+      const boost = P.flow * 0.5 * dt * tempFactor;
+      anthocyanin += boost * 12;
+      tannin += boost * 8;
+      phenolics += boost * 5;
+      capTempActual -= (capTempActual - P.temp) * 0.3 * dt * 10;
+      mixEff = frac;
+
+      if (frac >= 1) {
+        isCycling = false;
+        pumpPipe.visible(false);
+        mixEff = 0;
+      }
+    } else if (cycleType === 'punchdown') {
+      // Punch tool descends
+      punchTool.visible(true);
+      const t = stage._tank;
+      const targetY = t.capY + t.capH * 0.8;
+      const startY = t.capY - 40;
+      const py = startY + (targetY - startY) * Math.sin(frac * Math.PI);
+      punchTool.y(py);
+
+      // Gentle extraction boost
+      const boost = 2.0 * dt * tempFactor;
+      anthocyanin += boost * 10;
+      tannin += boost * 12;
+      phenolics += boost * 4;
+      capTempActual -= (capTempActual - P.temp) * 0.2 * dt * 10;
+      mixEff = frac;
+
+      if (frac >= 1) {
+        isCycling = false;
+        punchTool.visible(false);
+        punchTool.y(startY);
+        mixEff = 0;
+      }
+    } else if (cycleType === 'delestage') {
+      // Délestage: drain juice and splash back
+      const boost = 1.5 * dt * tempFactor;
+      anthocyanin += boost * 8;
+      tannin += boost * 6;
+      phenolics += boost * 3;
+      capTempActual -= (capTempActual - P.temp) * 0.4 * dt * 10;
+      mixEff = frac;
+
+      // Extra splash particles
+      if (Math.random() < 0.3) {
+        const t = stage._tank;
+        spawnParticle('splash', t.tx + t.tankW / 2, t.juiceTop, {
+          vx: (Math.random() - 0.5) * 80, vy: -50 - Math.random() * 30,
+          life: 0.4, radius: 3, color: '#b04060', opacity: 0.8,
+        });
+      }
+
+      if (frac >= 1) {
+        isCycling = false;
+        mixEff = 0;
+      }
+    }
+  }
+
+  // Background extraction (diffusion even without cap management)
+  const diffRate = 0.05 * tempFactor * dt;
+  anthocyanin += diffRate * 6;
+  tannin += diffRate * 4;
+  phenolics += diffRate * 2;
+
+  // Cap temperature drifts toward ambient when no action
+  if (!isCycling) {
+    capTempActual += (P.capTemp - capTempActual) * 0.1 * dt;
+  }
+
+  // CO2 bubbles from fermentation
+  if (co2Rate > 0.1 && Math.random() < co2Rate * 0.3) {
+    const t = stage._tank;
+    const bx = t.tx + t.innerPad + Math.random() * (t.tankW - t.innerPad * 2);
+    const by = t.juiceTop + Math.random() * (t.ty + t.tankH - t.juiceTop - t.innerPad);
+    spawnParticle('bubble', bx, by, {
+      vx: (Math.random() - 0.5) * 5, vy: -10 - Math.random() * 15,
+      life: 1.5 + Math.random(), radius: 1.5 + Math.random() * 2,
+      color: '#c8d8e8', opacity: 0.5,
+    });
+  }
+
+  // Cap rotation for visual interest
+  capRotation += dt * 0.5;
+  if (capGroup) capGroup.rotation(0); // keep flat, we use offset for "mixing" visual
+
+  // Spark data (extraction rate)
+  sparkData.push(anthocyanin + tannin);
+  if (sparkData.length > SPARK_MAX) sparkData.shift();
+}
+
+/* ====== UI Updates ====== */
+function updateMetrics() {
+  const elTime = document.getElementById('m-time');
+  elTime.textContent = simTime.toFixed(1) + ' h';
+
+  const elBrix = document.getElementById('m-brix');
+  elBrix.textContent = brix.toFixed(1) + ' °Bx';
+  const brixPct = Math.max(0, (brix / P.initBrix) * 100);
+  document.getElementById('bar-brix').style.width = brixPct + '%';
+
+  const elEth = document.getElementById('m-ethanol');
+  elEth.textContent = ethanol.toFixed(1) + ' % v/v';
+  document.getElementById('bar-ethanol').style.width = Math.min(100, (ethanol / 14.5) * 100) + '%';
+
+  const elFerm = document.getElementById('m-ferm');
+  if (brix < 1) { elFerm.textContent = 'Done'; elFerm.className = 'metric-val good'; }
+  else if (brix < P.initBrix * 0.3) { elFerm.textContent = 'Finishing'; elFerm.className = 'metric-val warn'; }
+  else { elFerm.textContent = 'Active'; elFerm.className = 'metric-val good'; }
+
+  document.getElementById('m-cycles').textContent = cycles;
+
+  const elCapStatus = document.getElementById('m-capstatus');
+  if (isCycling) {
+    elCapStatus.innerHTML = '<span class="badge badge-active">' + cycleType + '</span>';
+  } else {
+    elCapStatus.innerHTML = '<span class="badge badge-idle">Idle</span>';
+  }
+
+  // Anthocyanin (max ~1800 mg/L for red wine)
+  const anthoMax = 1800;
+  const anthoPct = Math.min(100, (anthocyanin / anthoMax) * 100);
+  document.getElementById('m-antho').textContent = Math.round(anthocyanin) + ' mg/L';
+  document.getElementById('bar-antho').style.width = anthoPct + '%';
+
+  // Tannin (max ~3500 mg/L)
+  const tanMax = 3500;
+  const tanPct = Math.min(100, (tannin / tanMax) * 100);
+  document.getElementById('m-tannin').textContent = Math.round(tannin) + ' mg/L';
+  document.getElementById('bar-tannin').style.width = tanPct + '%';
+
+  // Phenolics (max ~80 AU at 280nm)
+  const phenMax = 80;
+  const phenPct = Math.min(100, (phenolics / phenMax) * 100);
+  document.getElementById('m-phenol').textContent = phenolics.toFixed(1) + ' AU';
+  document.getElementById('bar-phenol').style.width = phenPct + '%';
+
+  // Cap temp delta
+  const capDelta = capTempActual - P.temp;
+  const elCapDelta = document.getElementById('m-capdelta');
+  elCapDelta.textContent = (capDelta > 0 ? '+' : '') + capDelta.toFixed(1) + '°C';
+  elCapDelta.className = 'metric-val ' + (capDelta > 5 ? 'bad' : capDelta > 2 ? 'warn' : 'good');
+
+  // Mixing efficacy
+  const elMix = document.getElementById('m-mixeff');
+  if (isCycling) {
+    elMix.textContent = Math.round(mixEff * 100) + '%';
+    elMix.className = 'metric-val good';
+  } else {
+    elMix.textContent = '—';
+    elMix.className = 'metric-val';
+  }
+
+  // Dryness risk
+  const elDry = document.getElementById('m-dryness');
+  const dryRisk = brix < 2 && ethanol > 12 && !isCycling && simTime > 20;
+  if (dryRisk) { elDry.textContent = 'High'; elDry.className = 'metric-val bad'; }
+  else if (brix < 5) { elDry.textContent = 'Medium'; elDry.className = 'metric-val warn'; }
+  else { elDry.textContent = 'Low'; elDry.className = 'metric-val good'; }
+
+  // Temperature gauge
+  const gauge = stage.findOne('#gauge-fill');
+  if (gauge) {
+    const t = stage._tank;
+    const gaugeH = t.tankH * 0.5;
+    const gaugeY = t.ty + t.tankH * 0.25;
+    const tempPct = Math.min(1, Math.max(0, (capTempActual - 15) / 35));
+    const fillH = gaugeH * tempPct;
+    gauge.y(gaugeY + gaugeH - fillH);
+    gauge.height(Math.max(4, fillH));
+    gauge.fill(capTempActual > 35 ? '#e8604f' : capTempActual > 30 ? '#f5a623' : '#4a9');
+  }
+
+  // Method label
+  const ml = stage.findOne('#method-label');
+  if (ml) {
+    let txt = '';
+    if (isCycling) {
+      txt = cycleType === 'pumpover' ? '⬇ Pump-Over Active' :
+            cycleType === 'punchdown' ? '⬇ Punch-Down Active' :
+            '⬇ Délestage Active';
+    } else if (P.method === 'none') {
+      txt = 'No Cap Management';
+    } else {
+      txt = 'Waiting for next cycle...';
+    }
+    ml.text(txt);
+  }
+
+  drawSparkline();
+}
+
+function drawSparkline() {
+  const canvas = document.getElementById('spark');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (sparkData.length < 2) return;
+
+  const maxVal = Math.max(...sparkData, 1);
+  const minVal = Math.min(...sparkData, 0);
+  const range = maxVal - minVal || 1;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(42,48,80,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, h / 2);
+  ctx.lineTo(w, h / 2);
+  ctx.stroke();
+
+  // Line
+  ctx.strokeStyle = '#e8604f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < sparkData.length; i++) {
+    const x = (i / (SPARK_MAX - 1)) * w;
+    const y = h - ((sparkData[i] - minVal) / range) * (h - 4) - 2;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Fill
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(232,96,79,0.15)';
+  ctx.fill();
+}
+
+/* ====== Animation Loop ====== */
+let lastFrame = performance.now();
+function animate(now) {
+  const dtMs = now - lastFrame;
+  lastFrame = now;
+  const dtSec = Math.min(0.05, dtMs / 1000);
+
+  // Time scale: 1 real second = 0.05 sim hours (so 20s = 1 hour)
+  const dtSim = dtSec * 0.05;
+
+  updateSim(dtSim);
+
+  const w = stage.width();
+  const h = stage.height();
+  updateParticles(dtSec, w, h);
+  drawParticles();
+  tankLayer.batchDraw();
+
+  updateMetrics();
+  requestAnimationFrame(animate);
+}
+
+/* ====== Controls ====== */
+function bindControls() {
+  // Method buttons
+  document.querySelectorAll('.method-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      P.method = btn.dataset.method;
+      if (P.method === 'none') {
+        isCycling = false;
+        pumpPipe.visible(false);
+        punchTool.visible(false);
+      }
+    });
+  });
+
+  // Preset buttons
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      P.preset = btn.dataset.preset;
+      const ps = PRESETS[P.preset];
+      P.temp = ps.temp; P.capTemp = ps.capTemp; P.initBrix = ps.initBrix;
+      P.capThickness = ps.capThick; P.freq = ps.freq; P.flow = ps.flow;
+      capTempActual = P.capTemp;
+      // Update slider displays
+      document.getElementById('temp').value = P.temp;
+      document.getElementById('temp-val').textContent = P.temp + '°C';
+      document.getElementById('captemp').value = P.capTemp;
+      document.getElementById('captemp-val').textContent = P.capTemp + '°C';
+      document.getElementById('brix').value = P.initBrix;
+      document.getElementById('brix-val').textContent = P.initBrix + '°Bx';
+      document.getElementById('capthick').value = P.capThickness;
+      document.getElementById('capthick-val').textContent = P.capThickness + '%';
+      document.getElementById('freq').value = P.freq;
+      document.getElementById('freq-val').textContent = P.freq + '/hr';
+      document.getElementById('flow').value = P.flow;
+      document.getElementById('flow-val').textContent = P.flow.toFixed(1) + ' tank-vol/hr';
+      // Rebuild tank to reflect cap thickness
+      rebuild();
+      resetSim();
+    });
+  });
+
+  // Sliders
+  document.getElementById('freq').addEventListener('input', e => {
+    P.freq = parseFloat(e.target.value);
+    document.getElementById('freq-val').textContent = P.freq + '/hr';
+  });
+  document.getElementById('flow').addEventListener('input', e => {
+    P.flow = parseFloat(e.target.value);
+    document.getElementById('flow-val').textContent = P.flow.toFixed(1) + ' tank-vol/hr';
+  });
+  document.getElementById('temp').addEventListener('input', e => {
+    P.temp = parseFloat(e.target.value);
+    document.getElementById('temp-val').textContent = P.temp + '°C';
+  });
+  document.getElementById('captemp').addEventListener('input', e => {
+    P.capTemp = parseFloat(e.target.value);
+    capTempActual = P.capTemp;
+    document.getElementById('captemp-val').textContent = P.capTemp + '°C';
+  });
+  document.getElementById('brix').addEventListener('input', e => {
+    P.initBrix = parseFloat(e.target.value);
+    document.getElementById('brix-val').textContent = P.initBrix + '°Bx';
+    if (simTime < 0.5) brix = P.initBrix;
+  });
+  document.getElementById('capthick').addEventListener('input', e => {
+    P.capThickness = parseFloat(e.target.value);
+    document.getElementById('capthick-val').textContent = P.capThickness + '%';
+    rebuild();
+  });
+
+  // Reset
+  document.getElementById('reset-btn').addEventListener('click', resetSim);
+
+  // Play/Pause
+  document.getElementById('play-btn').addEventListener('click', () => {
+    running = !running;
+    const btn = document.getElementById('play-btn');
+    if (running) {
+      btn.innerHTML = '⏸ Pause';
+      btn.style.background = 'linear-gradient(135deg,#2a5a3a,#4a9)';
+    } else {
+      btn.innerHTML = '▶ Resume';
+      btn.style.background = 'linear-gradient(135deg,#5a3a20,#f5a623)';
+    }
+  });
+}
+
+function resetSim() {
+  simTime = 0;
+  brix = P.initBrix;
+  ethanol = 0;
+  anthocyanin = 0;
+  tannin = 0;
+  phenolics = 0;
+  cycles = 0;
+  cycleProgress = 0;
+  isCycling = false;
+  capTempActual = P.capTemp;
+  sparkData = [];
+  particles.length = 0;
+  pumpPipe.visible(false);
+  punchTool.visible(false);
+}
+
+function rebuild() {
+  const w = container.clientWidth || window.innerWidth;
+  const h = container.clientHeight || window.innerHeight;
+  stage.width(w);
+  stage.height(h);
+  buildTank(w, h);
+  tankLayer.draw();
+}
+
+/* ====== Resize ====== */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(rebuild, 150);
+});
+
+/* ====== Init ====== */
+function init() {
+  initStage();
+  bindControls();
+  capTempActual = P.capTemp;
+  brix = P.initBrix;
+  lastFrame = performance.now();
+  requestAnimationFrame(animate);
+}
+
+// Wait for Konva to load
+if (typeof Konva !== 'undefined') {
+  init();
+} else {
+  window.addEventListener('load', () => {
+    if (typeof Konva !== 'undefined') init();
+    else console.error('Konva failed to load');
+  });
+}
+</script>
+</body>
+</html>
