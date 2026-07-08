@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Tasting Panel — Sensory Analysis Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0708; --surface: #161214; --surface2: #1f1a1c; --border: #2a2228;
+  --text: #d4c9be; --muted: #7a6e66; --accent: #a8203a; --accent2: #c9a060;
+  --accent3: #6b8e23; --wine: #6d1f2e; --wine-light: #a8203a;
+  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { font-size: 16px; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+.disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+.disclaimer strong { font-weight: 600; }
+
+#canvas-container { position: fixed; inset: 0; z-index: 0; overflow-y: auto; padding: 12px; }
+
+/* Desktop: panels float as overlay HUD */
+#ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+#controls {
+  position: absolute; top: 12px; left: 12px; width: 300px; pointer-events: auto;
+  background: rgba(22,18,20,0.92); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; max-height: calc(100vh - 24px); overflow-y: auto; backdrop-filter: blur(8px);
+}
+#metrics {
+  position: absolute; top: 12px; right: 12px; width: 280px; pointer-events: auto;
+  background: rgba(22,18,20,0.92); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; max-height: calc(100vh - 24px); overflow-y: auto; backdrop-filter: blur(8px);
+}
+
+.panel-title { font-size: 0.78rem; font-weight: 700; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.panel-section { margin-bottom: 12px; }
+.panel-section:last-child { margin-bottom: 0; }
+
+label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 3px; }
+select, .val-display { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 0.82rem; font-family: var(--font); }
+select { cursor: pointer; }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); height: 4px; -webkit-appearance: none; background: var(--surface2); border-radius: 4px; outline: none; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--surface); }
+input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--surface); }
+
+.slider-row { display: flex; justify-content: space-between; align-items: center; }
+.slider-row .val { font-size: 0.75rem; color: var(--accent2); font-weight: 600; min-width: 40px; text-align: right; }
+
+.preset-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 0.72rem; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+.preset-btn:hover { border-color: var(--accent); color: var(--accent2); }
+.preset-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+
+/* Chart area */
+#chart-area { display: flex; flex-direction: column; gap: 10px; max-width: 740px; margin: 0 auto; padding: 8px 0; }
+.chart-card { background: rgba(22,18,20,0.88); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.chart-card h3 { font-size: 0.8rem; color: var(--accent2); margin-bottom: 8px; font-weight: 600; }
+.chart-wrapper { position: relative; width: 100%; }
+.chart-wrapper.radar { height: 320px; }
+.chart-wrapper.line { height: 180px; }
+.chart-wrapper.bar { height: 160px; }
+.chart-wrapper.doughnut { height: 180px; }
+
+/* Metrics */
+.metric { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(42,34,40,0.5); font-size: 0.8rem; }
+.metric:last-child { border-bottom: none; }
+.metric .lbl { color: var(--muted); }
+.metric .val { color: var(--text); font-weight: 600; }
+.metric .val.good { color: var(--accent3); }
+.metric .val.warn { color: var(--accent2); }
+.metric .val.bad { color: var(--accent); }
+
+.panelist-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.panelist-chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 3px 8px; font-size: 0.7rem; cursor: pointer; transition: all 0.15s; }
+.panelist-chip:hover { border-color: var(--accent); }
+.panelist-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.attr-selector { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.attr-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 4px; padding: 3px 6px; font-size: 0.68rem; cursor: pointer; transition: all 0.15s; }
+.attr-btn:hover { color: var(--text); }
+.attr-btn.active { background: var(--accent2); color: var(--bg); border-color: var(--accent2); }
+
+.quality-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.q-outstanding { background: rgba(107,142,35,0.2); color: #8fac3a; border: 1px solid #6b8e23; }
+.q-verygood { background: rgba(201,160,96,0.2); color: #c9a060; border: 1px solid #c9a060; }
+.q-good { background: rgba(168,32,58,0.15); color: #d07080; border: 1px solid #a8203a; }
+.q-acceptable { background: rgba(122,110,102,0.15); color: #9a8e86; border: 1px solid #7a6e66; }
+
+#header-bar { text-align: center; padding: 8px 0 4px; }
+#header-bar h1 { font-size: 1.1rem; color: var(--text); }
+#header-bar h1 span { color: var(--accent); }
+#header-bar .subtitle { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+@media (max-width: 768px) {
+  html, body { overflow-y: auto; height: auto; }
+  #canvas-container {
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 280px;
+    max-height: none;
+    inset: auto !important;
+    z-index: 0;
+    padding: 6px;
+  }
+  canvas { width: 100% !important; height: 100% !important; }
+  #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+  #controls {
+    position: relative !important; top: auto !important; left: auto !important;
+    width: auto !important; max-height: none !important; margin: 6px 0;
+    border-radius: 8px; border-left: none; border-right: none;
+  }
+  #metrics {
+    position: relative !important; top: auto !important; right: auto !important;
+    width: auto !important; margin: 6px 0;
+    border-radius: 8px; border-left: none; border-right: none;
+  }
+  #chart-area { max-width: 100%; }
+  .chart-wrapper.radar { height: 260px; }
+  .chart-wrapper.line { height: 160px; }
+  .chart-wrapper.bar { height: 140px; }
+  .chart-wrapper.doughnut { height: 160px; }
+}
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <div id="header-bar">
+    <h1>🍷 Wine Tasting Panel — <span>Sensory Analysis Dashboard</span></h1>
+    <div class="subtitle">Trained panel evaluation · 8 assessors · multi-attribute scoring with consensus metrics</div>
+  </div>
+  <div id="chart-area">
+    <div class="chart-card">
+      <h3>Sensory Profile — Panel Average vs Selected Taster</h3>
+      <div class="chart-wrapper radar"><canvas id="radarChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Perception Evolution Over Tasting Time (0–30 min)</h3>
+      <div class="chart-wrapper line"><canvas id="lineChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Individual Panelist Scores — <span id="barAttrLabel">Aroma Intensity</span></h3>
+      <div class="attr-selector" id="attrSelector"></div>
+      <div class="chart-wrapper bar"><canvas id="barChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Quality Classification Distribution</h3>
+      <div class="chart-wrapper doughnut"><canvas id="doughnutChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div id="ui-layer">
+  <div id="controls">
+    <div class="panel-title">⚙ Tasting Parameters</div>
+    <div class="panel-section">
+      <label>Wine Type</label>
+      <select id="wineType">
+        <option value="cabernet">Cabernet Sauvignon</option>
+        <option value="pinot">Pinot Noir</option>
+        <option value="syrah">Syrah / Shiraz</option>
+        <option value="chardonnay">Chardonnay</option>
+        <option value="riesling">Riesling</option>
+      </select>
+    </div>
+    <div class="panel-section">
+      <label>Serving Temperature</label>
+      <div class="slider-row"><input type="range" id="temp" min="6" max="24" step="0.5" value="16"><span class="val" id="tempVal">16°C</span></div>
+    </div>
+    <div class="panel-section">
+      <label>Decanting Time</label>
+      <div class="slider-row"><input type="range" id="decant" min="0" max="180" step="5" value="30"><span class="val" id="decantVal">30 min</span></div>
+    </div>
+    <div class="panel-section">
+      <label>Glass Type</label>
+      <select id="glassType">
+        <option value="bordeaux">Bordeaux (tall, wide bowl)</option>
+        <option value="burgundy">Burgundy (wide, round)</option>
+        <option value="universal">Universal (balanced)</option>
+        <option value="iso">ISO (small, standard)</option>
+      </select>
+    </div>
+    <div class="panel-section">
+      <label>Wine Age</label>
+      <div class="slider-row"><input type="range" id="age" min="0" max="25" step="1" value="5"><span class="val" id="ageVal">5 yr</span></div>
+    </div>
+    <div class="panel-section">
+      <label>Tasting Time (in glass)</label>
+      <div class="slider-row"><input type="range" id="tasteTime" min="0" max="30" step="1" value="5"><span class="val" id="tasteTimeVal">5 min</span></div>
+    </div>
+    <div class="panel-section">
+      <label>Quick Presets</label>
+      <div class="preset-grid">
+        <button class="preset-btn" data-preset="young-red">Young Red</button>
+        <button class="preset-btn" data-preset="aged-red">Aged Red</button>
+        <button class="preset-btn" data-preset="white-chill">Chilled White</button>
+        <button class="preset-btn" data-preset="decanted">Decanted</button>
+      </div>
+    </div>
+  </div>
+  <div id="metrics">
+    <div class="panel-title">📊 Panel Metrics</div>
+    <div class="panel-section">
+      <div class="metric"><span class="lbl">Overall Score</span><span class="val" id="mOverall">—</span></div>
+      <div class="metric"><span class="lbl">Quality Grade</span><span class="val" id="mGrade">—</span></div>
+      <div class="metric"><span class="lbl">Panel Consensus (α)</span><span class="val" id="mConsensus">—</span></div>
+      <div class="metric"><span class="lbl">Score Range</span><span class="val" id="mRange">—</span></div>
+      <div class="metric"><span class="lbl">Std Deviation</span><span class="val" id="mStd">—</span></div>
+      <div class="metric"><span class="lbl">Dominant Trait</span><span class="val" id="mDominant">—</span></div>
+      <div class="metric"><span class="lbl">Weakest Trait</span><span class="val" id="mWeakest">—</span></div>
+      <div class="metric"><span class="lbl">Serving Optimal</span><span class="val" id="mOptimal">—</span></div>
+    </div>
+    <div class="panel-section">
+      <label style="margin-bottom:4px;">Highlight Taster</label>
+      <div class="panelist-list" id="panelistList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====== SENSORY MODEL ======
+const ATTRIBUTES = [
+  { key: 'aromaIntensity', name: 'Aroma Intensity', short: 'Aroma' },
+  { key: 'aromaQuality',   name: 'Aroma Quality',   short: 'A.Quality' },
+  { key: 'body',           name: 'Body / Weight',    short: 'Body' },
+  { key: 'acidity',        name: 'Acidity',           short: 'Acidity' },
+  { key: 'tannin',         name: 'Tannin Structure',  short: 'Tannin' },
+  { key: 'sweetness',      name: 'Sweetness',         short: 'Sweet' },
+  { key: 'alcohol',        name: 'Alcohol Heat',      short: 'Alcohol' },
+  { key: 'finish',         name: 'Finish Length',     short: 'Finish' },
+  { key: 'complexity',     name: 'Complexity',        short: 'Complex' },
+  { key: 'balance',        name: 'Balance',           short: 'Balance' },
+];
+
+const PANELISTS = [
+  { id: 0, name: 'A. Mercier', bias: { aromaIntensity: +0.3, body: +0.2, tannin: -0.1, complexity: +0.4 } },
+  { id: 1, name: 'B. Hoffman', bias: { acidity: +0.3, balance: +0.2, tannin: +0.1, alcohol: -0.2 } },
+  { id: 2, name: 'C. Dubois',  bias: { aromaQuality: +0.4, complexity: +0.3, finish: +0.2, body: -0.1 } },
+  { id: 3, name: 'D. Okafor',  bias: { body: +0.4, tannin: +0.3, alcohol: +0.2, sweetness: -0.1 } },
+  { id: 4, name: 'E. Rossi',   bias: { acidity: -0.2, sweetness: +0.3, body: +0.1, finish: +0.2 } },
+  { id: 5, name: 'F. Lindqvist',bias: { tannin: -0.3, astringency: -0.2, balance: +0.4, aromaIntensity: -0.1 } },
+  { id: 6, name: 'G. Yamamoto', bias: { aromaIntensity: +0.2, complexity: +0.2, balance: +0.3, body: -0.2 } },
+  { id: 7, name: 'H. Chen',    bias: { finish: +0.3, acidity: +0.2, complexity: +0.1, tannin: +0.1 } },
+];
+
+const WINE_PROFILES = {
+  cabernet:    { aromaIntensity: 7.5, aromaQuality: 7.0, body: 8.0, acidity: 6.5, tannin: 8.5, sweetness: 1.5, alcohol: 7.0, finish: 7.5, complexity: 7.0, balance: 6.5, optimalTemp: 17, color: '#722f37' },
+  pinot:       { aromaIntensity: 6.5, aromaQuality: 8.0, body: 5.5, acidity: 7.0, tannin: 4.5, sweetness: 1.0, alcohol: 6.0, finish: 7.0, complexity: 8.0, balance: 7.5, optimalTemp: 15, color: '#9b3349' },
+  syrah:       { aromaIntensity: 8.0, aromaQuality: 7.5, body: 8.5, acidity: 5.5, tannin: 8.0, sweetness: 2.0, alcohol: 7.5, finish: 8.0, complexity: 7.5, balance: 6.0, optimalTemp: 18, color: '#5a1a2a' },
+  chardonnay:  { aromaIntensity: 6.0, aromaQuality: 6.5, body: 7.0, acidity: 5.5, tannin: 1.0, sweetness: 3.0, alcohol: 6.5, finish: 6.0, complexity: 6.0, balance: 7.0, optimalTemp: 11, color: '#d4a843' },
+  riesling:    { aromaIntensity: 7.0, aromaQuality: 8.5, body: 4.5, acidity: 9.0, tannin: 0.5, sweetness: 5.0, alcohol: 5.0, finish: 8.0, complexity: 8.5, balance: 8.0, optimalTemp: 9, color: '#c9d443' },
+};
+
+const GLASS_FACTORS = {
+  bordeaux:  { aromaIntensity: 1.15, aromaQuality: 1.10, finish: 1.05, body: 1.05 },
+  burgundy:  { aromaIntensity: 1.20, aromaQuality: 1.15, complexity: 1.08, finish: 1.05 },
+  universal:  { aromaIntensity: 1.05, aromaQuality: 1.05, balance: 1.03 },
+  iso:       { aromaIntensity: 0.85, aromaQuality: 0.90, complexity: 0.90, finish: 0.90 },
+};
+
+// ====== STATE ======
+let params = {
+  wineType: 'cabernet',
+  temp: 16,
+  decant: 30,
+  glassType: 'bordeaux',
+  age: 5,
+  tasteTime: 5,
+};
+let selectedPanelist = -1; // -1 = none
+let selectedAttr = 'aromaIntensity';
+let charts = {};
+
+// ====== SENSORY COMPUTATION ======
+function computeBaseProfile(p) {
+  const base = WINE_PROFILES[p.wineType];
+  const profile = {};
+  for (const attr of ATTRIBUTES) {
+    profile[attr.key] = base[attr.key];
+  }
+
+  // Temperature effect (Arrhenius-like on aroma volatility)
+  const optimalT = base.optimalTemp;
+  const tempDelta = p.temp - optimalT;
+  // Aroma increases with temp but quality degrades if too warm
+  const tempFactor = Math.exp(tempDelta * 0.06);
+  profile.aromaIntensity = profile.aromaIntensity * tempFactor;
+  profile.aromaQuality = profile.aromaQuality * (1 - Math.max(0, tempDelta) * 0.04 + Math.max(0, -tempDelta) * 0.01);
+  // Alcohol heat increases with temp
+  profile.alcohol = profile.alcohol * (1 + tempDelta * 0.05);
+  // Acidity perception decreases at warmer temps
+  profile.acidity = profile.acidity * (1 - tempDelta * 0.02);
+
+  // Decanting effect: oxygen softens tannins, opens aromas, but extended decanting loses delicate aromas
+  const decantH = p.decant / 60; // hours
+  const tanninReduction = 1 - decantH * 0.15;
+  profile.tannin = profile.tannin * Math.max(0.5, tanninReduction);
+  const aromaOpen = Math.min(1.25, 1 + decantH * 0.20);
+  profile.aromaIntensity = profile.aromaIntensity * aromaOpen;
+  profile.aromaQuality = profile.aromaQuality * (1 + decantH * 0.08 - Math.max(0, decantH - 1.5) * 0.10);
+  profile.complexity = profile.complexity * (1 + decantH * 0.05 - Math.max(0, decantH - 2) * 0.08);
+
+  // Glass type effect
+  const glass = GLASS_FACTORS[p.glassType];
+  for (const [key, factor] of Object.entries(glass)) {
+    if (profile[key] !== undefined) {
+      profile[key] = profile[key] * factor;
+    }
+  }
+
+  // Wine age effect
+  const ageY = p.age;
+  // Tannins polymerize and soften with age
+  profile.tannin = profile.tannin * Math.max(0.4, 1 - ageY * 0.03);
+  // Aroma shifts from primary (fruit) to tertiary (complexity)
+  profile.aromaIntensity = profile.aromaIntensity * Math.max(0.5, 1 - ageY * 0.02);
+  profile.complexity = profile.complexity * (1 + ageY * 0.025);
+  profile.aromaQuality = profile.aromaQuality * (1 + ageY * 0.01);
+  // Acidity drops slightly with age
+  profile.acidity = profile.acidity * Math.max(0.7, 1 - ageY * 0.015);
+  // Body evolves
+  profile.body = profile.body * (1 + ageY * 0.005);
+  // Finish extends with integration
+  profile.finish = profile.finish * (1 + ageY * 0.015);
+  // Balance improves with age (integration)
+  profile.balance = profile.balance * (1 + ageY * 0.02);
+
+  // In-glass tasting time: aromas open up, then fade
+  const tt = p.tasteTime;
+  const timeAromaFactor = 1 + tt * 0.02 - Math.max(0, tt - 15) * 0.03;
+  profile.aromaIntensity = profile.aromaIntensity * timeAromaFactor;
+  profile.aromaQuality = profile.aromaQuality * (1 + tt * 0.01 - Math.max(0, tt - 20) * 0.02);
+
+  // Clamp all to [0, 10]
+  for (const attr of ATTRIBUTES) {
+    profile[attr.key] = Math.max(0, Math.min(10, profile[attr.key]));
+  }
+
+  return profile;
+}
+
+function computePanelistScores(profile, panelist) {
+  const scores = {};
+  for (const attr of ATTRIBUTES) {
+    const bias = panelist.bias[attr.key] || 0;
+    // Random noise seeded by panelist id + attr for stable results
+    const noise = (Math.sin(panelist.id * 7.13 + attr.key.charCodeAt(0) * 3.7) * 0.5);
+    scores[attr.key] = Math.max(0, Math.min(10, profile[attr.key] + bias + noise));
+  }
+  return scores;
+}
+
+function computeAllScores() {
+  const base = computeBaseProfile(params);
+  const allScores = PANELISTS.map(p => computePanelistScores(base, p));
+  const avg = {};
+  for (const attr of ATTRIBUTES) {
+    avg[attr.key] = allScores.reduce((s, sc) => s + sc[attr.key], 0) / allScores.length;
+  }
+  return { base, avg, allScores };
+}
+
+// Consensus: Cronbach's alpha approximation
+function computeConsensus(allScores, avg) {
+  const n = PANELISTS.length;
+  const k = ATTRIBUTES.length;
+  let totalVar = 0;
+  for (const attr of ATTRIBUTES) {
+    const mean = avg[attr.key];
+    const varAttr = allScores.reduce((s, sc) => s + Math.pow(sc[attr.key] - mean, 2), 0) / (n - 1);
+    totalVar += varAttr;
+  }
+  let grandMean = 0;
+  for (const attr of ATTRIBUTES) grandMean += avg[attr.key];
+  grandMean /= k;
+  let panelVar = 0;
+  for (const p of PANELISTS) {
+    let pMean = 0;
+    for (const attr of ATTRIBUTES) pMean += allScores[p.id][attr.key];
+    pMean /= k;
+    panelVar += Math.pow(pMean - grandMean, 2);
+  }
+  panelVar /= (n - 1);
+  const alpha = (k / (k - 1)) * (1 - totalVar / (totalVar + panelVar * k));
+  return Math.max(0, Math.min(1, isFinite(alpha) ? alpha : 0));
+}
+
+function computeOverallScore(avg) {
+  // Weighted score: balance and complexity weighted higher, sweetness lower (it's not "better" = sweeter)
+  const weights = { aromaIntensity: 0.8, aromaQuality: 1.2, body: 0.8, acidity: 1.0, tannin: 0.8, sweetness: 0.3, alcohol: 0.5, finish: 1.2, complexity: 1.3, balance: 1.3 };
+  let total = 0, wSum = 0;
+  for (const attr of ATTRIBUTES) {
+    const w = weights[attr.key] || 1;
+    total += avg[attr.key] * w;
+    wSum += w;
+  }
+  return total / wSum;
+}
+
+function getQualityGrade(score) {
+  if (score >= 8.0) return { label: 'Outstanding', class: 'q-outstanding', pct: 0 };
+  if (score >= 6.8) return { label: 'Very Good', class: 'q-verygood', pct: 0 };
+  if (score >= 5.5) return { label: 'Good', class: 'q-good', pct: 0 };
+  return { label: 'Acceptable', class: 'q-acceptable', pct: 0 };
+}
+
+function computeQualityDistribution(allScores) {
+  let outstanding = 0, veryGood = 0, good = 0, acceptable = 0;
+  for (const sc of allScores) {
+    let total = 0;
+    for (const attr of ATTRIBUTES) total += sc[attr.key];
+    const avg = total / ATTRIBUTES.length;
+    if (avg >= 8.0) outstanding++;
+    else if (avg >= 6.8) veryGood++;
+    else if (avg >= 5.5) good++;
+    else acceptable++;
+  }
+  return [outstanding, veryGood, good, acceptable];
+}
+
+// ====== CHART SETUP ======
+const chartColors = {
+  panel: 'rgba(201, 160, 96, 0.4)',
+  panelBorder: 'rgba(201, 160, 96, 0.9)',
+  selected: 'rgba(168, 32, 58, 0.3)',
+  selectedBorder: 'rgba(168, 32, 58, 0.95)',
+  line1: '#a8203a', line2: '#c9a060', line3: '#6b8e23', line4: '#5b8cb5',
+  barColors: ['#722f37','#9b3349','#5a1a2a','#c9a060','#6b8e23','#a8203a','#5b8cb5','#d4763a'],
+  doughnut: ['#6b8e23', '#c9a060', '#a8203a', '#7a6e66'],
+};
+
+Chart.defaults.color = '#7a6e66';
+Chart.defaults.font.family = "system-ui, sans-serif";
+Chart.defaults.font.size = 10;
+
+function initCharts() {
+  // Radar
+  charts.radar = new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: {
+      labels: ATTRIBUTES.map(a => a.short),
+      datasets: [
+        { label: 'Panel Average', data: [], backgroundColor: chartColors.panel, borderColor: chartColors.panelBorder, borderWidth: 2, pointRadius: 3, pointBackgroundColor: chartColors.panelBorder },
+        { label: 'Selected Taster', data: [], backgroundColor: chartColors.selected, borderColor: chartColors.selectedBorder, borderWidth: 2, pointRadius: 3, pointBackgroundColor: chartColors.selectedBorder, hidden: true },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { r: { min: 0, max: 10, ticks: { stepSize: 2, backdropColor: 'transparent', color: '#5a4e46' }, grid: { color: 'rgba(42,34,40,0.6)' }, angleLines: { color: 'rgba(42,34,40,0.6)' }, pointLabels: { color: '#9a8e86', font: { size: 10 } } } },
+      plugins: { legend: { labels: { color: '#d4c9be', font: { size: 10 }, boxWidth: 12 } } }
+    }
+  });
+
+  // Line chart: perception evolution over time
+  charts.line = new Chart(document.getElementById('lineChart'), {
+    type: 'line',
+    data: {
+      labels: Array.from({length: 16}, (_, i) => i * 2 + 'm'),
+      datasets: [
+        { label: 'Aroma Intensity', data: [], borderColor: chartColors.line1, backgroundColor: 'rgba(168,32,58,0.08)', borderWidth: 2.5, tension: 0.4, pointRadius: 2, pointBackgroundColor: chartColors.line1, fill: true },
+        { label: 'Aroma Quality', data: [], borderColor: chartColors.line2, backgroundColor: 'rgba(201,160,96,0.08)', borderWidth: 2.5, tension: 0.4, pointRadius: 2, pointBackgroundColor: chartColors.line2, fill: true },
+        { label: 'Complexity', data: [], borderColor: chartColors.line3, backgroundColor: 'rgba(107,142,35,0.08)', borderWidth: 2.5, tension: 0.4, pointRadius: 2, pointBackgroundColor: chartColors.line3, fill: true },
+        { label: 'Tannin (perceived)', data: [], borderColor: chartColors.line4, backgroundColor: 'transparent', borderWidth: 2, tension: 0.4, pointRadius: 2, pointBackgroundColor: chartColors.line4, borderDash: [4, 3] },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: 'rgba(42,34,40,0.4)' }, ticks: { color: '#5a4e46', font: { size: 9 } } },
+        y: { min: 0, max: 10, grid: { color: 'rgba(42,34,40,0.4)' }, ticks: { color: '#5a4e46', font: { size: 9 } } }
+      },
+      plugins: { legend: { labels: { color: '#d4c9be', font: { size: 9 }, boxWidth: 16 } } },
+      interaction: { intersect: false, mode: 'index' },
+      elements: { line: { borderWidth: 2.5 } }
+    }
+  });
+
+  // Bar chart: individual panelist scores for selected attribute
+  charts.bar = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: PANELISTS.map(p => p.name.split(' ')[1]),
+      datasets: [{ label: '', data: [], backgroundColor: chartColors.barColors, borderRadius: 4, borderSkipped: false }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#9a8e86', font: { size: 9 } } },
+        y: { min: 0, max: 10, grid: { color: 'rgba(42,34,40,0.4)' }, ticks: { color: '#5a4e46', font: { size: 9 } } }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  // Doughnut: quality distribution
+  charts.doughnut = new Chart(document.getElementById('doughnutChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Outstanding', 'Very Good', 'Good', 'Acceptable'],
+      datasets: [{ data: [0,0,0,0], backgroundColor: chartColors.doughnut, borderColor: '#161214', borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '55%',
+      plugins: { legend: { position: 'right', labels: { color: '#d4c9be', font: { size: 10 }, boxWidth: 12, padding: 8 } } }
+    }
+  });
+}
+
+// ====== UPDATE ======
+function computeTimeEvolution() {
+  const timePoints = 16;
+  const aromaInt = [], aromaQual = [], complexity = [], tanninP = [];
+  const baseParams = { ...params };
+  for (let i = 0; i < timePoints; i++) {
+    baseParams.tasteTime = i * 2;
+    const prof = computeBaseProfile(baseParams);
+    aromaInt.push(+prof.aromaIntensity.toFixed(2));
+    aromaQual.push(+prof.aromaQuality.toFixed(2));
+    complexity.push(+prof.complexity.toFixed(2));
+    tanninP.push(+prof.tannin.toFixed(2));
+  }
+  return { aromaInt, aromaQual, complexity, tanninP };
+}
+
+function updateAll() {
+  const { base, avg, allScores } = computeAllScores();
+
+  // Radar: average + selected
+  charts.radar.data.datasets[0].data = ATTRIBUTES.map(a => +avg[a.key].toFixed(2));
+  if (selectedPanelist >= 0) {
+    charts.radar.data.datasets[1].data = ATTRIBUTES.map(a => +allScores[selectedPanelist][a.key].toFixed(2));
+    charts.radar.data.datasets[1].hidden = false;
+  } else {
+    charts.radar.data.datasets[1].hidden = true;
+  }
+  charts.radar.update('none');
+
+  // Line chart: time evolution
+  const evo = computeTimeEvolution();
+  charts.line.data.datasets[0].data = evo.aromaInt;
+  charts.line.data.datasets[1].data = evo.aromaQual;
+  charts.line.data.datasets[2].data = evo.complexity;
+  charts.line.data.datasets[3].data = evo.tanninP;
+  charts.line.update('none');
+
+  // Bar chart: selected attribute
+  charts.bar.data.datasets[0].data = allScores.map(sc => +sc[selectedAttr].toFixed(2));
+  charts.bar.update('none');
+
+  // Doughnut
+  charts.doughnut.data.datasets[0].data = computeQualityDistribution(allScores);
+  charts.doughnut.update('none');
+
+  // Metrics
+  const overall = computeOverallScore(avg);
+  const grade = getQualityGrade(overall);
+  const consensus = computeConsensus(allScores, avg);
+
+  let maxScore = -1, minScore = 99, maxAttr = '', minAttr = '';
+  for (const attr of ATTRIBUTES) {
+    if (avg[attr.key] > maxScore) { maxScore = avg[attr.key]; maxAttr = attr.name; }
+    if (avg[attr.key] < minScore) { minScore = avg[attr.key]; minAttr = attr.name; }
+  }
+
+  const scoreVals = allScores.map(sc => {
+    let s = 0; for (const a of ATTRIBUTES) s += sc[a.key]; return s / ATTRIBUTES.length;
+  });
+  const range = Math.max(...scoreVals) - Math.min(...scoreVals);
+  const mean = scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length;
+  const std = Math.sqrt(scoreVals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / scoreVals.length);
+
+  const optimal = WINE_PROFILES[params.wineType].optimalTemp;
+  const tempDelta = params.temp - optimal;
+  let optimalStr;
+  if (Math.abs(tempDelta) <= 1) optimalStr = '<span class="val good">Optimal</span>';
+  else if (tempDelta > 1) optimalStr = '<span class="val warn">Too warm (' + (tempDelta > 0 ? '+' : '') + tempDelta.toFixed(1) + '°)</span>';
+  else optimalStr = '<span class="val warn">Too cold (' + tempDelta.toFixed(1) + '°)</span>';
+
+  document.getElementById('mOverall').textContent = overall.toFixed(2) + ' / 10';
+  document.getElementById('mGrade').innerHTML = '<span class="quality-badge ' + grade.class + '">' + grade.label + '</span>';
+  document.getElementById('mConsensus').textContent = (consensus * 100).toFixed(0) + '%';
+  document.getElementById('mConsensus').className = 'val ' + (consensus > 0.8 ? 'good' : consensus > 0.6 ? 'warn' : 'bad');
+  document.getElementById('mRange').textContent = range.toFixed(2);
+  document.getElementById('mStd').textContent = '±' + std.toFixed(2);
+  document.getElementById('mDominant').textContent = maxAttr;
+  document.getElementById('mWeakest').textContent = minAttr;
+  document.getElementById('mOptimal').innerHTML = optimalStr;
+}
+
+// ====== UI WIRING ======
+function setupUI() {
+  const sliderMap = [
+    { id: 'temp', param: 'temp', suffix: '°C', valId: 'tempVal' },
+    { id: 'decant', param: 'decant', suffix: ' min', valId: 'decantVal' },
+    { id: 'age', param: 'age', suffix: ' yr', valId: 'ageVal' },
+    { id: 'tasteTime', param: 'tasteTime', suffix: ' min', valId: 'tasteTimeVal' },
+  ];
+  sliderMap.forEach(s => {
+    const el = document.getElementById(s.id);
+    el.addEventListener('input', () => {
+      params[s.param] = parseFloat(el.value);
+      document.getElementById(s.valId).textContent = el.value + s.suffix;
+      updateAll();
+    });
+  });
+
+  document.getElementById('wineType').addEventListener('change', e => {
+    params.wineType = e.target.value;
+    updateAll();
+  });
+  document.getElementById('glassType').addEventListener('change', e => {
+    params.glassType = e.target.value;
+    updateAll();
+  });
+
+  // Attribute selector
+  const attrSel = document.getElementById('attrSelector');
+  ATTRIBUTES.forEach(attr => {
+    const btn = document.createElement('button');
+    btn.className = 'attr-btn' + (attr.key === selectedAttr ? ' active' : '');
+    btn.textContent = attr.short;
+    btn.addEventListener('click', () => {
+      selectedAttr = attr.key;
+      document.querySelectorAll('.attr-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('barAttrLabel').textContent = attr.name;
+      updateAll();
+    });
+    attrSel.appendChild(btn);
+  });
+
+  // Panelist chips
+  const pList = document.getElementById('panelistList');
+  PANELISTS.forEach(p => {
+    const chip = document.createElement('div');
+    chip.className = 'panelist-chip';
+    chip.textContent = p.name;
+    chip.addEventListener('click', () => {
+      if (selectedPanelist === p.id) {
+        selectedPanelist = -1;
+        chip.classList.remove('active');
+      } else {
+        selectedPanelist = p.id;
+        document.querySelectorAll('.panelist-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      }
+      updateAll();
+    });
+    pList.appendChild(chip);
+  });
+
+  // Presets
+  const presets = {
+    'young-red':    { wineType: 'cabernet', temp: 16, decant: 15, glassType: 'bordeaux', age: 2, tasteTime: 3 },
+    'aged-red':     { wineType: 'pinot', temp: 16, decant: 60, glassType: 'burgundy', age: 15, tasteTime: 8 },
+    'white-chill':  { wineType: 'chardonnay', temp: 11, decant: 0, glassType: 'universal', age: 3, tasteTime: 5 },
+    'decanted':     { wineType: 'syrah', temp: 18, decant: 120, glassType: 'bordeaux', age: 8, tasteTime: 10 },
+  };
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = presets[btn.dataset.preset];
+      params = { ...preset };
+      // Update UI
+      document.getElementById('wineType').value = params.wineType;
+      document.getElementById('glassType').value = params.glassType;
+      document.getElementById('temp').value = params.temp;
+      document.getElementById('tempVal').textContent = params.temp + '°C';
+      document.getElementById('decant').value = params.decant;
+      document.getElementById('decantVal').textContent = params.decant + ' min';
+      document.getElementById('age').value = params.age;
+      document.getElementById('ageVal').textContent = params.age + ' yr';
+      document.getElementById('tasteTime').value = params.tasteTime;
+      document.getElementById('tasteTimeVal').textContent = params.tasteTime + ' min';
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateAll();
+    });
+  });
+}
+
+// ====== INIT ======
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof Chart === 'undefined') {
+    document.getElementById('chart-area').innerHTML = '<div style="color:#a8203a;text-align:center;padding:2rem;">Chart.js failed to load. Check CDN connectivity.</div>';
+    return;
+  }
+  initCharts();
+  setupUI();
+  updateAll();
+});
+</script>
+</body>
+</html>
