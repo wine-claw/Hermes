@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Drip Irrigation Wetting Pattern Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f14;
+    --surface: #121820;
+    --surface2: #1a2230;
+    --border: #2a3540;
+    --text: #d4c8a8;
+    --muted: #8a8270;
+    --accent: #4a9cd8;
+    --accent2: #6abf6e;
+    --warn: #e0a040;
+    --danger: #d85050;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 15px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
+  }
+  .disclaimer {
+    background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060;
+    padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem;
+    font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container {
+    position: fixed; inset: 0; z-index: 0;
+  }
+  canvas { display: block; }
+
+  #ui-layer {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+  }
+
+  .panel {
+    background: rgba(18, 24, 32, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+  }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px;
+    width: 300px; max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    padding: 14px 16px;
+  }
+
+  #controls h2 {
+    font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--accent); margin-bottom: 10px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+
+  .ctrl-group { margin-bottom: 10px; }
+  .ctrl-group label {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.78rem; color: var(--muted); margin-bottom: 4px;
+  }
+  .ctrl-group label .val {
+    color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums;
+    font-size: 0.76rem;
+  }
+  .ctrl-group input[type="range"] {
+    width: 100%; height: 6px; -webkit-appearance: none;
+    background: var(--surface2); border-radius: 3px; outline: none;
+  }
+  .ctrl-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px;
+    background: var(--accent); border-radius: 50%; cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  .ctrl-group input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; background: var(--accent);
+    border-radius: 50%; cursor: pointer; border: 2px solid var(--bg);
+  }
+  .ctrl-group select {
+    width: 100%; padding: 5px 8px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); font-size: 0.78rem; cursor: pointer;
+  }
+
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .btn-row button {
+    flex: 1; min-width: 0; padding: 6px 4px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 5px; color: var(--text); font-size: 0.72rem;
+    cursor: pointer; transition: all 0.15s; touch-action: manipulation;
+  }
+  .btn-row button:hover { border-color: var(--accent); }
+  .btn-row button.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+
+  #metrics {
+    position: absolute; top: 12px; right: 12px;
+    width: 240px; padding: 14px 16px;
+  }
+
+  #metrics h2 {
+    font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--accent2); margin-bottom: 10px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 0; font-size: 0.76rem;
+  }
+  .metric-row .m-label { color: var(--muted); }
+  .metric-row .m-val {
+    color: var(--text); font-weight: 600;
+    font-variant-numeric: tabular-nums; font-size: 0.78rem;
+  }
+  .metric-row .m-val.good { color: var(--accent2); }
+  .metric-row .m-val.warn { color: var(--warn); }
+  .metric-row .m-val.danger { color: var(--danger); }
+
+  #sparkline-canvas {
+    width: 100%; height: 50px; margin-top: 8px;
+    border-radius: 5px; background: var(--surface2);
+  }
+
+  .status-badge {
+    display: inline-block; padding: 3px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-top: 8px;
+  }
+  .status-badge.optimal { background: rgba(106,191,110,0.2); color: var(--accent2); border: 1px solid rgba(106,191,110,0.3); }
+  .status-badge.warn { background: rgba(224,160,64,0.2); color: var(--warn); border: 1px solid rgba(224,160,64,0.3); }
+  .status-badge.danger { background: rgba(216,80,80,0.2); color: var(--danger); border: 1px solid rgba(216,80,80,0.3); }
+
+  #legend {
+    position: absolute; bottom: 12px; left: 12px;
+    padding: 10px 14px; pointer-events: auto;
+    font-size: 0.72rem; color: var(--muted);
+  }
+  #legend .legend-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  #legend .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  #play-controls {
+    position: absolute; bottom: 12px; right: 12px;
+    padding: 8px 12px; pointer-events: auto;
+    display: flex; gap: 8px; align-items: center;
+  }
+  #play-controls button {
+    padding: 5px 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); font-size: 0.76rem; cursor: pointer;
+    transition: all 0.15s; touch-action: manipulation;
+  }
+  #play-controls button:hover { border-color: var(--accent); }
+  #play-controls .speed-label { font-size: 0.72rem; color: var(--muted); }
+
+  .pixi-error {
+    padding: 2rem; text-align: center; color: var(--danger);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #legend, #play-controls {
+      position: relative !important; top: auto !important;
+      left: auto !important; right: auto !important; bottom: auto !important;
+      margin: 8px 12px;
+    }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"></div>
+<div id="ui-layer">
+  <div class="panel" id="controls">
+    <h2>🌿 Drip Irrigation Controls</h2>
+
+    <div class="ctrl-group">
+      <label>Soil Type</label>
+      <select id="soil-type">
+        <option value="sand">Sand — fast drainage, wide bulb</option>
+        <option value="loamy-sand">Loamy Sand</option>
+        <option value="sandy-loam" selected>Sandy Loam — balanced</option>
+        <option value="loam">Loam — moderate</option>
+        <option value="clay-loam">Clay Loam — slow, narrow bulb</option>
+        <option value="clay">Clay — very slow, tight bulb</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Emitter Flow Rate <span class="val" id="flow-val">2.0 L/h</span></label>
+      <input type="range" id="flow-rate" min="0.5" max="8" step="0.1" value="2.0">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Emitter Spacing <span class="val" id="spacing-val">40 cm</span></label>
+      <input type="range" id="emitter-spacing" min="20" max="100" step="5" value="40">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Root Depth <span class="val" id="root-val">60 cm</span></label>
+      <input type="range" id="root-depth" min="20" max="120" step="5" value="60">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Irrigation Duration <span class="val" id="dur-val">4.0 h</span></label>
+      <input type="range" id="duration" min="0.5" max="12" step="0.5" value="4.0">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Initial Soil Moisture <span class="val" id="init-val">30%</span></label>
+      <input type="range" id="init-moisture" min="5" max="70" step="1" value="30">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Vine Spacing <span class="val" id="vs-val">180 cm</span></label>
+      <input type="range" id="vine-spacing" min="100" max="300" step="10" value="180">
+    </div>
+
+    <div class="btn-row" style="margin-top:12px;">
+      <button data-preset="sandy">Sandy</button>
+      <button data-preset="loam">Loam</button>
+      <button data-preset="clay">Clay</button>
+    </div>
+    <div class="btn-row" style="margin-top:4px;">
+      <button data-preset="deficit">Deficit</button>
+      <button data-preset="standard">Standard</button>
+      <button data-preset="pulse">Pulse</button>
+    </div>
+  </div>
+
+  <div class="panel" id="metrics">
+    <h2>📊 Live Metrics</h2>
+    <div class="metric-row"><span class="m-label">Wetted Radius</span><span class="m-val" id="m-radius">— cm</span></div>
+    <div class="metric-row"><span class="m-label">Wetted Depth</span><span class="m-val" id="m-depth">— cm</span></div>
+    <div class="metric-row"><span class="m-label">Root Zone Moisture</span><span class="m-val" id="m-moisture">— %</span></div>
+    <div class="metric-row"><span class="m-label">Application Efficiency</span><span class="m-val" id="m-eff">— %</span></div>
+    <div class="metric-row"><span class="m-label">Deep Percolation</span><span class="m-val" id="m-perc">— %</span></div>
+    <div class="metric-row"><span class="m-label">Water Applied</span><span class="m-val" id="m-applied">— L</span></div>
+    <div class="metric-row"><span class="m-label">Sim Time</span><span class="m-val" id="m-time">0.0 h</span></div>
+    <canvas id="sparkline-canvas" width="208" height="50"></canvas>
+    <div id="status-badge" class="status-badge optimal">Optimal</div>
+  </div>
+
+  <div class="panel" id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4a9cd8;"></div>Water droplet</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a6a3a;"></div>Dry soil</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5a8a4a;"></div>Moist soil</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2a6a8a;"></div>Saturated</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8a7a5a;"></div>Roots</div>
+  </div>
+
+  <div class="panel" id="play-controls">
+    <button id="btn-play">⏸ Pause</button>
+    <button id="btn-reset">↻ Reset</button>
+    <span class="speed-label">Speed:</span>
+    <button id="btn-speed">1×</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ==================== SOIL PARAMETERS ====================
+  // Ks: saturated hydraulic conductivity (cm/h)
+  // theta_s: saturated water content (%)
+  // theta_fc: field capacity (%)
+  // theta_pwp: permanent wilting point (%)
+  // n: van Genuchten n (bulb shape — higher = wider, lower = deeper)
+  const SOILS = {
+    'sand':         { Ks: 30.0, theta_s: 43, theta_fc: 10, theta_pwp: 5,  n: 4.5, label: 'Sand' },
+    'loamy-sand':   { Ks: 15.0, theta_s: 41, theta_fc: 15, theta_pwp: 7,  n: 3.5, label: 'Loamy Sand' },
+    'sandy-loam':   { Ks: 6.0,  theta_s: 39, theta_fc: 22, theta_pwp: 10, n: 2.8, label: 'Sandy Loam' },
+    'loam':         { Ks: 2.5,  theta_s: 46, theta_fc: 30, theta_pwp: 14, n: 2.0, label: 'Loam' },
+    'clay-loam':    { Ks: 1.0,  theta_s: 48, theta_fc: 36, theta_pwp: 20, n: 1.4, label: 'Clay Loam' },
+    'clay':         { Ks: 0.5,  theta_s: 52, theta_fc: 42, theta_pwp: 28, n: 1.1, label: 'Clay' }
+  };
+
+  // ==================== STATE ====================
+  const P = {
+    soilType: 'sandy-loam',
+    flowRate: 2.0,      // L/h
+    emitterSpacing: 40,  // cm
+    rootDepth: 60,       // cm
+    duration: 4.0,       // h
+    initMoisture: 30,    // %
+    vineSpacing: 180     // cm
+  };
+
+  let simTime = 0;        // hours
+  let playing = true;
+  let speedMult = 1;
+  let moistureHistory = []; // for sparkline
+  let droplets = [];
+  let soilGrid = null;
+  let rootBranches = [];
+  let emitters = [];
+  let pixiApp = null;
+  let soilTexture = null;
+  let rootGraphics = null;
+  let dropletContainer = null;
+  let dripLineGfx = null;
+  let vineGfx = null;
+  let surfaceGfx = null;
+  let emitterGlowGfx = null;
+
+  // World dimensions (cm) — cross-section
+  const WORLD_W = 200;   // cm wide
+  const WORLD_H = 120;   // cm deep
+  const GRID_COLS = 100;
+  const GRID_ROWS = 60;
+  const CELL_W = WORLD_W / GRID_COLS;  // 2 cm
+  const CELL_H = WORLD_H / GRID_ROWS;  // 2 cm
+
+  // ==================== PIXI INIT ====================
+  function initPixi() {
+    const container = document.getElementById('canvas-container');
+    if (typeof PIXI === 'undefined') {
+      container.innerHTML = '<div class="pixi-error">Failed to load Pixi.js from CDN. The visualization cannot render.</div>';
+      return false;
+    }
+
+    pixiApp = new PIXI.Application({
+      background: 0x0a0f14,
+      antialias: true,
+      resizeTo: container,
+      resolution: Math.min(window.devicePixelRatio || 1, 2)
+    });
+    container.appendChild(pixiApp.view);
+
+    // Create layers
+    soilTexture = new PIXI.Graphics();
+    pixiApp.stage.addChild(soilTexture);
+
+    rootGraphics = new PIXI.Graphics();
+    pixiApp.stage.addChild(rootGraphics);
+
+    surfaceGfx = new PIXI.Graphics();
+    pixiApp.stage.addChild(surfaceGfx);
+
+    vineGfx = new PIXI.Graphics();
+    pixiApp.stage.addChild(vineGfx);
+
+    dripLineGfx = new PIXI.Graphics();
+    pixiApp.stage.addChild(dripLineGfx);
+
+    emitterGlowGfx = new PIXI.Graphics();
+    pixiApp.stage.addChild(emitterGlowGfx);
+
+    dropletContainer = new PIXI.Container();
+    pixiApp.stage.addChild(dropletContainer);
+
+    pixiApp.ticker.add(update);
+    return true;
+  }
+
+  // ==================== COORDINATE MAPPING ====================
+  function worldToScreen(wx, wy) {
+    const w = pixiApp.screen.width;
+    const h = pixiApp.screen.height;
+    const padding = 20;
+    const scaleX = (w - padding * 2) / WORLD_W;
+    const scaleY = (h - padding * 2) / WORLD_H;
+    const scale = Math.min(scaleX, scaleY);
+    const offsetX = (w - WORLD_W * scale) / 2;
+    const offsetY = (h - WORLD_H * scale) / 2;
+    return {
+      x: offsetX + wx * scale,
+      y: offsetY + wy * scale,
+      scale: scale
+    };
+  }
+
+  // ==================== SOIL GRID ====================
+  function initSoilGrid() {
+    const soil = SOILS[P.soilType];
+    soilGrid = [];
+    for (let r = 0; r < GRID_ROWS; r++) {
+      const row = [];
+      for (let c = 0; c < GRID_COLS; c++) {
+        row.push(P.initMoisture / 100 * soil.theta_s);
+      }
+      soilGrid.push(row);
+    }
+    moistureHistory = [];
+  }
+
+  // ==================== EMITTERS ====================
+  function initEmitters() {
+    emitters = [];
+    // Place emitters across the surface based on spacing
+    const numEmitters = Math.floor(WORLD_W / P.emitterSpacing);
+    const startX = (WORLD_W - (numEmitters - 1) * P.emitterSpacing) / 2;
+    for (let i = 0; i < numEmitters; i++) {
+      emitters.push({
+        x: startX + i * P.emitterSpacing,
+        y: 0,
+        accVolume: 0,  // accumulated volume (L)
+        lastDropletT: 0
+      });
+    }
+  }
+
+  // ==================== ROOT SYSTEM ====================
+  function initRoots() {
+    rootBranches = [];
+    // Main tap root from center vine
+    const vineX = WORLD_W / 2;
+    const surfaceY = 0;
+
+    // Main tap root going straight down
+    rootBranches.push({
+      x1: vineX, y1: surfaceY,
+      x2: vineX, y2: P.rootDepth,
+      width: 3.5,
+      type: 'tap'
+    });
+
+    // Lateral roots branching off
+    const numLaterals = 8;
+    for (let i = 0; i < numLaterals; i++) {
+      const depthFrac = (i + 1) / (numLaterals + 1);
+      const branchY = depthFrac * P.rootDepth;
+      const spreadMax = 25 + depthFrac * 15;
+      const side = i % 2 === 0 ? 1 : -1;
+      const spread = spreadMax * (0.7 + Math.random() * 0.3);
+      const endY = branchY + 5 + Math.random() * 10;
+      rootBranches.push({
+        x1: vineX, y1: branchY,
+        x2: vineX + side * spread, y2: endY,
+        width: 2.0 - depthFrac * 0.8,
+        type: 'lateral'
+      });
+    }
+
+    // Fine feeder roots (smaller branches)
+    const numFeeders = 16;
+    for (let i = 0; i < numFeeders; i++) {
+      const depthFrac = 0.2 + Math.random() * 0.7;
+      const branchY = depthFrac * P.rootDepth;
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const startX = vineX + side * (5 + Math.random() * 20);
+      const spread = 8 + Math.random() * 12;
+      const endY = branchY + 3 + Math.random() * 8;
+      rootBranches.push({
+        x1: startX, y1: branchY,
+        x2: startX + side * spread, y2: endY,
+        width: 0.8,
+        type: 'feeder'
+      });
+    }
+  }
+
+  // ==================== SOIL MOISTURE SIMULATION ====================
+  // Simplified 2D Richards-like flow: each cell exchanges moisture with neighbors
+  // based on hydraulic conductivity (scaled by soil type) and moisture gradient.
+  function simulateSoil(dt) {
+    if (!soilGrid) return;
+    var soil = SOILS[P.soilType];
+    var theta_s = soil.theta_s;
+    var theta_fc = soil.theta_fc;
+    var theta_pwp = soil.theta_pwp;
+    var Ks = soil.Ks;
+    var n = soil.n;
+    var dtH = dt / 3600.0;  // convert sim seconds to hours
+
+    // Source: emitters add water at surface cells
+    var sourceLph = P.flowRate;  // L/h per emitter
+    for (var ei = 0; ei < emitters.length; ei++) {
+      var em = emitters[ei];
+      em.accVolume += sourceLph * dtH;
+      var cellX = Math.round(em.x / CELL_W);
+      var volCC = sourceLph * dtH * 1000;
+      var waterCm = volCC / (CELL_W * 100);  // cm of water over cell area
+      var addPct = waterCm / CELL_H * 100;   // convert to volumetric %
+      for (var dc = -1; dc <= 1; dc++) {
+        var c = cellX + dc;
+        if (c >= 0 && c < GRID_COLS) {
+          soilGrid[0][c] = Math.min(theta_s, soilGrid[0][c] + addPct * (1 - Math.abs(dc) * 0.3));
+        }
+      }
+    }
+
+    // --- Gravity drainage: excess above FC drains downward ---
+    // K_eff = Ks * S^2 (simplified, S = effective saturation 0-1)
+    // Drainage flux = K_eff * dtH (cm of water per hour)
+    var newGrid = soilGrid.map(function(row) { return row.slice(); });
+    var gravScale = 1.5;
+
+    for (var r = 0; r < GRID_ROWS; r++) {
+      for (var c = 0; c < GRID_COLS; c++) {
+        var theta = soilGrid[r][c];
+        var excess = theta - theta_fc;
+        if (excess <= 0.001) continue;
+        var sat = theta / theta_s;
+        var kEff = Ks * sat * sat;  // cm/h
+        var drainAmount = Math.min(excess, gravScale * kEff * dtH / CELL_H * 100);
+        if (drainAmount > 0.0001) {
+          newGrid[r][c] -= drainAmount;
+          if (r < GRID_ROWS - 1) {
+            newGrid[r + 1][c] = Math.min(theta_s, newGrid[r + 1][c] + drainAmount);
+          }
+        }
+      }
+    }
+    soilGrid = newGrid;
+
+    // --- Lateral diffusion: moisture gradients equalize ---
+    // Higher n (sand) = more lateral spread relative to vertical
+    var diffGrid = soilGrid.map(function(row) { return row.slice(); });
+    var diffScale = 0.15 * n;
+
+    for (var r2 = 0; r2 < GRID_ROWS; r2++) {
+      for (var c2 = 0; c2 < GRID_COLS; c2++) {
+        var th = soilGrid[r2][c2];
+        for (var dir = 0; dir < 2; dir++) {
+          var dcv = dir === 0 ? -1 : 1;
+          var nc2 = c2 + dcv;
+          if (nc2 >= 0 && nc2 < GRID_COLS) {
+            var thN = soilGrid[r2][nc2];
+            var diff = (th - thN) * diffScale * dtH * Ks * 0.3;
+            if (Math.abs(diff) > 0.0001) {
+              var transfer = Math.min(Math.abs(diff), th * 0.2);
+              if (diff > 0) {
+                diffGrid[r2][c2] -= transfer;
+                diffGrid[r2][nc2] = Math.min(theta_s, diffGrid[r2][nc2] + transfer);
+              }
+            }
+          }
+        }
+      }
+    }
+    soilGrid = diffGrid;
+
+    // Track root-zone average moisture for sparkline
+    if (Math.floor(simTime * 4) > moistureHistory.length) {
+      moistureHistory.push(getRootZoneMoisturePct());
+      if (moistureHistory.length > 120) moistureHistory.shift();
+    }
+  }
+
+  // ==================== METRICS ====================
+  function getRootZoneMoisture() {
+    if (!soilGrid) return 0;
+    var soil = SOILS[P.soilType];
+    var rootRowEnd = Math.min(GRID_ROWS, Math.ceil(P.rootDepth / CELL_H));
+    var centerCol = Math.floor(GRID_COLS / 2);
+    var rootSpreadCols = Math.ceil(30 / CELL_W);
+    var sum = 0, count = 0;
+    for (var r = 0; r < rootRowEnd; r++) {
+      for (var c = centerCol - rootSpreadCols; c <= centerCol + rootSpreadCols; c++) {
+        if (c >= 0 && c < GRID_COLS) {
+          sum += soilGrid[r][c];
+          count++;
+        }
+      }
+    }
+    return count > 0 ? (sum / count) : 0;
+  }
+
+  function getRootZoneMoisturePct() {
+    var theta = getRootZoneMoisture();
+    var soil = SOILS[P.soilType];
+    // Convert theta (volumetric %) to relative moisture: 0% at PWP, 100% at saturation
+    var range = soil.theta_s - soil.theta_pwp;
+    if (range <= 0) return 0;
+    return Math.max(0, Math.min(100, ((theta - soil.theta_pwp) / range) * 100));
+  }
+
+  function getWettedRadius() {
+    if (!soilGrid) return 0;
+    const soil = SOILS[P.soilType];
+    const threshold = (P.initMoisture + 5) / 100 * soil.theta_s;
+    const centerCol = Math.floor(GRID_COLS / 2);
+    let maxRadius = 0;
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        if (soilGrid[r][c] > threshold) {
+          const dx = Math.abs(c - centerCol) * CELL_W;
+          if (dx > maxRadius) maxRadius = dx;
+        }
+      }
+    }
+    return maxRadius;
+  }
+
+  function getWettedDepth() {
+    if (!soilGrid) return 0;
+    const soil = SOILS[P.soilType];
+    const threshold = (P.initMoisture + 5) / 100 * soil.theta_s;
+    let maxDepth = 0;
+    const centerCol = Math.floor(GRID_COLS / 2);
+    for (let r = 0; r < GRID_ROWS; r++) {
+      if (soilGrid[r][centerCol] > threshold) {
+        maxDepth = (r + 1) * CELL_H;
+      }
+    }
+    return maxDepth;
+  }
+
+  function getDeepPercolation() {
+    if (!soilGrid) return 0;
+    const soil = SOILS[P.soilType];
+    const rootRow = Math.floor(P.rootDepth / CELL_H);
+    let belowRoot = 0, totalWater = 0;
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const excess = soilGrid[r][c] - (P.initMoisture / 100 * soil.theta_s);
+        if (excess > 0) {
+          totalWater += excess;
+          if (r > rootRow) belowRoot += excess;
+        }
+      }
+    }
+    return totalWater > 0 ? (belowRoot / totalWater * 100) : 0;
+  }
+
+  function getWaterApplied() {
+    let total = 0;
+    for (const em of emitters) {
+      total += em.accVolume;
+    }
+    return total;
+  }
+
+  function getApplicationEfficiency() {
+    const perc = getDeepPercolation();
+    return Math.max(0, 100 - perc);
+  }
+
+  function updateMetrics() {
+    var soil = SOILS[P.soilType];
+    var rootMoistTheta = getRootZoneMoisture();
+    var rootMoistPct = getRootZoneMoisturePct();
+    var radius = getWettedRadius();
+    var depth = getWettedDepth();
+    var perc = getDeepPercolation();
+    var applied = getWaterApplied();
+    var eff = getApplicationEfficiency();
+
+    document.getElementById('m-radius').textContent = radius.toFixed(0) + ' cm';
+    document.getElementById('m-depth').textContent = depth.toFixed(0) + ' cm';
+    document.getElementById('m-moisture').textContent = rootMoistPct.toFixed(1) + ' %';
+    document.getElementById('m-eff').textContent = eff.toFixed(0) + ' %';
+    document.getElementById('m-perc').textContent = perc.toFixed(0) + ' %';
+    document.getElementById('m-applied').textContent = applied.toFixed(1) + ' L';
+    document.getElementById('m-time').textContent = simTime.toFixed(1) + ' h';
+
+    var moistEl = document.getElementById('m-moisture');
+    if (rootMoistPct < 15) {
+      moistEl.className = 'm-val danger';
+    } else if (rootMoistPct < 40) {
+      moistEl.className = 'm-val warn';
+    } else if (rootMoistPct > 85) {
+      moistEl.className = 'm-val warn';
+    } else {
+      moistEl.className = 'm-val good';
+    }
+
+    var effEl = document.getElementById('m-eff');
+    if (eff > 80) effEl.className = 'm-val good';
+    else if (eff > 60) effEl.className = 'm-val warn';
+    else effEl.className = 'm-val danger';
+
+    var percEl = document.getElementById('m-perc');
+    if (perc < 10) percEl.className = 'm-val good';
+    else if (perc < 25) percEl.className = 'm-val warn';
+    else percEl.className = 'm-val danger';
+
+    var badge = document.getElementById('status-badge');
+    if (perc > 25 || rootMoistPct < 15) {
+      badge.textContent = 'At Risk';
+      badge.className = 'status-badge danger';
+    } else if (perc > 10 || rootMoistPct < 40 || rootMoistPct > 85) {
+      badge.textContent = 'Monitor';
+      badge.className = 'status-badge warn';
+    } else {
+      badge.textContent = 'Optimal';
+      badge.className = 'status-badge optimal';
+    }
+
+    drawSparkline();
+  }
+
+  // ==================== SPARKLINE ====================
+  function drawSparkline() {
+    var canvas = document.getElementById('sparkline-canvas');
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width;
+    var h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (moistureHistory.length < 2) return;
+
+    // Use percentage (0-100) for Y axis
+    var fcY = h - 0.65 * h;   // FC ~ 65% relative
+    var pwpY = h - 0.15 * h;  // PWP ~ 15% relative
+
+    ctx.strokeStyle = 'rgba(106,191,110,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, fcY); ctx.lineTo(w, fcY); ctx.stroke();
+    ctx.strokeStyle = 'rgba(216,80,80,0.3)';
+    ctx.beginPath(); ctx.moveTo(0, pwpY); ctx.lineTo(w, pwpY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = '#4a9cd8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (var i = 0; i < moistureHistory.length; i++) {
+      var x = (i / (moistureHistory.length - 1)) * w;
+      var pct = moistureHistory[i]; // already 0-100
+      var y = h - (pct / 100) * h;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.lineTo(w, h);
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(74,156,216,0.15)';
+    ctx.fill();
+  }
+
+  // ==================== RENDERING ====================
+  function moistureToColor(theta, theta_s) {
+    var sat = theta / theta_s;
+    if (sat < 0.25) {
+      var t = sat / 0.25;
+      return [
+        Math.round(58 + t * (80 - 58)),
+        Math.round(52 + t * (90 - 52)),
+        Math.round(38 + t * (50 - 38))
+      ];
+    } else if (sat < 0.55) {
+      var t2 = (sat - 0.25) / 0.30;
+      return [
+        Math.round(80 + t2 * (60 - 80)),
+        Math.round(90 + t2 * (130 - 90)),
+        Math.round(50 + t2 * (90 - 50))
+      ];
+    } else if (sat < 0.8) {
+      var t3 = (sat - 0.55) / 0.25;
+      return [
+        Math.round(60 + t3 * (40 - 60)),
+        Math.round(130 + t3 * (120 - 130)),
+        Math.round(90 + t3 * (150 - 90))
+      ];
+    } else {
+      var t4 = (sat - 0.8) / 0.20;
+      return [
+        Math.round(40 + t4 * (30 - 40)),
+        Math.round(120 + t4 * (100 - 120)),
+        Math.round(150 + t4 * (180 - 150))
+      ];
+    }
+  }
+
+  function renderSoil() {
+    if (!soilGrid || !soilTexture) return;
+    const soil = SOILS[P.soilType];
+    const theta_s = soil.theta_s;
+    const s = worldToScreen(0, 0);
+    const scale = s.scale;
+
+    soilTexture.clear();
+
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const theta = soilGrid[r][c];
+        const [cr, cg, cb] = moistureToColor(theta, theta_s);
+        const color = (cr << 16) | (cg << 8) | cb;
+        const sx = s.x + c * CELL_W * scale;
+        const sy = s.y + r * CELL_H * scale;
+        const cellW = Math.ceil(CELL_W * scale) + 1;
+        const cellH = Math.ceil(CELL_H * scale) + 1;
+        soilTexture.beginFill(color);
+        soilTexture.drawRect(sx, sy, cellW, cellH);
+        soilTexture.endFill();
+      }
+    }
+  }
+
+  function renderRoots() {
+    if (!rootGraphics) return;
+    rootGraphics.clear();
+
+    for (const branch of rootBranches) {
+      const p1 = worldToScreen(branch.x1, branch.y1);
+      const p2 = worldToScreen(branch.x2, branch.y2);
+      const w = branch.width * p1.scale;
+
+      if (branch.type === 'tap') {
+        rootGraphics.lineStyle(w, 0x6a5a3a, 1);
+      } else if (branch.type === 'lateral') {
+        rootGraphics.lineStyle(w, 0x7a6a4a, 0.9);
+      } else {
+        rootGraphics.lineStyle(w, 0x8a7a5a, 0.7);
+      }
+      rootGraphics.moveTo(p1.x, p1.y);
+      rootGraphics.lineTo(p2.x, p2.y);
+    }
+  }
+
+  function renderSurface() {
+    if (!surfaceGfx) return;
+    surfaceGfx.clear();
+    const left = worldToScreen(0, 0);
+    const right = worldToScreen(WORLD_W, 0);
+    const scale = left.scale;
+
+    // Ground surface line
+    surfaceGfx.lineStyle(2, 0x4a4a3a, 1);
+    surfaceGfx.moveTo(left.x - 10, left.y);
+    surfaceGfx.lineTo(right.x + 10, right.y);
+
+    // Sky gradient above
+    surfaceGfx.beginFill(0x1a2a3a, 0.3);
+    surfaceGfx.drawRect(left.x - 10, left.y - 100, (right.x + 10) - (left.x - 10), 100);
+    surfaceGfx.endFill();
+  }
+
+  function renderVine() {
+    if (!vineGfx) return;
+    vineGfx.clear();
+    const vineX = WORLD_W / 2;
+    const base = worldToScreen(vineX, 0);
+    const scale = base.scale;
+
+    // Trunk
+    vineGfx.lineStyle(4 * scale, 0x5a4a2a, 1);
+    vineGfx.moveTo(base.x, base.y);
+    vineGfx.lineTo(base.x, base.y - 30 * scale);
+
+    // Canopy (circle of leaves)
+    vineGfx.beginFill(0x3a6a2a, 0.8);
+    vineGfx.drawCircle(base.x, base.y - 35 * scale, 12 * scale);
+    vineGfx.endFill();
+    vineGfx.beginFill(0x4a7a3a, 0.6);
+    vineGfx.drawCircle(base.x - 5 * scale, base.y - 38 * scale, 8 * scale);
+    vineGfx.endFill();
+    vineGfx.beginFill(0x4a7a3a, 0.6);
+    vineGfx.drawCircle(base.x + 5 * scale, base.y - 36 * scale, 7 * scale);
+    vineGfx.endFill();
+
+    // Vine spacing markers
+    const vsLeft = worldToScreen(vineX - P.vineSpacing / 2, 0);
+    const vsRight = worldToScreen(vineX + P.vineSpacing / 2, 0);
+    vineGfx.lineStyle(1, 0x4a4a3a, 0.4);
+    vineGfx.moveTo(vsLeft.x, vsLeft.y - 5);
+    vineGfx.lineTo(vsLeft.x, vsLeft.y + 5);
+    vineGfx.moveTo(vsRight.x, vsRight.y - 5);
+    vineGfx.lineTo(vsRight.x, vsRight.y + 5);
+  }
+
+  function renderDripLine() {
+    if (!dripLineGfx) return;
+    dripLineGfx.clear();
+    const left = worldToScreen(0, -2);
+    const right = worldToScreen(WORLD_W, -2);
+    const scale = left.scale;
+
+    // Drip line (pipe along surface)
+    dripLineGfx.lineStyle(3 * scale, 0x2a3a4a, 1);
+    dripLineGfx.moveTo(left.x, left.y);
+    dripLineGfx.lineTo(right.x, right.y);
+
+    // Highlight on pipe
+    dripLineGfx.lineStyle(1 * scale, 0x4a6a8a, 0.5);
+    dripLineGfx.moveTo(left.x, left.y - 1 * scale);
+    dripLineGfx.lineTo(right.x, right.y - 1 * scale);
+  }
+
+  function renderEmitterGlows() {
+    if (!emitterGlowGfx) return;
+    emitterGlowGfx.clear();
+    const scale = worldToScreen(0, 0).scale;
+
+    for (const em of emitters) {
+      const p = worldToScreen(em.x, 0);
+      // Pulsing glow at emitter
+      const pulse = 0.5 + 0.5 * Math.sin(simTime * 8 + em.x * 0.1);
+      const glowR = (4 + pulse * 3) * scale;
+
+      emitterGlowGfx.beginFill(0x4a9cd8, 0.3 + pulse * 0.2);
+      emitterGlowGfx.drawCircle(p.x, p.y, glowR);
+      emitterGlowGfx.endFill();
+
+      emitterGlowGfx.beginFill(0x6abfff, 0.8);
+      emitterGlowGfx.drawCircle(p.x, p.y, 2 * scale);
+      emitterGlowGfx.endFill();
+    }
+  }
+
+  // ==================== DROPLETS ====================
+  function spawnDroplets(dtSec) {
+    if (!playing) return;
+    if (simTime >= P.duration) return;
+
+    for (var i = 0; i < emitters.length; i++) {
+      var em = emitters[i];
+      em.lastDropletT += dtSec;
+      var interval = 0.15 / (P.flowRate / 2.0);
+      while (em.lastDropletT > interval) {
+        em.lastDropletT -= interval;
+        droplets.push({
+          wx: em.x + (Math.random() - 0.5) * 1.5,
+          wy: -2,
+          vy: 80 + Math.random() * 40,
+          life: 0,
+          maxLife: 0.4 + Math.random() * 0.2,
+          gfx: null
+        });
+      }
+    }
+  }
+
+  function updateDroplets(dtSec) {
+    var toRemove = [];
+
+    for (var i = 0; i < droplets.length; i++) {
+      var d = droplets[i];
+      d.wy += d.vy * dtSec;
+      d.life += dtSec;
+
+      if (d.wy >= 0) {
+        toRemove.push(i);
+        continue;
+      }
+
+      if (d.life > d.maxLife) {
+        toRemove.push(i);
+        continue;
+      }
+
+      if (!d.gfx) {
+        d.gfx = new PIXI.Graphics();
+        dropletContainer.addChild(d.gfx);
+      }
+      var p = worldToScreen(d.wx, d.wy);
+      var scale = p.scale;
+      d.gfx.clear();
+      var alpha = 1 - (d.life / d.maxLife) * 0.4;
+      var r = Math.max(1.5, 2.5 * scale);
+      d.gfx.beginFill(0x6abfff, alpha * 0.9);
+      d.gfx.drawCircle(p.x, p.y, r);
+      d.gfx.endFill();
+
+      d.gfx.lineStyle(1.5 * scale, 0x4a9cd8, alpha * 0.4);
+      d.gfx.moveTo(p.x, p.y);
+      d.gfx.lineTo(p.x, p.y + 5 * scale);
+    }
+
+    for (var j = toRemove.length - 1; j >= 0; j--) {
+      var d2 = droplets[toRemove[j]];
+      if (d2.gfx) {
+        dropletContainer.removeChild(d2.gfx);
+        d2.gfx.destroy();
+      }
+      droplets.splice(toRemove[j], 1);
+    }
+
+    if (droplets.length > 200) {
+      var excess = droplets.length - 200;
+      for (var k = 0; k < excess; k++) {
+        var d3 = droplets[0];
+        if (d3.gfx) {
+          dropletContainer.removeChild(d3.gfx);
+          d3.gfx.destroy();
+        }
+        droplets.shift();
+      }
+    }
+  }
+
+  // ==================== MAIN UPDATE LOOP ====================
+  let lastMetricsUpdate = 0;
+  let soilRenderCounter = 0;
+
+  function update(dt) {
+    // dt is in seconds (PIXI ticker)
+    // Sim time advances at speedMult * 60x real time (1 real sec = 1 sim min at 1x)
+    var simDtSec = dt * speedMult * 60;  // sim seconds per frame
+
+    if (playing && simTime < P.duration) {
+      simTime += simDtSec / 3600;  // convert to hours
+      if (simTime > P.duration) simTime = P.duration;
+
+      simulateSoil(simDtSec);
+      spawnDroplets(simDtSec);
+    }
+
+    updateDroplets(dt * speedMult);
+
+    // Render soil every few frames for performance
+    soilRenderCounter++;
+    if (soilRenderCounter >= 3) {
+      soilRenderCounter = 0;
+      renderSoil();
+    }
+
+    renderRoots();
+    renderSurface();
+    renderVine();
+    renderDripLine();
+    renderEmitterGlows();
+
+    // Update metrics ~4 times per second
+    lastMetricsUpdate += dt;
+    if (lastMetricsUpdate > 0.25) {
+      lastMetricsUpdate = 0;
+      updateMetrics();
+    }
+  }
+
+  // ==================== RESET ====================
+  function resetSim() {
+    simTime = 0;
+    moistureHistory = [];
+    // Clear droplets
+    for (const d of droplets) {
+      if (d.gfx) {
+        dropletContainer.removeChild(d.gfx);
+        d.gfx.destroy();
+      }
+    }
+    droplets = [];
+    initSoilGrid();
+    initEmitters();
+    initRoots();
+    updateMetrics();
+  }
+
+  // ==================== UI WIRING ====================
+  function wireControls() {
+    const soilSel = document.getElementById('soil-type');
+    soilSel.addEventListener('change', () => {
+      P.soilType = soilSel.value;
+      resetSim();
+    });
+
+    function wireSlider(id, key, suffix, transform) {
+      const el = document.getElementById(id);
+      const valEl = document.getElementById(id.replace(/-rate|-spacing|-depth|-duration|-moisture|-spacing/, '-val') ||
+        id.replace('flow', 'flow').replace('emitter', 'spacing').replace('root', 'root')
+          .replace('duration', 'dur').replace('init', 'init').replace('vine', 'vs'));
+      el.addEventListener('input', () => {
+        const v = parseFloat(el.value);
+        P[key] = transform ? transform(v) : v;
+        if (valEl) {
+          valEl.textContent = v.toFixed(key === 'flowRate' ? 1 : 0) + suffix;
+        }
+      });
+      el.addEventListener('change', () => {
+        if (key === 'rootDepth' || key === 'emitterSpacing' || key === 'vineSpacing') {
+          initEmitters();
+          initRoots();
+          resetSim();
+        }
+      });
+    }
+
+    const flowEl = document.getElementById('flow-rate');
+    const flowVal = document.getElementById('flow-val');
+    flowEl.addEventListener('input', () => {
+      P.flowRate = parseFloat(flowEl.value);
+      flowVal.textContent = P.flowRate.toFixed(1) + ' L/h';
+    });
+
+    const spacingEl = document.getElementById('emitter-spacing');
+    const spacingVal = document.getElementById('spacing-val');
+    spacingEl.addEventListener('input', () => {
+      P.emitterSpacing = parseFloat(spacingEl.value);
+      spacingVal.textContent = P.emitterSpacing.toFixed(0) + ' cm';
+    });
+    spacingEl.addEventListener('change', () => { initEmitters(); resetSim(); });
+
+    const rootEl = document.getElementById('root-depth');
+    const rootVal = document.getElementById('root-val');
+    rootEl.addEventListener('input', () => {
+      P.rootDepth = parseFloat(rootEl.value);
+      rootVal.textContent = P.rootDepth.toFixed(0) + ' cm';
+    });
+    rootEl.addEventListener('change', () => { initRoots(); resetSim(); });
+
+    const durEl = document.getElementById('duration');
+    const durVal = document.getElementById('dur-val');
+    durEl.addEventListener('input', () => {
+      P.duration = parseFloat(durEl.value);
+      durVal.textContent = P.duration.toFixed(1) + ' h';
+    });
+
+    const initEl = document.getElementById('init-moisture');
+    const initVal = document.getElementById('init-val');
+    initEl.addEventListener('input', () => {
+      P.initMoisture = parseFloat(initEl.value);
+      initVal.textContent = P.initMoisture.toFixed(0) + '%';
+    });
+    initEl.addEventListener('change', () => { resetSim(); });
+
+    const vsEl = document.getElementById('vine-spacing');
+    const vsVal = document.getElementById('vs-val');
+    vsEl.addEventListener('input', () => {
+      P.vineSpacing = parseFloat(vsEl.value);
+      vsVal.textContent = P.vineSpacing.toFixed(0) + ' cm';
+    });
+
+    // Play/pause
+    const playBtn = document.getElementById('btn-play');
+    playBtn.addEventListener('click', () => {
+      playing = !playing;
+      playBtn.textContent = playing ? '⏸ Pause' : '▶ Play';
+    });
+
+    // Reset
+    document.getElementById('btn-reset').addEventListener('click', resetSim);
+
+    // Speed
+    const speedBtn = document.getElementById('btn-speed');
+    const speeds = [1, 2, 4, 8];
+    let speedIdx = 0;
+    speedBtn.addEventListener('click', () => {
+      speedIdx = (speedIdx + 1) % speeds.length;
+      speedMult = speeds[speedIdx];
+      speedBtn.textContent = speedMult + '×';
+    });
+
+    // Presets
+    const presetButtons = document.querySelectorAll('[data-preset]');
+    presetButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const preset = btn.dataset.preset;
+        applyPreset(preset);
+        presetButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
+
+  function applyPreset(name) {
+    const presets = {
+      'sandy':    { soilType: 'sand',        flowRate: 4.0, emitterSpacing: 30, rootDepth: 80, duration: 3.0, initMoisture: 15, vineSpacing: 180 },
+      'loam':     { soilType: 'loam',        flowRate: 2.0, emitterSpacing: 40, rootDepth: 60, duration: 4.0, initMoisture: 30, vineSpacing: 180 },
+      'clay':     { soilType: 'clay',        flowRate: 1.0, emitterSpacing: 50, rootDepth: 50, duration: 6.0, initMoisture: 40, vineSpacing: 180 },
+      'deficit':  { soilType: 'sandy-loam',  flowRate: 1.5, emitterSpacing: 40, rootDepth: 70, duration: 2.0, initMoisture: 20, vineSpacing: 180 },
+      'standard': { soilType: 'sandy-loam',  flowRate: 2.0, emitterSpacing: 40, rootDepth: 60, duration: 4.0, initMoisture: 30, vineSpacing: 180 },
+      'pulse':    { soilType: 'loam',        flowRate: 3.0, emitterSpacing: 35, rootDepth: 55, duration: 5.0, initMoisture: 25, vineSpacing: 200 }
+    };
+    const p = presets[name];
+    if (!p) return;
+    Object.assign(P, p);
+
+    // Update UI
+    document.getElementById('soil-type').value = P.soilType;
+    document.getElementById('flow-rate').value = P.flowRate;
+    document.getElementById('flow-val').textContent = P.flowRate.toFixed(1) + ' L/h';
+    document.getElementById('emitter-spacing').value = P.emitterSpacing;
+    document.getElementById('spacing-val').textContent = P.emitterSpacing.toFixed(0) + ' cm';
+    document.getElementById('root-depth').value = P.rootDepth;
+    document.getElementById('root-val').textContent = P.rootDepth.toFixed(0) + ' cm';
+    document.getElementById('duration').value = P.duration;
+    document.getElementById('dur-val').textContent = P.duration.toFixed(1) + ' h';
+    document.getElementById('init-moisture').value = P.initMoisture;
+    document.getElementById('init-val').textContent = P.initMoisture.toFixed(0) + '%';
+    document.getElementById('vine-spacing').value = P.vineSpacing;
+    document.getElementById('vs-val').textContent = P.vineSpacing.toFixed(0) + ' cm';
+
+    resetSim();
+  }
+
+  // ==================== RESIZE ====================
+  window.addEventListener('resize', () => {
+    if (pixiApp) pixiApp.resize();
+  });
+
+  // ==================== INIT ====================
+  function init() {
+    if (!initPixi()) return;
+    initSoilGrid();
+    initEmitters();
+    initRoots();
+    wireControls();
+    updateMetrics();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
