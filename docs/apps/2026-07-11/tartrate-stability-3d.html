@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Wine Tartrate Stability — 3D Surface Explorer</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  :root{
+    --bg:#0a0810;--surface:#151020;--border:#2a2040;--text:#e0d4c8;--muted:#8a7a8e;
+    --accent:#c9a060;--accent2:#8b2a4a;--stable:#3a8a5a;--unstable:#c0392b;--marginal:#e8a030;
+  }
+  html{font-size:15px}
+  body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.55;overflow:hidden;height:100vh}
+
+  .disclaimer{background:#1a1015;border-bottom:1px solid #3a2530;color:#c9a060;padding:.7rem 1rem;text-align:center;font-size:.82rem;font-family:system-ui,sans-serif;position:sticky;top:0;z-index:100}
+  .disclaimer strong{font-weight:600}
+
+  /* Canvas / Plotly container */
+  #canvas-container{position:fixed;inset:0;z-index:0}
+  #plot-3d{width:100%;height:100%}
+  #plot-2d{width:100%;height:100%;display:none}
+
+  /* UI layer */
+  #ui-layer{position:absolute;inset:0;pointer-events:none;z-index:10}
+
+  /* Control panel */
+  #controls{position:absolute;top:12px;left:12px;width:290px;max-height:calc(100vh - 40px);overflow-y:auto;
+    background:rgba(18,12,28,.88);border:1px solid var(--border);border-radius:12px;padding:14px;
+    pointer-events:auto;backdrop-filter:blur(8px);font-size:.85rem;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+  #controls::-webkit-scrollbar{width:5px}
+  #controls::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  #controls h2{font-size:.92rem;color:var(--accent);margin-bottom:2px;font-weight:700}
+  #controls .subtitle{color:var(--muted);font-size:.72rem;margin-bottom:10px}
+
+  .ctrl-group{margin-bottom:9px}
+  .ctrl-group label{display:flex;justify-content:space-between;font-size:.78rem;color:var(--text);margin-bottom:2px}
+  .ctrl-group label .val{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+  .ctrl-group input[type=range]{
+    width:100%;height:18px;-webkit-appearance:none;background:transparent;cursor:pointer}
+  .ctrl-group input[type=range]::-webkit-slider-runnable-track{
+    height:4px;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:2px}
+  .ctrl-group input[type=range]::-moz-range-track{
+    height:4px;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:2px}
+  .ctrl-group input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;
+    margin-top:-5px;cursor:grab;box-shadow:0 0 6px rgba(201,160,96,.4)}
+  .ctrl-group input[type=range]::-moz-range-thumb{
+    width:14px;height:14px;background:var(--accent);border:none;border-radius:50%;cursor:grab}
+
+  .section-hr{border:none;border-top:1px solid var(--border);margin:10px 0 8px}
+
+  /* Z-axis selector */
+  #z-select{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:5px 8px;font-size:.8rem;cursor:pointer;outline:none}
+  #z-select:focus{border-color:var(--accent)}
+
+  /* View toggle */
+  .toggle-group{display:flex;gap:4px;margin-top:4px}
+  .toggle-btn{flex:1;padding:5px 0;font-size:.76rem;background:var(--surface);color:var(--muted);
+    border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .15s;text-align:center}
+  .toggle-btn.active{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+  .toggle-btn:hover:not(.active){color:var(--text);border-color:var(--accent)}
+
+  /* Presets */
+  .preset-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+  .preset-btn{padding:4px 10px;font-size:.72rem;background:var(--surface);color:var(--muted);
+    border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .15s}
+  .preset-btn:hover{color:var(--accent);border-color:var(--accent)}
+  .preset-btn.active{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+
+  /* Metrics panel */
+  #metrics{position:absolute;top:12px;right:12px;width:240px;
+    background:rgba(18,12,28,.88);border:1px solid var(--border);border-radius:12px;padding:14px;
+    pointer-events:auto;backdrop-filter:blur(8px);font-size:.85rem;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+  #metrics h3{font-size:.82rem;color:var(--accent);margin-bottom:8px;font-weight:700}
+  .metric-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;
+    border-bottom:1px solid rgba(42,32,64,.5)}
+  .metric-row:last-child{border-bottom:none}
+  .metric-label{font-size:.74rem;color:var(--muted)}
+  .metric-val{font-size:.82rem;font-weight:600;font-variant-numeric:tabular-nums}
+  .status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72rem;font-weight:700}
+  .status-stable{background:rgba(58,138,90,.25);color:#5acc7a;border:1px solid #3a8a5a}
+  .status-unstable{background:rgba(192,57,43,.25);color:#ff6b5a;border:1px solid #c0392b}
+  .status-marginal{background:rgba(232,160,48,.25);color:#f0b840;border:1px solid #e8a030}
+
+  .ref-line{font-size:.7rem;color:var(--muted);margin-top:8px;line-height:1.4}
+
+  /* Mobile layout */
+  @media (max-width:768px){
+    html,body{overflow-y:auto;height:auto}
+    #canvas-container{
+      position:relative!important;width:100%!important;height:44vh!important;
+      min-height:280px;max-height:420px;inset:auto!important;z-index:0
+    }
+    #plot-3d,#plot-2d{width:100%!important;height:100%!important}
+    #ui-layer{position:relative!important;inset:auto!important;pointer-events:auto}
+    #controls{
+      position:relative!important;top:auto!important;left:auto!important;
+      width:auto!important;max-height:none!important;margin:0;
+      border-radius:0;border-left:none;border-right:none;backdrop-filter:none
+    }
+    #metrics{
+      position:relative!important;top:auto!important;right:auto!important;
+      width:auto!important;margin:0;border-radius:0;border-left:none;border-right:none;
+      backdrop-filter:none
+    }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1015; border-bottom: 1px solid #3a2530; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <div id="plot-3d"></div>
+  <div id="plot-2d"></div>
+</div>
+
+<div id="ui-layer">
+  <div id="controls">
+    <h2>🍷 Tartrate Stability 3D Explorer</h2>
+    <div class="subtitle">Potassium Bitartrate (KHT) cold stability modeling</div>
+
+    <div class="ctrl-group">
+      <label>Z-Axis Response <select id="z-select" style="width:100%;margin-top:3px;background:#151020;color:#e0d4c8;border:1px solid #2a2040;border-radius:6px;padding:4px 6px;font-size:.8rem;outline:none">
+        <option value="si">Stability Index (CP/Ksp)</option>
+        <option value="kht">KHT Precipitate (mg/L)</option>
+        <option value="ht">HT⁻ Fraction (%)</option>
+        <option value="cp">Concentration Product (mmol²/L²)</option>
+      </select></label>
+    </div>
+
+    <div class="section-hr"></div>
+
+    <div class="ctrl-group">
+      <label>Tartaric Acid <span class="val" id="ta-val">2.5 g/L</span></label>
+      <input type="range" id="ta-slider" min="0.5" max="6.0" step="0.1" value="2.5">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Wine pH <span class="val" id="ph-val">3.50</span></label>
+      <input type="range" id="ph-slider" min="2.8" max="4.2" step="0.01" value="3.50">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Ethanol <span class="val" id="etoh-val">13.0%</span></label>
+      <input type="range" id="etoh-slider" min="0" max="18" step="0.1" value="13.0">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Calcium (Ca²⁺) <span class="val" id="ca-val">60 mg/L</span></label>
+      <input type="range" id="ca-slider" min="0" max="200" step="5" value="60">
+    </div>
+
+    <div class="ctrl-group">
+      <label>Cellar Temperature <span class="val" id="cellar-val">18°C</span></label>
+      <input type="range" id="cellar-slider" min="0" max="30" step="0.5" value="18">
+    </div>
+
+    <div class="section-hr"></div>
+
+    <div class="ctrl-group">
+      <label style="margin-bottom:3px">View Mode</label>
+      <div class="toggle-group">
+        <div class="toggle-btn active" data-view="3d" onclick="switchView('3d')">3D Surface</div>
+        <div class="toggle-btn" data-view="2d" onclick="switchView('2d')">2D Heatmap</div>
+      </div>
+    </div>
+
+    <div class="section-hr"></div>
+
+    <label style="font-size:.78rem;color:var(--text);margin-bottom:3px;display:block">Wine Presets</label>
+    <div class="preset-row">
+      <div class="preset-btn active" data-preset="white" onclick="applyPreset('white')">White</div>
+      <div class="preset-btn" data-preset="red" onclick="applyPreset('red')">Red</div>
+      <div class="preset-btn" data-preset="sparkling" onclick="applyPreset('sparkling')">Sparkling</div>
+      <div class="preset-btn" data-preset="rose" onclick="applyPreset('rose')">Rosé</div>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <h3>📊 Stability Analysis</h3>
+    <div class="metric-row">
+      <span class="metric-label">Status (cellar T)</span>
+      <span class="status-badge status-stable" id="m-status">Stable</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">SI at cellar temp</span>
+      <span class="metric-val" id="m-si-cellar">0.85</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">SI at -4°C (cold test)</span>
+      <span class="metric-val" id="m-si-cold">3.20</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">KHT deposit (eq.) at -4°C</span>
+      <span class="metric-val" id="m-kht">142 mg/L</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Cold stab. threshold</span>
+      <span class="metric-val" id="m-threshold">8.5°C</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">HT⁻ fraction</span>
+      <span class="metric-val" id="m-ht-frac">67.5%</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">K⁺ at default</span>
+      <span class="metric-val" id="m-k-default">1000 mg/L</span>
+    </div>
+    <div class="ref-line" id="m-note">
+      SI &gt; 1 = supersaturated (unstable). Cold stabilization should target SI ≈ 1 at bottling temperature.
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ─── Chemistry Model (all calculations in mmol/L) ──────
+  // Tartaric acid: H2T ⇌ H⁺ + HT⁻ (pKa1=3.04) | HT⁻ ⇌ H⁺ + T²⁻ (pKa2=4.37)
+  var Ka1 = Math.pow(10, -3.04);
+  var Ka2 = Math.pow(10, -4.37);
+  var MW_K = 39.1;      // K⁺   g/mol → mg/mmol
+  var MW_HT = 149.09;   // HT⁻  g/mol → mg/mmol
+  var MW_TA = 150.09;   // H2T  g/mol → mg/mmol
+  var MW_KHT = 188.27;  // KHT  g/mol → mg/mmol
+  var MW_CA = 40.08;    // Ca²⁺ g/mol → mg/mmol
+
+  // Empirical wine-adjusted KHT Ksp(T) in (mmol/L)²
+  // Calibrated so typical wines show supersaturation at <10°C and stability >20°C
+  // Pure-water Ksp(0°C)≈386, wine effective Ksp is ~4× lower due to matrix effects
+  function Ksp(T) {
+    return 100 * Math.exp(0.06 * T);
+  }
+
+  // Ethanol increases KHT solubility (~0.8% per 1% EtOH)
+  function KspWine(T, etoh) {
+    return Ksp(T) * (1 + 0.008 * etoh);
+  }
+
+  // α_HT = fraction of total tartaric acid as HT⁻ at given pH
+  function alphaHT(pH) {
+    var H = Math.pow(10, -pH);
+    var D = H*H + H * Ka1 + Ka1 * Ka2;
+    return H * Ka1 / D;
+  }
+
+  // Effective tartaric acid (mmol/L) after Ca-tartrate precipitation removes some
+  function effectiveTartaric_mmol(ta_gL, ca_mgL) {
+    var ta_mmol = ta_gL * 1000 / MW_TA;
+    var ca_mmol = ca_mgL / MW_CA;
+    var removed = Math.min(ca_mmol * 0.35, ta_mmol * 0.2);
+    return Math.max(0.1, ta_mmol - removed);
+  }
+
+  // Concentration product CP = [K⁺] × [HT⁻] in (mmol/L)²
+  function concentrationProduct_mmol(K_mgL, ta_gL, pH, ca_mgL) {
+    var ta_mmol = effectiveTartaric_mmol(ta_gL, ca_mgL);
+    var ht_mmol = ta_mmol * alphaHT(pH);
+    var k_mmol = K_mgL / MW_K;
+    return k_mmol * ht_mmol;
+  }
+
+  // Stability Index = CP / Ksp (dimensionless)
+  function stabilityIndex(K_mgL, T, ta_gL, pH, etoh, ca_mgL) {
+    var cp = concentrationProduct_mmol(K_mgL, ta_gL, pH, ca_mgL);
+    var ksp = KspWine(T, etoh) * (1 + 0.00015 * ca_mgL);
+    return cp / ksp;
+  }
+
+  // KHT precipitate to reach equilibrium (mg/L as KHT)
+  // Solves (K₀-x)(HT₀-x) = Ksp in mmol/L, then converts to mg/L KHT
+  function khtPrecipitate(K_mgL, T, ta_gL, pH, etoh, ca_mgL) {
+    var ta_mmol = effectiveTartaric_mmol(ta_gL, ca_mgL);
+    var ht_mmol = ta_mmol * alphaHT(pH);
+    var k_mmol = K_mgL / MW_K;
+    var ksp = KspWine(T, etoh) * (1 + 0.00015 * ca_mgL);
+    var cp = k_mmol * ht_mmol;
+    if (cp <= ksp) return 0;
+    var sum = k_mmol + ht_mmol;
+    var diff = k_mmol - ht_mmol;
+    var x = (sum - Math.sqrt(diff * diff + 4 * ksp)) / 2;
+    return Math.max(0, x * MW_KHT); // mg/L KHT
+  }
+
+  // ─── Parameters ────────────────────────────────────────
+  var P = {
+    ta: 2.5, pH: 3.50, etoh: 13.0, ca: 60, cellar: 18,
+    zVar: 'si', view: '3d'
+  };
+
+  // Surface grid: Temperature (0-30°C) × K⁺ (200-3000 mg/L)
+  var T_MIN = 0, T_MAX = 30, T_STEPS = 36;
+  var K_MIN = 200, K_MAX = 3000, K_STEPS = 35;
+
+  var T_AXIS = [];
+  var K_AXIS = [];
+  for (var i = 0; i < T_STEPS; i++) T_AXIS.push(+(T_MIN + (T_MAX - T_MIN) * i / (T_STEPS - 1)).toFixed(1));
+  for (var j = 0; j < K_STEPS; j++) K_AXIS.push(+(K_MIN + (K_MAX - K_MIN) * j / (K_STEPS - 1)).toFixed(0));
+
+  // ─── Color scale ───────────────────────────────────────
+  var STABILITY_COLORS = [
+    [0,   '#2a4a6a'],  // deep blue (very stable)
+    [0.3, '#3a8a5a'],  // green (stable)
+    [0.5, '#8a8a3a'],  // yellow-green
+    [0.65,'#e8a030'],  // amber (marginal)
+    [0.8, '#c05030'],  // orange-red
+    [1.0, '#8b1a1a']   // deep red (very unstable)
+  ];
+
+  var KHT_COLORS = [
+    [0,   '#1a2a1a'],
+    [0.2, '#3a8a5a'],
+    [0.5, '#e8a030'],
+    [0.8, '#c05030'],
+    [1.0, '#8b1a1a']
+  ];
+
+  var HT_COLORS = [
+    [0,   '#2a1a4a'],
+    [0.3, '#4a3a8a'],
+    [0.6, '#8a6a3a'],
+    [1.0, '#e8a030']
+  ];
+
+  // ─── Compute Z matrix ──────────────────────────────────
+  function computeZ() {
+    var z = [];
+    var zMin = Infinity, zMax = -Infinity;
+    for (var i = 0; i < T_STEPS; i++) {
+      var row = [];
+      for (var j = 0; j < K_STEPS; j++) {
+        var T = T_AXIS[i];
+        var K = K_AXIS[j];
+        var val;
+        if (P.zVar === 'si') {
+          val = stabilityIndex(K, T, P.ta, P.pH, P.etoh, P.ca);
+        } else if (P.zVar === 'kht') {
+          val = khtPrecipitate(K, T, P.ta, P.pH, P.etoh, P.ca);
+        } else if (P.zVar === 'ht') {
+          val = alphaHT(P.pH) * 100;
+        } else if (P.zVar === 'cp') {
+          val = concentrationProduct_mmol(K, P.ta, P.pH, P.ca);
+        }
+        if (P.zVar === 'si') val = Math.min(val, 15); // clamp for display
+        if (P.zVar === 'kht') val = Math.min(val, 500);
+        row.push(+val.toFixed(3));
+        if (val < zMin) zMin = val;
+        if (val > zMax) zMax = val;
+      }
+      z.push(row);
+    }
+    return { z: z, zMin: zMin, zMax: zMax };
+  }
+
+  // ─── Plotly Layout ─────────────────────────────────────
+  function getLayout(view) {
+    var zLabel = ({
+      si: 'Stability Index (CP/Ksp)',
+      kht: 'KHT Precipitate (mg/L)',
+      ht: 'HT⁻ Fraction (%)',
+      cp: 'Concentration Product (mmol²/L²)',
+    })[P.zVar];
+
+    if (view === '3d') {
+      return {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#c0b0a0', size: 10, family: 'system-ui,sans-serif' },
+        scene: {
+          xaxis: { title: { text: 'K⁺ (mg/L)', font: { size: 10 } }, gridcolor: '#2a2040', zerolinecolor: '#2a2040', backgroundcolor: 'rgba(10,8,16,0.3)' },
+          yaxis: { title: { text: 'Temperature (°C)', font: { size: 10 } }, gridcolor: '#2a2040', zerolinecolor: '#2a2040', backgroundcolor: 'rgba(10,8,16,0.3)' },
+          zaxis: { title: { text: zLabel, font: { size: 10 } }, gridcolor: '#2a2040', zerolinecolor: '#2a2040', backgroundcolor: 'rgba(10,8,16,0.3)' },
+          camera: { eye: { x: 1.6, y: -1.5, z: 0.9 } },
+          aspectratio: { x: 1, y: 1, z: 0.75 },
+          bgcolor: 'rgba(0,0,0,0)'
+        },
+        margin: { l: 0, r: 0, t: 0, b: 0 },
+        showlegend: false
+      };
+    } else {
+      return {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#c0b0a0', size: 10, family: 'system-ui,sans-serif' },
+        xaxis: { title: 'Temperature (°C)', gridcolor: '#2a2040', zerolinecolor: '#2a2040', ticks: '#6a5a6e' },
+        yaxis: { title: 'K⁺ (mg/L)', gridcolor: '#2a2040', zerolinecolor: '#2a2040', ticks: '#6a5a6e' },
+        margin: { l: 50, r: 50, t: 10, b: 40 },
+        coloraxis: {
+          cmin: 0,
+          cmax: P.zVar === 'si' ? 5 : (P.zVar === 'kht' ? 300 : (P.zVar === 'ht' ? 100 : 20)),
+          colorscale: P.zVar === 'si' ? STABILITY_COLORS : (P.zVar === 'kht' ? KHT_COLORS : HT_COLORS),
+          colorbar: { title: { text: zLabel, font: { size: 9, color: '#c0b0a0' } }, tickfont: { size: 8, color: '#8a7a8e' }, thickness: 12, len: 0.7 }
+        }
+      };
+    }
+  }
+
+  function getTrace(view, data) {
+    if (view === '3d') {
+      return {
+        type: 'surface',
+        x: K_AXIS,
+        y: T_AXIS,
+        z: data.z,
+        colorscale: P.zVar === 'si' ? STABILITY_COLORS : (P.zVar === 'kht' ? KHT_COLORS : HT_COLORS),
+        cmin: 0,
+        cmax: P.zVar === 'si' ? 5 : (P.zVar === 'kht' ? 300 : (P.zVar === 'ht' ? 100 : 20)),
+        showscale: false,
+        contours: {
+          z: {
+            show: true, usecolormap: true,
+            highlightcolor: '#ff6b5a', project: { z: true },
+            start: P.zVar === 'si' ? 1 : 0,
+            end: P.zVar === 'si' ? 1 : 1,
+            size: P.zVar === 'si' ? 0.001 : 1
+          }
+        },
+        opacity: 0.92,
+        hovertemplate: 'K⁺: %{x} mg/L<br>T: %{y}°C<br>' + (P.zVar === 'si' ? 'SI: %{z:.2f}' : 'Value: %{z:.1f}') + '<extra></extra>'
+      };
+    } else {
+      return {
+        type: 'heatmap',
+        x: T_AXIS,
+        y: K_AXIS,
+        z: data.z,
+        colorscale: P.zVar === 'si' ? STABILITY_COLORS : (P.zVar === 'kht' ? KHT_COLORS : HT_COLORS),
+        coloraxis: 'coloraxis',
+        hovertemplate: 'T: %{x}°C<br>K⁺: %{y} mg/L<br>Value: %{z:.2f}<extra></extra>',
+        transpose: true
+      };
+    }
+  }
+
+  // ─── Render ────────────────────────────────────────────
+  var renderTimer = null;
+
+  function render() {
+    var data = computeZ();
+    var layout = getLayout(P.view);
+    var trace = getTrace(P.view, data);
+
+    var targetDiv = P.view === '3d' ? 'plot-3d' : 'plot-2d';
+    Plotly.react(targetDiv, [trace], layout, {
+      responsive: true,
+      displayModeBar: false
+    });
+    updateMetrics();
+  }
+
+  function onParamChange() {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(render, 150);
+  }
+
+  // ─── Metrics ───────────────────────────────────────────
+  function updateMetrics() {
+    var K_def = 1000; // default K+ for metrics
+    var siCellar = stabilityIndex(K_def, P.cellar, P.ta, P.pH, P.etoh, P.ca);
+    var siCold = stabilityIndex(K_def, -4, P.ta, P.pH, P.etoh, P.ca);
+    var kht = khtPrecipitate(K_def, -4, P.ta, P.pH, P.etoh, P.ca);
+    var htFrac = alphaHT(P.pH) * 100;
+
+    // Find cold stabilization threshold: temperature where SI ≈ 1
+    var threshold = '—';
+    for (var t = 0; t <= 30; t += 0.1) {
+      if (stabilityIndex(K_def, t, P.ta, P.pH, P.etoh, P.ca) <= 1.0) {
+        threshold = t.toFixed(1) + '°C';
+        break;
+      }
+    }
+    if (threshold === '—') threshold = '>30°C';
+
+    document.getElementById('m-si-cellar').textContent = siCellar.toFixed(2);
+    document.getElementById('m-si-cold').textContent = siCold.toFixed(2);
+    document.getElementById('m-kht').textContent = kht.toFixed(0) + ' mg/L';
+    document.getElementById('m-threshold').textContent = threshold;
+    document.getElementById('m-ht-frac').textContent = htFrac.toFixed(1) + '%';
+
+    var statusEl = document.getElementById('m-status');
+    if (siCellar < 0.85) {
+      statusEl.textContent = 'Stable';
+      statusEl.className = 'status-badge status-stable';
+    } else if (siCellar < 1.15) {
+      statusEl.textContent = 'Marginal';
+      statusEl.className = 'status-badge status-marginal';
+    } else {
+      statusEl.textContent = 'Unstable';
+      statusEl.className = 'status-badge status-unstable';
+    }
+
+    // Update note
+    var note = document.getElementById('m-note');
+    if (siCellar > 1.0) {
+      note.textContent = '⚠ Wine is supersaturated at cellar temperature. KHT precipitation likely without cold stabilization.';
+    } else if (siCold > 1.0) {
+      note.textContent = 'Wine is stable at cellar temp but will precipitate KHT at cold temperatures. Cold stabilization recommended before bottling.';
+    } else {
+      note.textContent = '✓ Wine is stable even at -4°C. No cold stabilization needed.';
+    }
+  }
+
+  // ─── View Switch ───────────────────────────────────────
+  window.switchView = function(view) {
+    P.view = view;
+    document.querySelectorAll('.toggle-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.view === view);
+    });
+    document.getElementById('plot-3d').style.display = view === '3d' ? 'block' : 'none';
+    document.getElementById('plot-2d').style.display = view === '2d' ? 'block' : 'none';
+    render();
+  };
+
+  // ─── Presets ───────────────────────────────────────────
+  var PRESETS = {
+    white:   { ta: 2.5, pH: 3.35, etoh: 12.5, ca: 45,  cellar: 15 },
+    red:     { ta: 2.0, pH: 3.65, etoh: 14.0, ca: 70,  cellar: 18 },
+    sparkling:{ ta: 3.0, pH: 3.15, etoh: 12.0, ca: 80,  cellar: 14 },
+    rose:    { ta: 2.2, pH: 3.45, etoh: 12.5, ca: 55,  cellar: 16 }
+  };
+
+  window.applyPreset = function(name) {
+    var ps = PRESETS[name];
+    if (!ps) return;
+    P.ta = ps.ta; P.pH = ps.pH; P.etoh = ps.etoh; P.ca = ps.ca; P.cellar = ps.cellar;
+    document.getElementById('ta-slider').value = ps.ta;
+    document.getElementById('ph-slider').value = ps.pH;
+    document.getElementById('etoh-slider').value = ps.etoh;
+    document.getElementById('ca-slider').value = ps.ca;
+    document.getElementById('cellar-slider').value = ps.cellar;
+    updateSliderLabels();
+    document.querySelectorAll('.preset-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.preset === name);
+    });
+    onParamChange();
+  };
+
+  // ─── Slider Wiring ─────────────────────────────────────
+  function updateSliderLabels() {
+    document.getElementById('ta-val').textContent = (+P.ta).toFixed(1) + ' g/L';
+    document.getElementById('ph-val').textContent = (+P.pH).toFixed(2);
+    document.getElementById('etoh-val').textContent = (+P.etoh).toFixed(1) + '%';
+    document.getElementById('ca-val').textContent = P.ca + ' mg/L';
+    document.getElementById('cellar-val').textContent = P.cellar + '°C';
+  }
+
+  var sliderMap = [
+    ['ta-slider', 'ta', parseFloat],
+    ['ph-slider', 'pH', parseFloat],
+    ['etoh-slider', 'etoh', parseFloat],
+    ['ca-slider', 'ca', function(v){ return parseInt(v,10); }],
+    ['cellar-slider', 'cellar', parseFloat]
+  ];
+
+  sliderMap.forEach(function(m) {
+    var el = document.getElementById(m[0]);
+    el.addEventListener('input', function() {
+      P[m[1]] = m[2](el.value);
+      updateSliderLabels();
+      // Clear active preset when manually adjusting
+      document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+      onParamChange();
+    });
+  });
+
+  document.getElementById('z-select').addEventListener('change', function() {
+    P.zVar = this.value;
+    onParamChange();
+  });
+
+  // ─── Resize ────────────────────────────────────────────
+  var resizeTimer = null;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+      var activeId = P.view === '3d' ? 'plot-3d' : 'plot-2d';
+      Plotly.Plots.resize(activeId);
+    }, 200);
+  });
+
+  // ─── Init ──────────────────────────────────────────────
+  updateSliderLabels();
+  render();
+})();
+</script>
+</body>
+</html>

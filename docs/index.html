@@ -193,6 +193,7 @@ const APPS = [
   {date: "2026-07-08", title: "Pump-Over & Cap Management Simulator", description: "Interactive Konva.js red wine fermentation cap management simulator — stainless steel tank cross-section with floating grape skin cap, pump-over spray system, punch-down tool, and délestage method. Monod + Arrhenius fermentation kinetics drive live Brix decline, ethanol production, CO₂ bubble evolution, and extraction of anthocyanin, tannin, and total phenolics. Adjustable cycle frequency, pump flow rate, must/cap temperature, initial Brix, and cap thickness with Cabernet, Pinot Noir, Syrah, and Light Red presets. Live extraction-rate sparkline, temperature gauge, cap health monitoring, and dryness risk assessment.", url: "./apps/2026-07-08/pump-over-cap-management.html"},
   {date: "2026-07-09", title: "Wine Tasting Panel — Sensory Analysis Dashboard", description: "Interactive Chart.js trained sensory panel dashboard — 8 assessors score 10 wine attributes (aroma intensity/quality, body, acidity, tannin, sweetness, alcohol, finish, complexity, balance) with per-panelist bias and seeded noise. Serving temperature, decanting time, glass type, wine age, and in-glass tasting time drive Arrhenius-like aroma volatility, tannin polymerization, and perception evolution. Live radar (panel avg vs selected taster), time-evolution line chart, per-attribute bar chart, quality distribution doughnut, Cronbach's alpha consensus, and weighted overall score. Five varietals, four glass types, and Young Red, Aged Red, Chilled White, and Decanted presets.", url: "./apps/2026-07-09/sensory-panel-dashboard.html"},
   {date: "2026-07-10", title: "Vineyard Drip Irrigation Wetting Pattern Simulator", description: "Interactive Pixi.js 2D WebGL cross-section simulator of subsurface drip irrigation — water droplets fall from emitters and infiltrate soil, creating dynamic wetting bulbs. Simplified Richards equation with van Genuchten hydraulic conductivity across 6 soil types (sand to clay). Adjustable emitter flow rate, spacing, root depth, irrigation duration, initial moisture, and vine spacing. Live wetted radius, wetted depth, root-zone moisture, application efficiency, deep percolation loss, water applied, moisture history sparkline with FC/PWP reference lines, and irrigation status badge. Sandy, Loam, Clay, Deficit, Standard, and Pulse presets.", url: "./apps/2026-07-10/drip-irrigation-simulator.html"},
+  {date: "2026-07-11", title: "Wine Tartrate Stability — 3D Surface Explorer", description: "Interactive Plotly.js 3D surface visualization of potassium bitartrate (KHT) cold stability — Stability Index (CP/Ksp), KHT precipitate, HT⁻ fraction, and concentration product across temperature × K⁺ concentration. Tartaric acid speciation with pKa1/pKa2, ethanol-modified Ksp, calcium tartrate competition, and cold stabilization threshold calculation. Adjustable tartaric acid, pH, ethanol, calcium, and cellar temperature with 3D surface / 2D heatmap toggle and White, Red, Sparkling, and Rosé presets.", url: "./apps/2026-07-11/tartrate-stability-3d.html"},
 ];
 </script>
 <script>
@@ -229,7 +230,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById("last-updated").textContent="2026-07-10";
+document.getElementById("last-updated").textContent="2026-07-11";
 render();
 </script>
 </body>
