@@ -194,6 +194,7 @@ const APPS = [
   {date: "2026-07-09", title: "Wine Tasting Panel — Sensory Analysis Dashboard", description: "Interactive Chart.js trained sensory panel dashboard — 8 assessors score 10 wine attributes (aroma intensity/quality, body, acidity, tannin, sweetness, alcohol, finish, complexity, balance) with per-panelist bias and seeded noise. Serving temperature, decanting time, glass type, wine age, and in-glass tasting time drive Arrhenius-like aroma volatility, tannin polymerization, and perception evolution. Live radar (panel avg vs selected taster), time-evolution line chart, per-attribute bar chart, quality distribution doughnut, Cronbach's alpha consensus, and weighted overall score. Five varietals, four glass types, and Young Red, Aged Red, Chilled White, and Decanted presets.", url: "./apps/2026-07-09/sensory-panel-dashboard.html"},
   {date: "2026-07-10", title: "Vineyard Drip Irrigation Wetting Pattern Simulator", description: "Interactive Pixi.js 2D WebGL cross-section simulator of subsurface drip irrigation — water droplets fall from emitters and infiltrate soil, creating dynamic wetting bulbs. Simplified Richards equation with van Genuchten hydraulic conductivity across 6 soil types (sand to clay). Adjustable emitter flow rate, spacing, root depth, irrigation duration, initial moisture, and vine spacing. Live wetted radius, wetted depth, root-zone moisture, application efficiency, deep percolation loss, water applied, moisture history sparkline with FC/PWP reference lines, and irrigation status badge. Sandy, Loam, Clay, Deficit, Standard, and Pulse presets.", url: "./apps/2026-07-10/drip-irrigation-simulator.html"},
   {date: "2026-07-11", title: "Wine Tartrate Stability — 3D Surface Explorer", description: "Interactive Plotly.js 3D surface visualization of potassium bitartrate (KHT) cold stability — Stability Index (CP/Ksp), KHT precipitate, HT⁻ fraction, and concentration product across temperature × K⁺ concentration. Tartaric acid speciation with pKa1/pKa2, ethanol-modified Ksp, calcium tartrate competition, and cold stabilization threshold calculation. Adjustable tartaric acid, pH, ethanol, calcium, and cellar temperature with 3D surface / 2D heatmap toggle and White, Red, Sparkling, and Rosé presets.", url: "./apps/2026-07-11/tartrate-stability-3d.html"},
+  {date: "2026-07-12", title: "3D Wine Glass Aroma Release Explorer", description: "Interactive Babylon.js 3D wine glass shape and aroma dynamics explorer — five glass profiles (Bordeaux, Burgundy, Champagne Flute, Coupe, ISO Tasting) rendered as lathe-revolution geometries with live aroma particle emission, headspace concentration tracking, and serving temperature effects. Arrhenius volatility model, swirl-enhanced evaporation, glass wall constraint physics, and per-class aroma intensity bars (Fruity, Floral, Spicy, Earthy, Oak/Vanilla, Mineral). Adjustable serving temperature, fill level, alcohol %, swirl intensity, and elapsed tasting time with Young Cabernet, Aged Pinot Noir, Champagne, Oaked Chardonnay, and Riesling presets.", url: "./apps/2026-07-12/wine-glass-aroma-3d.html"},
 ];
 </script>
 <script>
@@ -230,7 +231,7 @@ function render(){
     </article>`;
   }).join('');
 }
-document.getElementById("last-updated").textContent="2026-07-11";
+document.getElementById("last-updated").textContent="2026-07-12";
 render();
 </script>
 </body>

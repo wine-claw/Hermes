@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>3D Wine Glass Aroma Release Explorer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0f; color: #c9c9d4; overflow: hidden; height: 100%; }
+  
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+  
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  #renderCanvas { width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+  
+  #controls {
+    position: absolute; top: 12px; left: 12px; width: 290px;
+    background: rgba(15, 15, 25, 0.88); border: 1px solid rgba(100, 80, 140, 0.35);
+    border-radius: 12px; padding: 16px; pointer-events: auto;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    max-height: calc(100vh - 24px); overflow-y: auto;
+    font-size: 0.85rem;
+  }
+  
+  #controls h2 { font-size: 1.0rem; color: #b894e6; margin-bottom: 10px; font-weight: 600; }
+  #controls h3 { font-size: 0.78rem; color: #7a6a9a; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  
+  .glass-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+  .glass-btn {
+    background: rgba(30, 25, 45, 0.8); border: 1px solid rgba(80, 60, 120, 0.3);
+    color: #a99cc7; border-radius: 8px; padding: 8px 6px; font-size: 0.78rem;
+    cursor: pointer; transition: all 0.2s; text-align: center; pointer-events: auto;
+  }
+  .glass-btn:hover { border-color: #8a6cc7; background: rgba(40, 30, 60, 0.9); }
+  .glass-btn.active { background: rgba(90, 60, 160, 0.5); border-color: #a070e0; color: #d4c4f4; }
+  
+  .slider-row { margin-bottom: 10px; }
+  .slider-row label { display: flex; justify-content: space-between; font-size: 0.8rem; color: #9a8ab5; margin-bottom: 4px; }
+  .slider-row label .val { color: #c9a060; font-weight: 600; }
+  
+  input[type=range] {
+    width: 100%; height: 6px; -webkit-appearance: none; appearance: none;
+    background: rgba(50, 40, 70, 0.6); border-radius: 3px; outline: none; pointer-events: auto;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #a070e0; cursor: pointer; border: 2px solid #c9a060;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%; background: #a070e0;
+    cursor: pointer; border: 2px solid #c9a060;
+  }
+  
+  .preset-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+  .preset-btn {
+    background: rgba(25, 20, 40, 0.7); border: 1px solid rgba(70, 50, 110, 0.3);
+    color: #8a7aa7; border-radius: 6px; padding: 5px 10px; font-size: 0.72rem;
+    cursor: pointer; transition: all 0.15s; pointer-events: auto;
+  }
+  .preset-btn:hover { border-color: #8a6cc7; color: #b894e6; }
+  
+  #metrics {
+    position: absolute; top: 12px; right: 12px; width: 230px;
+    background: rgba(15, 15, 25, 0.88); border: 1px solid rgba(100, 80, 140, 0.35);
+    border-radius: 12px; padding: 16px; pointer-events: auto;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    font-size: 0.82rem;
+  }
+  
+  #metrics h2 { font-size: 0.95rem; color: #b894e6; margin-bottom: 10px; font-weight: 600; }
+  
+  .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(50, 40, 70, 0.3); }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-label { color: #8a7aa7; font-size: 0.76rem; }
+  .metric-val { color: #c9a060; font-weight: 600; font-size: 0.85rem; text-align: right; }
+  .metric-val.good { color: #6ac070; }
+  .metric-val.warn { color: #e8a040; }
+  .metric-val.bad { color: #e06060; }
+  
+  .aroma-bar-container { margin-top: 8px; }
+  .aroma-bar-label { display: flex; justify-content: space-between; font-size: 0.74rem; color: #9a8ab5; margin-bottom: 2px; }
+  .aroma-bar { height: 5px; background: rgba(40, 30, 60, 0.5); border-radius: 3px; overflow: hidden; }
+  .aroma-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  
+  #panel-close {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 15, 25, 0.88); border: 1px solid rgba(100, 80, 140, 0.35);
+    border-radius: 8px; padding: 6px 14px; color: #b894e6; font-size: 0.78rem;
+    cursor: pointer; pointer-events: auto; display: none; z-index: 20;
+  }
+  
+  #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #7a6a9a; font-size: 1.1rem; text-align: center; z-index: 50; pointer-events: none; }
+  #loading .spinner { width: 40px; height: 40px; border: 3px solid rgba(100, 80, 140, 0.2); border-top-color: #a070e0; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  /* MOBILE */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    #renderCanvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #panel-close { display: block; }
+    #ui-layer.collapsed .panel, #ui-layer.collapsed #panel-close { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<div id="loading"><div class="spinner"></div>Loading 3D scene…</div>
+<div id="canvas-container">
+  <canvas id="renderCanvas"></canvas>
+</div>
+<div id="ui-layer">
+  <div id="panel-close" onclick="document.getElementById('ui-layer').classList.toggle('collapsed')">✕ Close / Open panels</div>
+  <div id="controls" class="panel">
+    <h2>🍷 Wine Glass Aroma Explorer</h2>
+    <h3>Glass Type</h3>
+    <div class="glass-buttons" id="glassButtons"></div>
+    
+    <h3>Wine & Serving</h3>
+    <div class="slider-row">
+      <label>Serving Temp <span class="val" id="tempVal">16°C</span></label>
+      <input type="range" id="tempSlider" min="6" max="24" step="0.5" value="16">
+    </div>
+    <div class="slider-row">
+      <label>Fill Level <span class="val" id="fillVal">30%</span></label>
+      <input type="range" id="fillSlider" min="10" max="60" step="5" value="30">
+    </div>
+    <div class="slider-row">
+      <label>Alcohol <span class="val" id="abvVal">14.0%</span></label>
+      <input type="range" id="abvSlider" min="8" max="16" step="0.5" value="14">
+    </div>
+    
+    <h3>Aroma Dynamics</h3>
+    <div class="slider-row">
+      <label>Swirl Intensity <span class="val" id="swirlVal">0.5</span></label>
+      <input type="range" id="swirlSlider" min="0" max="1" step="0.1" value="0.5">
+    </div>
+    <div class="slider-row">
+      <label>Time Elapsed <span class="val" id="timeVal">0 min</span></label>
+      <input type="range" id="timeSlider" min="0" max="30" step="1" value="0">
+    </div>
+    
+    <h3>Presets</h3>
+    <div class="preset-row" id="presetRow"></div>
+  </div>
+  
+  <div id="metrics" class="panel">
+    <h2>📊 Live Metrics</h2>
+    <div class="metric-row"><span class="metric-label">Glass Volume</span><span class="metric-val" id="mVolume">—</span></div>
+    <div class="metric-row"><span class="metric-label">Wine Volume</span><span class="metric-val" id="mWineVol">—</span></div>
+    <div class="metric-row"><span class="metric-label">Headspace</span><span class="metric-val" id="mHeadspace">—</span></div>
+    <div class="metric-row"><span class="metric-label">Surface Area</span><span class="metric-val" id="mSurfArea">—</span></div>
+    <div class="metric-row"><span class="metric-label">Aroma Conc.</span><span class="metric-val" id="mAromaConc">—</span></div>
+    <div class="metric-row"><span class="metric-label">Evap. Rate</span><span class="metric-val" id="mEvapRate">—</span></div>
+    <div class="metric-row"><span class="metric-label">Aroma Score</span><span class="metric-val" id="mAromaScore">—</span></div>
+    <div class="metric-row"><span class="metric-label">Temp Effect</span><span class="metric-val" id="mTempEff">—</span></div>
+    <div class="metric-row"><span class="metric-label">Glass Suitability</span><span class="metric-val" id="mSuitability">—</span></div>
+    
+    <h3 style="margin-top:12px;color:#7a6a9a;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;">Aroma Intensity by Class</h3>
+    <div class="aroma-bar-container" id="aromaBars"></div>
+  </div>
+</div>
+
+<script src="https://cdn.babylonjs.com/v7.0.0/babylon.js"></script>
+<script>
+"use strict";
+
+// ============ GLASS PROFILES ============
+// Each profile is a series of [radius, height] points from bottom to rim
+// Radii in cm, heights in cm. These define the inner wall of the glass.
+const GLASS_PROFILES = {
+  bordeaux: {
+    name: "Bordeaux",
+    fullName: "Bordeaux (Cabernet/Merlot)",
+    description: "Tall bowl, narrow rim for tannic reds",
+    points: [
+      [0.0, 0.0], [2.8, 0.0], [3.0, 0.3], [3.0, 0.5],
+      [3.2, 1.0], [3.8, 2.0], [4.5, 3.0], [4.8, 4.0],
+      [4.6, 5.0], [4.2, 6.0], [3.6, 7.0], [3.0, 8.0],
+      [2.5, 9.0], [2.2, 9.5], [2.3, 10.0]
+    ],
+    stemHeight: 8.5,
+    baseRadius: 3.2,
+    bestFor: "tannic red",
+    rimDiameter: 4.6,
+    bowlVolume: 720,
+    color: 0x8a0a2a
+  },
+  burgundy: {
+    name: "Burgundy",
+    fullName: "Burgundy (Pinot Noir)",
+    description: "Wide balloon bowl for delicate aromas",
+    points: [
+      [0.0, 0.0], [3.5, 0.0], [3.8, 0.3], [4.0, 0.5],
+      [4.5, 1.0], [5.5, 2.0], [6.2, 3.0], [6.5, 4.0],
+      [6.3, 5.0], [5.8, 6.0], [4.8, 7.0], [3.8, 8.0],
+      [3.2, 8.8], [3.0, 9.2], [3.2, 9.5]
+    ],
+    stemHeight: 8.0,
+    baseRadius: 4.0,
+    bestFor: "delicate red",
+    rimDiameter: 6.4,
+    bowlVolume: 880,
+    color: 0x9a1530
+  },
+  champagne: {
+    name: "Champagne",
+    fullName: "Champagne Flute",
+    description: "Tall narrow flute for sparkle preservation",
+    points: [
+      [0.0, 0.0], [2.0, 0.0], [2.2, 0.3], [2.5, 0.5],
+      [2.8, 1.0], [3.0, 2.0], [3.0, 3.0], [2.8, 4.0],
+      [2.5, 5.0], [2.3, 6.0], [2.2, 7.0], [2.1, 8.0],
+      [2.0, 9.0], [2.0, 10.0], [2.1, 10.5], [2.2, 11.0],
+      [2.3, 11.5]
+    ],
+    stemHeight: 10.0,
+    baseRadius: 2.5,
+    bestFor: "sparkling",
+    rimDiameter: 4.6,
+    bowlVolume: 250,
+    color: 0xe8d040
+  },
+  coupe: {
+    name: "Coupe",
+    fullName: "Champagne Coupe",
+    description: "Wide shallow saucer — style over science",
+    points: [
+      [0.0, 0.0], [2.5, 0.0], [3.0, 0.3], [4.0, 0.5],
+      [5.0, 1.0], [5.8, 1.5], [6.2, 2.0], [6.5, 2.5],
+      [6.5, 3.0], [6.3, 3.5], [5.8, 4.0], [4.8, 4.5],
+      [3.5, 5.0], [3.0, 5.3], [3.2, 5.5]
+    ],
+    stemHeight: 7.5,
+    baseRadius: 4.5,
+    bestFor: "sparkling",
+    rimDiameter: 13.0,
+    bowlVolume: 300,
+    color: 0xe8c830
+  },
+  iso: {
+    name: "ISO",
+    fullName: "ISO Tasting Glass",
+    description: "Standardized egg shape for evaluation",
+    points: [
+      [0.0, 0.0], [2.2, 0.0], [2.5, 0.3], [2.8, 0.5],
+      [3.2, 1.0], [3.8, 1.5], [4.2, 2.0], [4.5, 2.5],
+      [4.5, 3.0], [4.3, 3.5], [3.8, 4.0], [3.2, 4.5],
+      [2.8, 5.0], [2.5, 5.5], [2.6, 5.8]
+    ],
+    stemHeight: 7.0,
+    baseRadius: 2.8,
+    bestFor: "all",
+    rimDiameter: 5.2,
+    bowlVolume: 210,
+    color: 0xb01840
+  }
+};
+
+// ============ AROMA COMPOUND CLASSES ============
+const AROMA_CLASSES = [
+  { name: "Fruity", color: 0xff8a40, volatility: 0.7, mw: 130 },
+  { name: "Floral", color: 0xff60e0, volatility: 0.65, mw: 154 },
+  { name: "Spicy", color: 0xe0a040, volatility: 0.55, mw: 148 },
+  { name: "Earthy", color: 0x80a060, volatility: 0.45, mw: 134 },
+  { name: "Oak/Vanilla", color: 0xa06030, volatility: 0.50, mw: 152 },
+  { name: "Mineral", color: 0x60c0e0, volatility: 0.40, mw: 120 }
+];
+
+// ============ WINE PRESETS ============
+const WINE_PRESETS = [
+  { name: "Young Cabernet", glass: "bordeaux", temp: 17, abv: 14.0, fill: 30, aromaWeights: [0.3, 0.15, 0.2, 0.15, 0.15, 0.05] },
+  { name: "Aged Pinot Noir", glass: "burgundy", temp: 15, abv: 13.5, fill: 30, aromaWeights: [0.25, 0.25, 0.1, 0.2, 0.1, 0.1] },
+  { name: "Champagne", glass: "champagne", temp: 8, abv: 12.5, fill: 40, aromaWeights: [0.3, 0.2, 0.05, 0.1, 0.15, 0.2] },
+  { name: "Oaked Chardonnay", glass: "burgundy", temp: 12, abv: 13.5, fill: 30, aromaWeights: [0.25, 0.15, 0.1, 0.1, 0.3, 0.1] },
+  { name: "Riesling", glass: "iso", temp: 10, abv: 11.5, fill: 30, aromaWeights: [0.35, 0.3, 0.05, 0.1, 0.05, 0.15] }
+];
+
+// ============ STATE ============
+const state = {
+  glassKey: "bordeaux",
+  temperature: 16,
+  fillLevel: 30,
+  abv: 14.0,
+  swirl: 0.5,
+  elapsedTime: 0,
+  aromaWeights: [0.3, 0.15, 0.2, 0.15, 0.15, 0.05]
+};
+
+// ============ BABYLON SETUP ============
+let engine, scene, camera, glassMesh, wineMesh, particleSystem, lightHemi, lightDir;
+let stemMesh, baseMesh;
+let aromaParticles = [];
+let glassGroup;
+let swirlTimer = 0;
+
+function initBabylon() {
+  const canvas = document.getElementById("renderCanvas");
+  engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, antialias: true });
+  scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color4(0.04, 0.03, 0.08, 1.0);
+  
+  // Camera — orbital view
+  camera = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2.2, Math.PI / 2.3, 45, new BABYLON.Vector3(0, 12, 0), scene);
+  camera.attachControl(canvas, true);
+  camera.lowerRadiusLimit = 20;
+  camera.upperRadiusLimit = 80;
+  camera.lowerBetaLimit = Math.PI / 4;
+  camera.upperBetaLimit = Math.PI / 2.05;
+  camera.wheelPrecision = 3;
+  camera.panningSensibility = 0;
+  
+  // Lights
+  lightHemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
+  lightHemi.intensity = 0.5;
+  lightHemi.groundColor = new BABYLON.Color3(0.15, 0.1, 0.2);
+  lightHemi.diffuse = new BABYLON.Color3(0.9, 0.85, 1.0);
+  
+  lightDir = new BABYLON.DirectionalLight("dir", new BABYLON.Vector3(-0.5, -1, -0.3), scene);
+  lightDir.intensity = 0.8;
+  lightDir.diffuse = new BABYLON.Color3(1, 0.95, 0.9);
+  
+  // Ground plane — subtle reflective table
+  const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+  groundMat.diffuseColor = new BABYLON.Color3(0.08, 0.06, 0.12);
+  groundMat.specularColor = new BABYLON.Color3(0.3, 0.2, 0.35);
+  groundMat.specularPower = 128;
+  const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 60, height: 60 }, scene);
+  ground.material = groundMat;
+  ground.position.y = -0.01;
+  ground.receiveShadows = true;
+  
+  // Shadow generator
+  const shadowGen = new BABYLON.ShadowGenerator(512, lightDir);
+  shadowGen.useBlurExponentialShadowMap = true;
+  shadowGen.blurScale = 2;
+  window._shadowGen = shadowGen;
+  
+  // Glass group
+  glassGroup = new BABYLON.TransformNode("glassGroup", scene);
+  
+  // Build initial glass
+  rebuildGlass();
+  
+  // Setup particle system for aroma
+  createParticleSystem();
+  
+  // Render loop
+  engine.runRenderLoop(function() {
+    if (scene) {
+      updateParticles();
+      scene.render();
+    }
+  });
+  
+  // Resize
+  window.addEventListener("resize", function() {
+    engine.resize();
+  });
+  
+  // Hide loading
+  document.getElementById("loading").style.display = "none";
+}
+
+// ============ GLASS BUILDING ============
+function latheProfile(points, scale) {
+  // Convert profile points to Babylon Vector2 array for lathe
+  // points: [[r, h], ...] in cm. scale converts to scene units.
+  var shape = [];
+  for (var i = 0; i < points.length; i++) {
+    shape.push(new BABYLON.Vector2(Math.max(0.001, points[i][0]) * scale, points[i][1] * scale));
+  }
+  return shape;
+}
+
+function rebuildGlass() {
+  // Dispose old meshes
+  if (glassMesh) { glassMesh.dispose(); glassMesh = null; }
+  if (wineMesh) { wineMesh.dispose(); wineMesh = null; }
+  if (stemMesh) { stemMesh.dispose(); stemMesh = null; }
+  if (baseMesh) { stemMesh = null; baseMesh = null; }
+  
+  var profile = GLASS_PROFILES[state.glassKey];
+  var scale = 1.0; // 1 cm = 1 scene unit
+  
+  // Glass body — lathe the inner profile, then offset outward for glass thickness
+  var innerShape = latheProfile(profile.points, scale);
+  
+  // Outer shape = inner shape + thickness (offset outward)
+  var thickness = 0.15 * scale;
+  var outerShape = [];
+  for (var i = 0; i < innerShape.length; i++) {
+    outerShape.push(new BABYLON.Vector2(innerShape[i].x + thickness, innerShape[i].y));
+  }
+  
+  // Create glass as a lathe of the outer profile, with transparency
+  glassMesh = BABYLON.MeshBuilder.CreateLathe("glass", {
+    shape: outerShape,
+    radius: 1,
+    tessellation: 64,
+    sideOrientation: BABYLON.Mesh.DOUBLESIDE,
+    cap: BABYLON.Mesh.CAP_START
+  }, scene);
+  glassMesh.parent = glassGroup;
+  
+  var glassMat = new BABYLON.StandardMaterial("glassMat", scene);
+  glassMat.diffuseColor = new BABYLON.Color3(0.85, 0.9, 0.95);
+  glassMat.alpha = 0.25;
+  glassMat.specularColor = new BABYLON.Color3(1, 1, 1);
+  glassMat.specularPower = 256;
+  glassMat.emissiveColor = new BABYLON.Color3(0.05, 0.07, 0.1);
+  glassMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+  glassMat.backFaceCulling = false;
+  glassMesh.material = glassMat;
+  
+  if (window._shadowGen) {
+    // Don't cast shadows from glass — too thin
+  }
+  
+  // Wine liquid — lathe of inner profile up to fill height
+  var totalBowlHeight = profile.points[profile.points.length - 1][1] * scale;
+  var fillHeight = totalBowlHeight * (state.fillLevel / 100);
+  
+  // Find the profile points up to fillHeight, and interpolate the last point
+  var wineShape = [];
+  for (var i = 0; i < innerShape.length; i++) {
+    if (innerShape[i].y <= fillHeight) {
+      wineShape.push(new BABYLON.Vector2(innerShape[i].x, innerShape[i].y));
+    } else {
+      // Interpolate to find the radius at fillHeight
+      if (i > 0) {
+        var prev = innerShape[i - 1];
+        var curr = innerShape[i];
+        var t = (fillHeight - prev.y) / (curr.y - prev.y);
+        var r = prev.x + t * (curr.x - prev.x);
+        wineShape.push(new BABYLON.Vector2(Math.max(0.01, r), fillHeight));
+      }
+      break;
+    }
+  }
+  // Ensure wine shape has a bottom (center point)
+  if (wineShape.length > 0 && wineShape[0].x > 0.01) {
+    wineShape.unshift(new BABYLON.Vector2(0.01, wineShape[0].y));
+  }
+  
+  if (wineShape.length >= 2) {
+    // Create wine surface (a disc at fill height) + wine body (lathe)
+    wineMesh = BABYLON.MeshBuilder.CreateLathe("wine", {
+      shape: wineShape,
+      radius: 1,
+      tessellation: 64,
+      sideOrientation: BABYLON.Mesh.DOUBLESIDE,
+      cap: BABYLON.Mesh.CAP_START
+    }, scene);
+    wineMesh.parent = glassGroup;
+    
+    var wineColor = profile.color;
+    var r = ((wineColor >> 16) & 0xff) / 255;
+    var g = ((wineColor >> 8) & 0xff) / 255;
+    var b = (wineColor & 0xff) / 255;
+    
+    var wineMat = new BABYLON.StandardMaterial("wineMat", scene);
+    wineMat.diffuseColor = new BABYLON.Color3(r * 0.6, g * 0.6, b * 0.6);
+    wineMat.emissiveColor = new BABYLON.Color3(r * 0.15, g * 0.05, b * 0.08);
+    wineMat.specularColor = new BABYLON.Color3(0.8, 0.6, 0.5);
+    wineMat.specularPower = 64;
+    wineMat.alpha = 0.88;
+    wineMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+    wineMesh.material = wineMat;
+  }
+  
+  // Stem
+  var stemProfile = GLASS_PROFILES[state.glassKey];
+  var stemHeight = stemProfile.stemHeight * scale;
+  var stemStartY = 0;
+  var stemRadius = 0.35 * scale;
+  
+  stemMesh = BABYLON.MeshBuilder.CreateCylinder("stem", {
+    height: stemHeight,
+    diameterTop: stemRadius * 2,
+    diameterBottom: stemRadius * 2,
+    tessellation: 16
+  }, scene);
+  stemMesh.position.y = stemHeight / 2;
+  stemMesh.parent = glassGroup;
+  
+  var stemMat = new BABYLON.StandardMaterial("stemMat", scene);
+  stemMat.diffuseColor = new BABYLON.Color3(0.85, 0.9, 0.95);
+  stemMat.alpha = 0.3;
+  stemMat.specularColor = new BABYLON.Color3(1, 1, 1);
+  stemMat.specularPower = 256;
+  stemMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+  stemMesh.material = stemMat;
+  
+  // Base / foot
+  baseMesh = BABYLON.MeshBuilder.CreateCylinder("base", {
+    height: 0.3 * scale,
+    diameterTop: stemProfile.baseRadius * 2 * scale,
+    diameterBottom: stemProfile.baseRadius * 2 * scale,
+    tessellation: 32
+  }, scene);
+  baseMesh.position.y = 0.15 * scale;
+  baseMesh.parent = glassGroup;
+  
+  var baseMat = new BABYLON.StandardMaterial("baseMat", scene);
+  baseMat.diffuseColor = new BABYLON.Color3(0.85, 0.9, 0.95);
+  baseMat.alpha = 0.3;
+  baseMat.specularColor = new BABYLON.Color3(1, 1, 1);
+  baseMat.specularPower = 256;
+  baseMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+  baseMesh.material = baseMat;
+  
+  // Position group so base sits on ground
+  glassGroup.position.y = 0;
+  
+  // Update particles origin
+  updateParticleOrigin(fillHeight);
+}
+
+// ============ PARTICLE SYSTEM ============
+function createParticleSystem() {
+  // We'll manage particles manually for better control
+  aromaParticles = [];
+}
+
+function updateParticleOrigin(fillHeight) {
+  // Particles emit from wine surface
+  state._fillHeightScene = fillHeight;
+  state._bowlRadius = getSurfaceRadius(fillHeight);
+}
+
+function getSurfaceRadius(fillHeight) {
+  var profile = GLASS_PROFILES[state.glassKey];
+  var scale = 1.0;
+  var points = profile.points;
+  var totalH = points[points.length - 1][1] * scale;
+  var fillH = totalH * (state.fillLevel / 100);
+  
+  // Find radius at fillHeight
+  for (var i = 0; i < points.length - 1; i++) {
+    var h1 = points[i][1] * scale;
+    var h2 = points[i + 1][1] * scale;
+    if (fillH >= h1 && fillH <= h2) {
+      var t = (fillH - h1) / (h2 - h1);
+      var r1 = points[i][0] * scale;
+      var r2 = points[i + 1][0] * scale;
+      return r1 + t * (r2 - r1);
+    }
+  }
+  return 2.0;
+}
+
+function getRimRadius() {
+  var profile = GLASS_PROFILES[state.glassKey];
+  return profile.points[profile.points.length - 1][0] * 1.0;
+}
+
+function getGlassHeight() {
+  var profile = GLASS_PROFILES[state.glassKey];
+  return profile.points[profile.points.length - 1][1] * 1.0;
+}
+
+function spawnParticle() {
+  var fillH = state._fillHeightScene || 3.0;
+  var surfR = state._bowlRadius || 2.0;
+  
+  // Random position on wine surface
+  var angle = Math.random() * Math.PI * 2;
+  var r = Math.random() * surfR * 0.8;
+  var px = Math.cos(angle) * r;
+  var pz = Math.sin(angle) * r;
+  var py = fillH + 0.1;
+  
+  // Pick aroma class based on weights
+  var rand = Math.random();
+  var cumWeight = 0;
+  var aromaIdx = 0;
+  for (var i = 0; i < state.aromaWeights.length; i++) {
+    cumWeight += state.aromaWeights[i];
+    if (rand < cumWeight) { aromaIdx = i; break; }
+  }
+  
+  var aroma = AROMA_CLASSES[aromaIdx];
+  
+  // Temperature factor — Arrhenius-like: higher temp = more volatile
+  var tempK = state.temperature + 273.15;
+  var refTempK = 15 + 273.15;
+  var tempFactor = Math.exp(30000 / 8.314 * (1 / refTempK - 1 / tempK));
+  tempFactor = Math.min(3.0, Math.max(0.2, tempFactor));
+  
+  // ABV factor — ethanol carries aromas
+  var abvFactor = 0.5 + state.abv / 20;
+  
+  // Swirl factor — increases surface area exposure
+  var swirlFactor = 0.3 + state.swirl * 0.7;
+  
+  // Upward velocity
+  var upVel = (0.5 + aroma.volatility * 2.0) * tempFactor * swirlFactor * (0.4 + Math.random() * 0.3);
+  
+  // Lateral drift
+  var latVel = (Math.random() - 0.5) * 0.3 * swirlFactor;
+  var latVel2 = (Math.random() - 0.5) * 0.3 * swirlFactor;
+  
+  // Glass walls constrain — particles slow as they approach rim
+  var rimR = getRimRadius();
+  var glassH = getGlassHeight();
+  
+  aromaParticles.push({
+    x: px, y: py, z: pz,
+    vx: latVel, vy: upVel, vz: latVel2,
+    life: 1.0,
+    maxLife: 2.0 + Math.random() * 3.0,
+    aromaIdx: aromaIdx,
+    color: aroma.color,
+    size: 0.15 + Math.random() * 0.1,
+    tempFactor: tempFactor,
+    abvFactor: abvFactor,
+    rimR: rimR,
+    glassH: glassH,
+    fillH: fillH,
+    surfR: surfR
+  });
+}
+
+function updateParticles() {
+  // Spawn rate depends on temperature, swirl, volatility
+  var tempK = state.temperature + 273.15;
+  var refTempK = 15 + 273.15;
+  var tempFactor = Math.exp(30000 / 8.314 * (1 / refTempK - 1 / tempK));
+  tempFactor = Math.min(3.0, Math.max(0.2, tempFactor));
+  
+  var swirlFactor = 0.2 + state.swirl * 0.8;
+  var spawnRate = Math.floor(2 + tempFactor * swirlFactor * 4);
+  
+  for (var s = 0; s < spawnRate; s++) {
+    if (aromaParticles.length < 300) {
+      spawnParticle();
+    }
+  }
+  
+  // Update existing particles
+  var dt = engine.getDeltaTime() / 1000;
+  var glassProfile = GLASS_PROFILES[state.glassKey];
+  var points = glassProfile.points;
+  
+  for (var i = aromaParticles.length - 1; i >= 0; i--) {
+    var p = aromaParticles[i];
+    
+    // Apply velocity
+    p.x += p.vx * dt * 3;
+    p.y += p.vy * dt * 3;
+    p.z += p.vz * dt * 3;
+    
+    // Swirl effect — circular motion
+    if (state.swirl > 0.1) {
+      var cx = p.x;
+      var cz = p.z;
+      var angle2 = state.swirl * 2 * dt;
+      p.x = cx * Math.cos(angle2) - cz * Math.sin(angle2);
+      p.z = cx * Math.sin(angle2) + cz * Math.cos(angle2);
+    }
+    
+    // Glass wall constraint — particles can't pass through glass walls
+    var distFromCenter = Math.sqrt(p.x * p.x + p.z * p.z);
+    var wallR = getWallRadiusAtHeight(p.y, points);
+    if (wallR > 0 && distFromCenter > wallR - 0.1) {
+      // Push back toward center
+      var pushAngle = Math.atan2(p.z, p.x);
+      p.x = Math.cos(pushAngle) * (wallR - 0.1);
+      p.z = Math.sin(pushAngle) * (wallR - 0.1);
+      // Reduce lateral velocity
+      p.vx *= 0.5;
+      p.vz *= 0.5;
+    }
+    
+    // Slow down over time
+    p.vy *= 0.99;
+    p.vx *= 0.97;
+    p.vz *= 0.97;
+    
+    // Buoyancy — keep rising but slower at top
+    var heightRatio = p.y / p.glassH;
+    if (heightRatio < 1.0) {
+      p.vy += 0.5 * dt; // gentle buoyancy
+    } else {
+      p.vy *= 0.95; // slow above rim
+    }
+    
+    // Life decreases
+    p.life -= dt / p.maxLife;
+    
+    // Remove if dead or too far above
+    if (p.life <= 0 || p.y > p.glassH + 8) {
+      aromaParticles.splice(i, 1);
+    }
+  }
+  
+  // Render particles as spheres
+  renderAromaParticles();
+}
+
+function getWallRadiusAtHeight(h, points) {
+  var scale = 1.0;
+  for (var i = 0; i < points.length - 1; i++) {
+    var h1 = points[i][1] * scale;
+    var h2 = points[i + 1][1] * scale;
+    if (h >= h1 && h <= h2) {
+      var t = (h - h1) / (h2 - h1);
+      var r1 = points[i][0] * scale;
+      var r2 = points[i + 1][0] * scale;
+      return r1 + t * (r2 - r1);
+    }
+  }
+  if (h > points[points.length - 1][1] * scale) return -1; // above rim
+  return 0;
+}
+
+// Particle rendering using instanced spheres
+var particleMeshes = [];
+var particleTemplate = null;
+
+function ensureParticleTemplate() {
+  if (!particleTemplate && scene) {
+    particleTemplate = BABYLON.MeshBuilder.CreateSphere("pTmpl", { diameter: 1, segments: 6 }, scene);
+    particleTemplate.isVisible = false;
+    var mat = new BABYLON.StandardMaterial("pTmplMat", scene);
+    mat.emissiveColor = new BABYLON.Color3(1, 1, 1);
+    mat.disableLighting = true;
+    particleTemplate.material = mat;
+  }
+}
+
+function renderAromaParticles() {
+  ensureParticleTemplate();
+  
+  // Dispose excess meshes
+  while (particleMeshes.length > aromaParticles.length) {
+    var m = particleMeshes.pop();
+    if (m) m.dispose();
+  }
+  
+  // Create or update meshes
+  for (var i = 0; i < aromaParticles.length; i++) {
+    var p = aromaParticles[i];
+    if (i >= particleMeshes.length) {
+      var mesh = particleTemplate.createInstance("p" + i);
+      mesh.parent = glassGroup;
+      var mat = new BABYLON.StandardMaterial("pMat" + i, scene);
+      mat.disableLighting = true;
+      mat.emissiveColor = new BABYLON.Color3(
+        ((p.color >> 16) & 0xff) / 255,
+        ((p.color >> 8) & 0xff) / 255,
+        (p.color & 0xff) / 255
+      );
+      mat.alpha = 0.6;
+      mat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+      mesh.material = mat;
+      particleMeshes.push(mesh);
+    }
+    
+    var mesh2 = particleMeshes[i];
+    mesh2.position.x = p.x;
+    mesh2.position.y = p.y;
+    mesh2.position.z = p.z;
+    mesh2.scaling.x = p.size * p.life;
+    mesh2.scaling.y = p.size * p.life;
+    mesh2.scaling.z = p.size * p.life;
+    
+    // Fade based on life
+    var mat2 = mesh2.material;
+    if (mat2) {
+      mat2.alpha = 0.6 * p.life;
+    }
+    
+    mesh2.isVisible = p.life > 0.05;
+  }
+}
+
+// ============ METRICS CALCULATION ============
+function calculateMetrics() {
+  var profile = GLASS_PROFILES[state.glassKey];
+  var totalVol = profile.bowlVolume; // ml
+  var wineVol = totalVol * (state.fillLevel / 100);
+  var headspace = totalVol - wineVol;
+  
+  // Surface area — approximate as circle at fill height
+  var surfR = state._bowlRadius || 2.0;
+  var surfArea = Math.PI * surfR * surfR; // cm²
+  
+  // Temperature factor (Arrhenius-like for aroma volatility)
+  var tempK = state.temperature + 273.15;
+  var refTempK = 15 + 273.15;
+  var tempFactor = Math.exp(30000 / 8.314 * (1 / refTempK - 1 / tempK));
+  tempFactor = Math.min(3.0, Math.max(0.2, tempFactor));
+  
+  // ABV effect — ethanol increases aroma carry
+  var abvFactor = 0.5 + state.abv / 20;
+  
+  // Swirl effect — increases effective surface area
+  var swirlFactor = 0.3 + state.swirl * 0.7;
+  
+  // Evaporation rate (mg/min) — simplified Henry's law
+  var evapRate = surfArea * tempFactor * abvFactor * swirlFactor * 0.15;
+  
+  // Aroma concentration in headspace (ppm) — builds over time, decays with diffusion
+  var timeMin = state.elapsedTime;
+  var aromaConc = evapRate * timeMin / Math.max(10, headspace * 0.5) * 50;
+  aromaConc = Math.min(500, aromaConc);
+  
+  // Time decay — aroma dissipates after peak
+  if (timeMin > 15) {
+    aromaConc *= Math.max(0.3, 1 - (timeMin - 15) * 0.03);
+  }
+  
+  // Aroma score (0-100) — composite of concentration, headspace shape, glass suitability
+  var rimR = getRimRadius();
+  var bowlR = Math.max.apply(null, profile.points.map(function(p) { return p[0]; }));
+  var constrictionRatio = rimR / bowlR;
+  
+  // Narrower rim concentrates aromas better for most wines
+  var rimScore = 50 + (1 - constrictionRatio) * 50;
+  
+  // Headspace ratio — ideal is 65-75% headspace
+  var headspaceRatio = headspace / totalVol;
+  var headspaceScore = 100 - Math.abs(headspaceRatio - 0.7) * 200;
+  headspaceScore = Math.max(0, Math.min(100, headspaceScore));
+  
+  var aromaScore = (aromaConc / 500 * 40) + (rimScore * 0.3) + (headspaceScore * 0.3);
+  aromaScore = Math.max(0, Math.min(100, aromaScore));
+  
+  // Glass suitability for current wine type (based on aroma weights)
+  var bestFor = profile.bestFor;
+  var suitability = "Good";
+  var suitScore = 70;
+  if (state.aromaWeights[0] > 0.3 && bestFor === "tannic red") suitScore = 92;
+  else if (state.aromaWeights[1] > 0.2 && bestFor === "delicate red") suitScore = 92;
+  else if (state.aromaWeights[5] > 0.15 && bestFor === "sparkling") suitScore = 90;
+  else if (bestFor === "all") suitScore = 85;
+  else suitScore = 65;
+  
+  // Per-aroma-class intensity
+  var aromaIntensities = [];
+  for (var i = 0; i < AROMA_CLASSES.length; i++) {
+    var a = AROMA_CLASSES[i];
+    var intensity = state.aromaWeights[i] * aromaConc * a.volatility * tempFactor * swirlFactor / 100;
+    intensity = Math.min(100, intensity * 2);
+    aromaIntensities.push(intensity);
+  }
+  
+  return {
+    volume: totalVol,
+    wineVolume: wineVol,
+    headspace: headspace,
+    surfArea: surfArea,
+    aromaConc: aromaConc,
+    evapRate: evapRate,
+    aromaScore: aromaScore,
+    tempFactor: tempFactor,
+    suitability: suitability,
+    suitScore: suitScore,
+    aromaIntensities: aromaIntensities
+  };
+}
+
+// ============ UI UPDATES ============
+function updateMetrics() {
+  var m = calculateMetrics();
+  
+  document.getElementById("mVolume").textContent = m.volume.toFixed(0) + " ml";
+  document.getElementById("mWineVol").textContent = m.wineVolume.toFixed(0) + " ml";
+  document.getElementById("mHeadspace").textContent = m.headspace.toFixed(0) + " ml";
+  document.getElementById("mSurfArea").textContent = m.surfArea.toFixed(1) + " cm²";
+  document.getElementById("mAromaConc").textContent = m.aromaConc.toFixed(1) + " ppm";
+  document.getElementById("mEvapRate").textContent = m.evapRate.toFixed(2) + " mg/min";
+  
+  var scoreEl = document.getElementById("mAromaScore");
+  scoreEl.textContent = m.aromaScore.toFixed(0) + "/100";
+  scoreEl.className = "metric-val " + (m.aromaScore > 60 ? "good" : m.aromaScore > 35 ? "warn" : "bad");
+  
+  var tempEl = document.getElementById("mTempEff");
+  tempEl.textContent = "×" + m.tempFactor.toFixed(2);
+  tempEl.className = "metric-val " + (m.tempFactor > 1.2 ? "good" : m.tempFactor < 0.8 ? "warn" : "");
+  
+  var suitEl = document.getElementById("mSuitability");
+  suitEl.textContent = m.suitability + " (" + m.suitScore + "%)";
+  suitEl.className = "metric-val " + (m.suitScore > 85 ? "good" : m.suitScore > 70 ? "warn" : "bad");
+  
+  // Aroma bars
+  var barsContainer = document.getElementById("aromaBars");
+  barsContainer.innerHTML = "";
+  for (var i = 0; i < AROMA_CLASSES.length; i++) {
+    var a = AROMA_CLASSES[i];
+    var intensity = m.aromaIntensities[i];
+    var hexColor = "#" + a.color.toString(16).padStart(6, "0");
+    barsContainer.innerHTML += 
+      '<div class="aroma-bar-label"><span>' + a.name + '</span><span>' + intensity.toFixed(0) + '%</span></div>' +
+      '<div class="aroma-bar"><div class="aroma-bar-fill" style="width:' + intensity + '%;background:' + hexColor + ';"></div></div>';
+  }
+}
+
+// ============ GLASS BUTTONS ============
+function buildGlassButtons() {
+  var container = document.getElementById("glassButtons");
+  container.innerHTML = "";
+  var keys = Object.keys(GLASS_PROFILES);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var g = GLASS_PROFILES[key];
+    var btn = document.createElement("div");
+    btn.className = "glass-btn" + (key === state.glassKey ? " active" : "");
+    btn.textContent = g.name;
+    btn.setAttribute("data-key", key);
+    btn.onclick = (function(k) {
+      return function() {
+        state.glassKey = k;
+        rebuildGlass();
+        updateAllButtons();
+        updateMetrics();
+      };
+    })(key);
+    container.appendChild(btn);
+  }
+}
+
+function updateAllButtons() {
+  var btns = document.querySelectorAll(".glass-btn");
+  for (var i = 0; i < btns.length; i++) {
+    var key = btns[i].getAttribute("data-key");
+    btns[i].className = "glass-btn" + (key === state.glassKey ? " active" : "");
+  }
+}
+
+// ============ PRESET BUTTONS ============
+function buildPresetButtons() {
+  var container = document.getElementById("presetRow");
+  container.innerHTML = "";
+  for (var i = 0; i < WINE_PRESETS.length; i++) {
+    var preset = WINE_PRESETS[i];
+    var btn = document.createElement("button");
+    btn.className = "preset-btn";
+    btn.textContent = preset.name;
+    btn.onclick = (function(p) {
+      return function() {
+        state.glassKey = p.glass;
+        state.temperature = p.temp;
+        state.abv = p.abv;
+        state.fillLevel = p.fill;
+        state.aromaWeights = p.aromaWeights.slice();
+        state.elapsedTime = 0;
+        
+        // Update sliders
+        document.getElementById("tempSlider").value = p.temp;
+        document.getElementById("abvSlider").value = p.abv;
+        document.getElementById("fillSlider").value = p.fill;
+        document.getElementById("timeSlider").value = 0;
+        
+        updateSliderLabels();
+        rebuildGlass();
+        updateAllButtons();
+        updateMetrics();
+      };
+    })(preset);
+    container.appendChild(btn);
+  }
+}
+
+// ============ SLIDER HANDLERS ============
+function updateSliderLabels() {
+  document.getElementById("tempVal").textContent = state.temperature.toFixed(1) + "°C";
+  document.getElementById("fillVal").textContent = state.fillLevel + "%";
+  document.getElementById("abvVal").textContent = state.abv.toFixed(1) + "%";
+  document.getElementById("swirlVal").textContent = state.swirl.toFixed(1);
+  document.getElementById("timeVal").textContent = state.elapsedTime + " min";
+}
+
+function setupSliders() {
+  document.getElementById("tempSlider").oninput = function() {
+    state.temperature = parseFloat(this.value);
+    updateSliderLabels();
+    updateMetrics();
+  };
+  document.getElementById("fillSlider").oninput = function() {
+    state.fillLevel = parseInt(this.value);
+    updateSliderLabels();
+    rebuildGlass();
+    updateMetrics();
+  };
+  document.getElementById("abvSlider").oninput = function() {
+    state.abv = parseFloat(this.value);
+    updateSliderLabels();
+    updateMetrics();
+  };
+  document.getElementById("swirlSlider").oninput = function() {
+    state.swirl = parseFloat(this.value);
+    updateSliderLabels();
+    updateMetrics();
+  };
+  document.getElementById("timeSlider").oninput = function() {
+    state.elapsedTime = parseInt(this.value);
+    updateSliderLabels();
+    updateMetrics();
+  };
+}
+
+// ============ INIT ============
+function start() {
+  if (typeof BABYLON === "undefined") {
+    document.getElementById("loading").innerHTML = '<div style="color:#e06060;">Failed to load Babylon.js CDN.<br>Please refresh.</div>';
+    return;
+  }
+  initBabylon();
+  buildGlassButtons();
+  buildPresetButtons();
+  setupSliders();
+  updateSliderLabels();
+  updateMetrics();
+  
+  // Periodic metrics update
+  setInterval(updateMetrics, 500);
+}
+
+// Wait for Babylon to load
+if (typeof BABYLON !== "undefined") {
+  start();
+} else {
+  var checkCount = 0;
+  var checkInterval = setInterval(function() {
+    checkCount++;
+    if (typeof BABYLON !== "undefined") {
+      clearInterval(checkInterval);
+      start();
+    } else if (checkCount > 50) {
+      clearInterval(checkInterval);
+      document.getElementById("loading").innerHTML = '<div style="color:#e06060;">Failed to load Babylon.js CDN.<br>Please refresh.</div>';
+    }
+  }, 100);
+}
+</script>
+</body>
+</html>
