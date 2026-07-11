@@ -324,7 +324,7 @@ function initBabylon() {
   scene.clearColor = new BABYLON.Color4(0.04, 0.03, 0.08, 1.0);
   
   // Camera — orbital view
-  camera = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2.2, Math.PI / 2.3, 45, new BABYLON.Vector3(0, 12, 0), scene);
+  camera = new BABYLON.ArcRotateCamera("cam", -Math.PI / 2, Math.PI / 2.5, 42, new BABYLON.Vector3(0, 12, 0), scene);
   camera.attachControl(canvas, true);
   camera.lowerRadiusLimit = 20;
   camera.upperRadiusLimit = 80;
@@ -428,10 +428,10 @@ function rebuildGlass() {
   
   var glassMat = new BABYLON.StandardMaterial("glassMat", scene);
   glassMat.diffuseColor = new BABYLON.Color3(0.85, 0.9, 0.95);
-  glassMat.alpha = 0.25;
+  glassMat.alpha = 0.32;
   glassMat.specularColor = new BABYLON.Color3(1, 1, 1);
   glassMat.specularPower = 256;
-  glassMat.emissiveColor = new BABYLON.Color3(0.05, 0.07, 0.1);
+  glassMat.emissiveColor = new BABYLON.Color3(0.08, 0.1, 0.14);
   glassMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
   glassMat.backFaceCulling = false;
   glassMesh.material = glassMat;
@@ -866,7 +866,7 @@ function calculateMetrics() {
   for (var i = 0; i < AROMA_CLASSES.length; i++) {
     var a = AROMA_CLASSES[i];
     var intensity = state.aromaWeights[i] * aromaConc * a.volatility * tempFactor * swirlFactor / 100;
-    intensity = Math.min(100, intensity * 2);
+    intensity = Math.min(100, intensity * 8);
     aromaIntensities.push(intensity);
   }
   
