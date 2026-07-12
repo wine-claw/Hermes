@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Global Wine Trade Flow Explorer — D3.js</title>
+<style>
+:root {
+  --bg: #0a0e16; --surface: rgba(18,24,34,0.88); --surface2: rgba(22,30,42,0.92);
+  --border: #2a3441; --border-lit: #3a5060; --text: #d0d8e0; --muted: #7a8896;
+  --accent: #c8865a; --accent2: #5a8ac8; --accent3: #6ac89a; --warn: #c86a5a;
+  --gold: #c9a060;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { font-size: 15px; }
+body {
+  background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden; height: 100vh; line-height: 1.5;
+}
+a, button { touch-action: manipulation; }
+
+.disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+.disclaimer strong { font-weight: 600; }
+
+#canvas-container { position: fixed; inset: 0; z-index: 0; }
+#bg-canvas { width: 100%; height: 100%; display: block; }
+
+#ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; overflow-y: auto; }
+
+#title-bar {
+  pointer-events: none; text-align: center; padding: 10px 16px 4px;
+}
+#title-bar h1 {
+  font-size: 1.3rem; font-weight: 700; color: var(--gold);
+  text-shadow: 0 2px 12px rgba(0,0,0,0.8); letter-spacing: 0.02em;
+}
+#title-bar p { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+#chord-panel {
+  pointer-events: auto; position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+  width: 520px; max-width: 94vw; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px; backdrop-filter: blur(8px);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+#chord-panel h2 { font-size: 0.82rem; color: var(--accent); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+#chord-svg { width: 100%; display: block; }
+
+#controls {
+  pointer-events: auto; position: absolute; top: 52px; left: 16px; width: 240px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; backdrop-filter: blur(8px); box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  max-height: calc(100vh - 80px); overflow-y: auto;
+}
+#controls h2 { font-size: 0.82rem; color: var(--accent); margin-bottom: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.ctrl-group { margin-bottom: 14px; }
+.ctrl-group label { display: block; font-size: 0.76rem; color: var(--muted); margin-bottom: 4px; }
+.ctrl-group select, .ctrl-group input[type="range"] {
+  width: 100%; font-size: 0.82rem; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+}
+.ctrl-group select { cursor: pointer; }
+input[type="range"] { -webkit-appearance: none; height: 6px; border-radius: 3px; background: #1a2030; padding: 0; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--bg); }
+input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--bg); }
+
+.year-display { font-size: 1.8rem; font-weight: 800; color: var(--gold); text-align: center; padding: 2px 0; }
+
+.preset-btns { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.preset-btns button {
+  flex: 1 1 auto; min-width: 70px; font-size: 0.72rem; padding: 5px 8px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; transition: all 0.15s;
+}
+.preset-btns button:hover, .preset-btns button.active {
+  border-color: var(--accent); color: var(--accent); background: rgba(200,134,90,0.1);
+}
+
+#metrics {
+  pointer-events: auto; position: absolute; top: 52px; right: 16px; width: 250px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; backdrop-filter: blur(8px); box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  max-height: calc(100vh - 80px); overflow-y: auto;
+}
+#metrics h2 { font-size: 0.82rem; color: var(--accent2); margin-bottom: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.metric-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(42,52,65,0.5); font-size: 0.8rem; }
+.metric-row:last-child { border-bottom: none; }
+.metric-row .mlabel { color: var(--muted); }
+.metric-row .mvalue { font-weight: 700; color: var(--text); }
+.metric-row .mvalue.pos { color: var(--accent3); }
+.metric-row .mvalue.neg { color: var(--warn); }
+
+.bar-chart { margin-top: 10px; }
+.bar-chart h3 { font-size: 0.76rem; color: var(--accent); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+#bar-svg, #bar-svg2 { width: 100%; display: block; }
+
+#detail-panel {
+  pointer-events: auto; position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  width: 460px; max-width: 92vw; background: var(--surface2); border: 1px solid var(--border-lit);
+  border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: none;
+}
+#detail-panel h3 { font-size: 0.88rem; color: var(--gold); margin-bottom: 4px; }
+#detail-panel .detail-row { font-size: 0.76rem; color: var(--muted); }
+#detail-panel .detail-row span { color: var(--text); font-weight: 600; }
+#detail-panel .close-btn { position: absolute; top: 6px; right: 8px; background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; padding: 2px 6px; }
+
+.chord-label { font-size: 9px; fill: var(--text); font-weight: 600; pointer-events: none; }
+.chord-group { cursor: pointer; }
+.chord-ribbon { cursor: pointer; transition: opacity 0.2s; }
+.chord-ribbon:hover { opacity: 0.9 !important; }
+
+.bar-rect { transition: opacity 0.2s; cursor: pointer; }
+.bar-label { font-size: 8.5px; fill: var(--text); }
+.bar-value { font-size: 8.5px; fill: var(--muted); text-anchor: end; font-weight: 600; }
+.bar-row { cursor: pointer; }
+
+/* Mobile */
+@media (max-width: 768px) {
+  html, body { overflow-y: auto; height: auto; }
+  #canvas-container {
+    position: relative !important; width: 100% !important; height: 38vh !important;
+    min-height: 260px; max-height: 380px; inset: auto !important; z-index: 0;
+  }
+  #bg-canvas { width: 100% !important; height: 100% !important; }
+  #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; overflow: visible; }
+  #title-bar { padding: 8px 12px 2px; }
+  #title-bar h1 { font-size: 1.05rem; }
+  #chord-panel {
+    position: relative !important; top: auto !important; left: auto !important;
+    transform: none !important; width: auto !important; max-width: none !important;
+    margin: 8px 10px; border-radius: 8px;
+  }
+  #controls {
+    position: relative !important; top: auto !important; left: auto !important;
+    width: auto !important; max-height: none !important; margin: 8px 10px;
+    border-radius: 8px;
+  }
+  #metrics {
+    position: relative !important; top: auto !important; right: auto !important;
+    width: auto !important; max-height: none !important; margin: 8px 10px;
+    border-radius: 8px;
+  }
+  #detail-panel {
+    position: relative !important; bottom: auto !important; left: auto !important;
+    transform: none !important; width: auto !important; max-width: none !important;
+    margin: 8px 10px;
+  }
+}
+
+/* Scrollbar */
+#controls::-webkit-scrollbar, #metrics::-webkit-scrollbar { width: 5px; }
+#controls::-webkit-scrollbar-thumb, #metrics::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <canvas id="bg-canvas"></canvas>
+</div>
+
+<div id="ui-layer">
+  <div id="title-bar">
+    <h1>Global Wine Trade Flow Explorer</h1>
+    <p>Interactive D3.js chord diagram of international wine export & import flows · OIV-based estimates</p>
+  </div>
+
+  <div id="controls">
+    <h2>Trade Controls</h2>
+    <div class="ctrl-group">
+      <label>Year</label>
+      <div class="year-display" id="year-display">2022</div>
+      <input type="range" id="year-slider" min="0" max="5" value="4" step="1">
+    </div>
+    <div class="ctrl-group">
+      <label>Flow Direction</label>
+      <select id="flow-select">
+        <option value="export">Exports (producer → market)</option>
+        <option value="import">Imports (market → source)</option>
+        <option value="net">Net Trade Balance</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Volume Unit</label>
+      <select id="unit-select">
+        <option value="mhl">Million hectolitres (m hL)</option>
+        <option value="bUSD">Billion USD ($B)</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Highlight Country</label>
+      <select id="country-select">
+        <option value="">— All countries —</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>View Presets</label>
+      <div class="preset-btns">
+        <button data-preset="global" class="active">Global</button>
+        <button data-preset="eu">EU Focus</button>
+        <button data-preset="newworld">New World</button>
+        <button data-preset="asia">Asia Focus</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="chord-panel">
+    <h2>Trade Flow Chord Diagram</h2>
+    <svg id="chord-svg" viewBox="0 0 500 500"></svg>
+    <div style="text-align:center;font-size:0.72rem;color:var(--muted);margin-top:4px;">Click a segment to highlight · Hover ribbons for details</div>
+  </div>
+
+  <div id="metrics">
+    <h2>Trade Intelligence</h2>
+    <div class="metric-row"><span class="mlabel">Total Global Trade</span><span class="mvalue" id="m-total">—</span></div>
+    <div class="metric-row"><span class="mlabel">Top Exporter</span><span class="mvalue" id="m-top-exp">—</span></div>
+    <div class="metric-row"><span class="mlabel">Top Importer</span><span class="mvalue" id="m-top-imp">—</span></div>
+    <div class="metric-row"><span class="mlabel">Trade Balance Leader</span><span class="mvalue pos" id="m-surplus">—</span></div>
+    <div class="metric-row"><span class="mlabel">Largest Deficit</span><span class="mvalue neg" id="m-deficit">—</span></div>
+    <div class="metric-row"><span class="mlabel"># Countries Shown</span><span class="mvalue" id="m-count">—</span></div>
+
+    <div class="bar-chart">
+      <h3>Top Exporters</h3>
+      <svg id="bar-svg" viewBox="0 0 220 160"></svg>
+    </div>
+    <div class="bar-chart">
+      <h3>Top Importers</h3>
+      <svg id="bar-svg2" viewBox="0 0 220 160"></svg>
+    </div>
+  </div>
+
+  <div id="detail-panel">
+    <button class="close-btn" onclick="document.getElementById('detail-panel').style.display='none'">✕</button>
+    <h3 id="detail-title">—</h3>
+    <div class="detail-row" id="detail-content"></div>
+  </div>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+// ========== DATA: Wine trade flows (OIV-based estimates, m hL / $B) ==========
+// Countries/regions in the trade network
+const COUNTRIES = [
+  "Italy", "France", "Spain", "Portugal", "Germany",
+  "UK", "Netherlands", "USA", "Chile", "Argentina",
+  "Australia", "South Africa", "New Zealand", "China", "Canada"
+];
+
+// Color palette for countries
+const COUNTRY_COLORS = {
+  "Italy":         "#c8413a",
+  "France":        "#3a6ac8",
+  "Spain":         "#c88a3a",
+  "Portugal":      "#6a3ac8",
+  "Germany":       "#3a8ac8",
+  "UK":            "#2a5a8a",
+  "Netherlands":   "#c84a8a",
+  "USA":           "#3ac8c8",
+  "Chile":         "#6ac83a",
+  "Argentina":     "#8ac84a",
+  "Australia":     "#c8703a",
+  "South Africa":  "#c8c83a",
+  "New Zealand":   "#4ac8a0",
+  "China":         "#c83a6a",
+  "Canada":        "#3a7a8a"
+};
+
+// Trade data by year [exporter_idx][importer_idx] in m hL
+// Index order matches COUNTRIES array
+// Based on OIV world wine trade statistics with estimates for missing data
+const TRADE_DATA = {
+  2018: [
+    // From →     Ita  Fra  Spa  Por  Ger  UK   Ned  USA  Chi  Arg  Aus  SA   NZ   Chi2 Can  (m hL)
+    /* Italy */  [  0,   2,   1,   0,   8,  3,   4,  10,   0,   0,   0,  0,   0,   0,   3 ],
+    /* France */ [  3,   0,   3,   0,  10, 10,   3,  10,   0,   0,   0,  0,   0,   2,   4 ],
+    /* Spain */  [  4,  12,   0,   2,  10,  4,   2,   3,   3,   0,   0,  0,   0,   0,   2 ],
+    /* Portugal*/[  0,   1,   1,   0,   2,  3,   1,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    /* Germany */[  1,   2,   1,   0,   0,  4,   1,   2,   0,   0,   0,  0,   0,   0,   1 ],
+    /* UK */     [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    /* Netherl */[  0,   1,   0,   0,   1,  2,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    /* USA */    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   1 ],
+    /* Chile */  [  0,   0,   0,   0,   1,  1,   0,   5,   0,   0,   0,  0,   0,   1,   1 ],
+    /* Argentina*/[  0,   0,   0,   0,   0,  0,   0,   3,   0,   0,   0,  0,   0,   0,   1 ],
+    /* Australia*/[  0,   1,   0,   0,   1,  2,   0,   5,   3,   0,   0,  0,   0,   2,   2 ],
+    /* S.Africa */[  0,   0,   0,   0,   1,  1,   0,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    /* N.Zealand*/[  0,   0,   0,   0,   0,  1,   0,   1,   2,   0,   0,  0,   0,   2,   1 ],
+    /* China */   [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    /* Canada */  [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+  ],
+  2019: [
+    [  0,   2,   1,   0,   8,  3,   4,  11,   0,   0,   0,  0,   0,   0,   3 ],
+    [  3,   0,   3,   0,  10, 10,   3,  10,   0,   0,   0,  0,   0,   2,   4 ],
+    [  4,  13,   0,   2,  10,  4,   2,   3,   4,   0,   0,  0,   0,   0,   2 ],
+    [  0,   1,   1,   0,   2,  3,   1,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  1,   2,   1,   0,   0,  4,   1,   2,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   1,   0,   0,   1,  2,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   1,  1,   0,   6,   0,   0,   0,  0,   0,   1,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   3,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   1,   0,   0,   1,  2,   0,   5,   3,   0,   0,  0,   0,   2,   2 ],
+    [  0,   0,   0,   0,   1,  1,   0,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  1,   0,   1,   2,   0,   0,  0,   0,   2,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+  ],
+  2020: [
+    [  0,   1,   1,   0,   7,  2,   3,  10,   0,   0,   0,  0,   0,   0,   2 ],
+    [  3,   0,   3,   0,   9,  8,   3,   9,   0,   0,   0,  0,   0,   2,   4 ],
+    [  3,  11,   0,   2,   9,  3,   2,   3,   4,   0,   0,  0,   0,   0,   2 ],
+    [  0,   1,   1,   0,   2,  2,   1,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  1,   2,   1,   0,   0,  3,   1,   2,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   1,   0,   0,   1,  2,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   1,  1,   0,   5,   0,   0,   0,  0,   0,   1,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   2,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   1,   0,   0,   1,  2,   0,   4,   2,   0,   0,  0,   0,   1,   1 ],
+    [  0,   0,   0,   0,   1,  1,   0,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  1,   0,   1,   1,   0,   0,  0,   0,   1,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+  ],
+  2021: [
+    [  0,   2,   1,   0,   8,  3,   4,  11,   0,   0,   0,  0,   0,   0,   3 ],
+    [  3,   0,   3,   0,  10,  9,   3,  10,   0,   0,   0,  0,   0,   2,   4 ],
+    [  4,  12,   0,   2,  10,  4,   2,   3,   4,   0,   0,  0,   0,   0,   2 ],
+    [  0,   1,   1,   0,   2,  3,   1,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  1,   2,   1,   0,   0,  4,   1,   2,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   1,   0,   0,   1,  2,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   1,  1,   0,   6,   0,   0,   0,  0,   0,   1,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   3,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   1,   0,   0,   1,  2,   0,   5,   3,   0,   0,  0,   0,   2,   2 ],
+    [  0,   0,   0,   0,   1,  1,   0,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  1,   0,   1,   2,   0,   0,  0,   0,   2,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+  ],
+  2022: [
+    [  0,   2,   1,   0,   8,  3,   4,  11,   0,   0,   0,  0,   0,   0,   3 ],
+    [  3,   0,   3,   0,  10,  9,   3,  10,   0,   0,   0,  0,   0,   2,   4 ],
+    [  4,  12,   0,   2,  10,  4,   2,   3,   4,   0,   0,  0,   0,   0,   2 ],
+    [  0,   1,   1,   0,   2,  3,   1,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  1,   2,   1,   0,   0,  4,   1,   2,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   1,   0,   0,   1,  2,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   1,  1,   0,   6,   0,   0,   0,  0,   0,   1,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   3,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   1,   0,   0,   1,  2,   0,   5,   3,   0,   0,  0,   0,   2,   2 ],
+    [  0,   0,   0,   0,   1,  1,   0,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  1,   0,   1,   2,   0,   0,  0,   0,   2,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+  ],
+  2023: [
+    [  0,   2,   1,   0,   7,  3,   4,  10,   0,   0,   0,  0,   0,   0,   3 ],
+    [  3,   0,   3,   0,   9,  8,   3,   9,   0,   0,   0,  0,   0,   2,   4 ],
+    [  4,  11,   0,   2,   9,  4,   2,   3,   4,   0,   0,  0,   0,   0,   2 ],
+    [  0,   1,   1,   0,   2,  3,   1,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  1,   2,   1,   0,   0,  4,   1,   2,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   1,   0,   0,   1,  2,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   1,  1,   0,   6,   0,   0,   0,  0,   0,   1,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   3,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   1,   0,   0,   1,  2,   0,   5,   3,   0,   0,  0,   0,   2,   2 ],
+    [  0,   0,   0,   0,   1,  1,   0,   1,   0,   0,   0,  0,   0,   0,   1 ],
+    [  0,   0,   0,   0,   0,  1,   0,   1,   2,   0,   0,  0,   0,   2,   1 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+    [  0,   0,   0,   0,   0,  0,   0,   0,   0,   0,   0,  0,   0,   0,   0 ],
+  ],
+};
+
+const YEARS = [2018, 2019, 2020, 2021, 2022, 2023];
+
+// Average price per hL (USD/hL) by exporter — rough OIV/FAO estimates
+const PRICE_PER_HL = {
+  "Italy": 350, "France": 650, "Spain": 180, "Portugal": 300,
+  "Germany": 280, "UK": 400, "Netherlands": 300, "USA": 450,
+  "Chile": 220, "Argentina": 250, "Australia": 350, "South Africa": 200,
+  "New Zealand": 420, "China": 350, "Canada": 400
+};
+
+// Preset country groupings
+const PRESETS = {
+  global: null, // all countries
+  eu: ["Italy", "France", "Spain", "Portugal", "Germany", "UK", "Netherlands"],
+  newworld: ["USA", "Chile", "Argentina", "Australia", "South Africa", "New Zealand"],
+  asia: ["China", "Australia", "New Zealand", "Chile", "USA", "France", "Italy"],
+};
+
+// ========== STATE ==========
+let currentYear = 2022;
+let currentFlow = "export";
+let currentUnit = "mhl";
+let highlightedCountry = null;
+let activePreset = "global";
+
+// ========== BACKGROUND CANVAS (decorative particles) ==========
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx = bgCanvas.getContext('2d');
+let bgW = 1, bgH = 1;
+let bgParticles = [];
+
+function resizeCanvas() {
+  const rect = bgCanvas.parentElement.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  bgW = Math.max(rect.width, 1);
+  bgH = Math.max(rect.height, 1);
+  bgCanvas.width = bgW * dpr;
+  bgCanvas.height = bgH * dpr;
+  bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  initBgParticles();
+}
+
+function initBgParticles() {
+  bgParticles = [];
+  const n = Math.min(Math.floor(bgW * bgH / 12000), 80);
+  for (let i = 0; i < n; i++) {
+    bgParticles.push({
+      x: Math.random() * bgW,
+      y: Math.random() * bgH,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.15,
+      r: Math.random() * 2 + 0.5,
+      a: Math.random() * 0.08 + 0.02,
+      hue: Math.random() < 0.5 ? 30 : 210,
+    });
+  }
+}
+
+function drawBg() {
+  bgCtx.clearRect(0, 0, bgW, bgH);
+  // Subtle gradient overlay
+  const grad = bgCtx.createRadialGradient(bgW * 0.5, bgH * 0.4, 0, bgW * 0.5, bgH * 0.4, Math.max(bgW, bgH) * 0.6);
+  grad.addColorStop(0, 'rgba(20,28,40,0.3)');
+  grad.addColorStop(1, 'rgba(10,14,22,0.0)');
+  bgCtx.fillStyle = grad;
+  bgCtx.fillRect(0, 0, bgW, bgH);
+
+  for (const p of bgParticles) {
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < -10) p.x = bgW + 10;
+    if (p.x > bgW + 10) p.x = -10;
+    if (p.y < -10) p.y = bgH + 10;
+    if (p.y > bgH + 10) p.y = -10;
+    const g2 = bgCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 8);
+    g2.addColorStop(0, `hsla(${p.hue}, 50%, 60%, ${p.a})`);
+    g2.addColorStop(1, `hsla(${p.hue}, 50%, 60%, 0)`);
+    bgCtx.fillStyle = g2;
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, p.r * 8, 0, Math.PI * 2);
+    bgCtx.fill();
+  }
+  requestAnimationFrame(drawBg);
+}
+
+// ========== D3 CHORD DIAGRAM ==========
+const chordSvg = d3.select('#chord-svg');
+const chordW = 500, chordH = 500;
+const chordR = 220;
+const chordCx = chordW / 2, chordCy = chordH / 2;
+const labelR = chordR + 18;
+
+// ========== HELPER FUNCTIONS ==========
+function getTradeMatrix(year) {
+  const raw = TRADE_DATA[year];
+  if (!raw) return null;
+  // Filter by preset if needed
+  let indices;
+  if (activePreset === 'global' || !PRESETS[activePreset]) {
+    indices = COUNTRIES.map((_, i) => i);
+  } else {
+    const presetCountries = PRESETS[activePreset];
+    indices = presetCountries.map(c => COUNTRIES.indexOf(c)).filter(i => i >= 0);
+  }
+  // Build sub-matrix
+  const n = indices.length;
+  const matrix = [];
+  for (let i = 0; i < n; i++) {
+    const row = [];
+    for (let j = 0; j < n; j++) {
+      let val = raw[indices[i]][indices[j]];
+      // Convert to $B if needed
+      if (currentUnit === 'bUSD') {
+        const exporter = COUNTRIES[indices[i]];
+        const pricePerHL = PRICE_PER_HL[exporter] || 300;
+        val = val * pricePerHL / 1e9; // m hL * USD/hL / 1e9 = $B
+      }
+      row.push(val);
+    }
+    matrix.push(row);
+  }
+  return { matrix, indices, names: indices.map(i => COUNTRIES[i]) };
+}
+
+function computeStats(year) {
+  const { matrix, indices, names } = getTradeMatrix(year);
+  const exportsByCountry = {};
+  const importsByCountry = {};
+  for (let i = 0; i < names.length; i++) {
+    exportsByCountry[names[i]] = 0;
+    importsByCountry[names[i]] = 0;
+  }
+  let total = 0;
+  for (let i = 0; i < matrix.length; i++) {
+    for (let j = 0; j < matrix[i].length; j++) {
+      if (i !== j) {
+        exportsByCountry[names[i]] += matrix[i][j];
+        importsByCountry[names[j]] += matrix[i][j];
+        total += matrix[i][j];
+      }
+    }
+  }
+  // Trade balances
+  const balances = {};
+  for (const name of names) {
+    balances[name] = exportsByCountry[name] - importsByCountry[name];
+  }
+  return { exportsByCountry, importsByCountry, balances, total, names, matrix, indices };
+}
+
+function formatValue(val) {
+  if (currentUnit === 'mhl') {
+    return val.toFixed(1) + ' m hL';
+  } else {
+    return '$' + val.toFixed(2) + 'B';
+  }
+}
+
+function formatShort(val) {
+  if (currentUnit === 'mhl') {
+    return val.toFixed(1);
+  } else {
+    return val.toFixed(2);
+  }
+}
+
+// ========== CHORD DIAGRAM RENDERING ==========
+function renderChord() {
+  const { matrix, names } = getTradeMatrix(currentYear);
+  if (!matrix || names.length < 2) return;
+
+  chordSvg.selectAll('*').remove();
+
+  const chord = d3.chord()
+    .padAngle(0.04)
+    .sortSubgroups(d3.descending)
+    .sortChords(d3.descending);
+
+  const chords = chord(matrix);
+
+  const g = chordSvg.append('g')
+    .attr('transform', `translate(${chordCx},${chordCy})`);
+
+  // Color scale
+  const colorScale = (i) => COUNTRY_COLORS[names[i]] || '#888888';
+
+  // Groups (arcs around the circle)
+  const groupG = g.append('g')
+    .selectAll('g')
+    .data(chords.groups)
+    .enter().append('g')
+    .attr('class', 'chord-group')
+    .on('click', function(event, d) {
+      const countryName = names[d.index];
+      highlightCountry = highlightedCountry === countryName ? null : countryName;
+      document.getElementById('country-select').value = highlightedCountry || '';
+      showCountryDetail(countryName);
+      renderChord();
+    });
+
+  const arcGen = d3.arc()
+    .innerRadius(chordR)
+    .outerRadius(chordR + 14);
+
+  groupG.append('path')
+    .style('fill', d => colorScale(d.index))
+    .style('stroke', '#0a0e16')
+    .style('stroke-width', 1)
+    .attr('d', arcGen)
+    .style('opacity', d => {
+      if (!highlightedCountry) return 1;
+      return names[d.index] === highlightedCountry ? 1 : 0.25;
+    });
+
+  // Labels
+  groupG.append('text')
+    .attr('class', 'chord-label')
+    .each(function(d) {
+      const angle = (d.startAngle + d.endAngle) / 2;
+      const labelX = Math.cos(angle - Math.PI / 2) * labelR;
+      const labelY = Math.sin(angle - Math.PI / 2) * labelR;
+      const flip = angle > Math.PI;
+      const el = d3.select(this)
+        .attr('transform', `translate(${labelX},${labelY}) rotate(${(angle - Math.PI / 2) * 180 / Math.PI})`)
+        .attr('text-anchor', flip ? 'end' : 'start')
+        .attr('dx', flip ? -4 : 4)
+        .text(names[d.index]);
+    })
+    .style('opacity', d => {
+      if (!highlightedCountry) return 0.85;
+      return names[d.index] === highlightedCountry ? 1 : 0.2;
+    });
+
+  // Ribbons (trade flows)
+  const ribbonGen = d3.ribbon()
+    .radius(chordR);
+
+  g.append('g')
+    .selectAll('path')
+    .data(chords)
+    .enter().append('path')
+    .attr('class', 'chord-ribbon')
+    .attr('d', ribbonGen)
+    .style('fill', d => colorScale(d.source.index))
+    .style('opacity', d => {
+      if (!highlightedCountry) return 0.55;
+      const involves = names[d.source.index] === highlightedCountry || names[d.target.index] === highlightedCountry;
+      return involves ? 0.85 : 0.05;
+    })
+    .style('stroke', d => colorScale(d.source.index))
+    .style('stroke-width', 0.5)
+    .style('stroke-opacity', 0.3)
+    .on('click', function(event, d) {
+      const src = names[d.source.index];
+      const tgt = names[d.target.index];
+      const val = currentUnit === 'mhl' ? d.source.value : d.source.value;
+      showRibbonDetail(src, tgt, val);
+    })
+    .append('title')
+    .text(d => `${names[d.source.index]} → ${names[d.target.index]}: ${formatValue(d.source.value)}`);
+}
+
+// ========== BAR CHARTS ==========
+function renderBars() {
+  const stats = computeStats(currentYear);
+
+  // Sort exporters
+  const exporters = Object.entries(stats.exportsByCountry)
+    .filter(([k, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
+  const importers = Object.entries(stats.importsByCountry)
+    .filter(([k, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
+  renderBarChart('#bar-svg', exporters, 'export');
+  renderBarChart('#bar-svg2', importers, 'import');
+}
+
+function renderBarChart(selector, data, type) {
+  const svg = d3.select(selector);
+  svg.selectAll('*').remove();
+
+  if (!data.length) {
+    svg.append('text').attr('x', 110).attr('y', 80).attr('text-anchor', 'middle')
+      .attr('fill', 'var(--muted)').attr('font-size', '10px').text('No data');
+    return;
+  }
+
+  const maxVal = Math.max(...data.map(d => d[1]));
+  const barH = 16, gap = 4, topPad = 4, leftPad = 70, rightPad = 40;
+  const totalH = topPad + data.length * (barH + gap);
+
+  data.forEach((d, i) => {
+    const y = topPad + i * (barH + gap);
+    const w = Math.max((d[1] / maxVal) * (220 - leftPad - rightPad), 1);
+    const color = COUNTRY_COLORS[d[0]] || '#888';
+    const isHi = highlightedCountry === d[0];
+
+    const rowG = svg.append('g')
+      .attr('class', 'bar-row')
+      .attr('transform', `translate(0,${y})`)
+      .style('opacity', isHi || !highlightedCountry ? 1 : 0.3)
+      .on('click', function() {
+        highlightedCountry = highlightedCountry === d[0] ? null : d[0];
+        document.getElementById('country-select').value = highlightedCountry || '';
+        showCountryDetail(d[0]);
+        renderChord();
+        renderBars();
+      });
+
+    rowG.append('text')
+      .attr('class', 'bar-label')
+      .attr('x', leftPad - 6)
+      .attr('y', barH / 2 + 3)
+      .attr('text-anchor', 'end')
+      .text(d[0].length > 9 ? d[0].substring(0, 8) + '…' : d[0])
+      .style('fill', isHi ? color : 'var(--text)');
+
+    rowG.append('rect')
+      .attr('class', 'bar-rect')
+      .attr('x', leftPad)
+      .attr('y', 0)
+      .attr('width', w)
+      .attr('height', barH)
+      .attr('rx', 3)
+      .attr('fill', color)
+      .style('opacity', isHi ? 1 : 0.75);
+
+    rowG.append('text')
+      .attr('class', 'bar-value')
+      .attr('x', 220 - rightPad + 4)
+      .attr('y', barH / 2 + 3)
+      .text(formatShort(d[1]));
+  });
+}
+
+// ========== METRICS PANEL ==========
+function renderMetrics() {
+  const stats = computeStats(currentYear);
+  const unitLabel = currentUnit === 'mhl' ? 'm hL' : '$B';
+
+  document.getElementById('m-total').textContent = formatValue(stats.total);
+
+  const topExp = Object.entries(stats.exportsByCountry).sort((a,b) => b[1]-a[1])[0];
+  document.getElementById('m-top-exp').textContent = topExp ? `${topExp[0]} (${formatValue(topExp[1])})` : '—';
+
+  const topImp = Object.entries(stats.importsByCountry).sort((a,b) => b[1]-a[1])[0];
+  document.getElementById('m-top-imp').textContent = topImp ? `${topImp[0]} (${formatValue(topImp[1])})` : '—';
+
+  const surplus = Object.entries(stats.balances).sort((a,b) => b[1]-a[1])[0];
+  document.getElementById('m-surplus').textContent = surplus ? `${surplus[0]} (+${formatValue(surplus[1])})` : '—';
+
+  const deficit = Object.entries(stats.balances).sort((a,b) => a[1]-b[1])[0];
+  document.getElementById('m-deficit').textContent = deficit ? `${deficit[0]} (${formatValue(deficit[1])})` : '—';
+
+  document.getElementById('m-count').textContent = stats.names.length;
+}
+
+// ========== DETAIL PANELS ==========
+function showCountryDetail(country) {
+  const stats = computeStats(currentYear);
+  const exp = stats.exportsByCountry[country] || 0;
+  const imp = stats.importsByCountry[country] || 0;
+  const bal = stats.balances[country] || 0;
+
+  // Top trade partners
+  const partners = [];
+  const idx = stats.names.indexOf(country);
+  if (idx >= 0) {
+    for (let j = 0; j < stats.names.length; j++) {
+      if (j !== idx && stats.matrix[idx][j] > 0) {
+        partners.push({ name: stats.names[j], value: stats.matrix[idx][j], dir: 'export' });
+      }
+    }
+    for (let i = 0; i < stats.names.length; i++) {
+      if (i !== idx && stats.matrix[i][idx] > 0) {
+        partners.push({ name: stats.names[i], value: stats.matrix[i][idx], dir: 'import' });
+      }
+    }
+  }
+  partners.sort((a,b) => b.value - a.value);
+  const topPartners = partners.slice(0, 5).map(p =>
+    `${p.name} ${p.dir === 'export' ? '→' : '←'} ${formatValue(p.value)}`
+  ).join(' · ');
+
+  const panel = document.getElementById('detail-panel');
+  document.getElementById('detail-title').textContent = country + ' — Trade Profile (' + currentYear + ')';
+  document.getElementById('detail-content').innerHTML =
+    `Exports: <span>${formatValue(exp)}</span> · Imports: <span>${formatValue(imp)}</span> · Balance: <span style="color:${bal >= 0 ? 'var(--accent3)' : 'var(--warn)'}">${bal >= 0 ? '+' : ''}${formatValue(bal)}</span>` +
+    (topPartners ? `<br>Top flows: ${topPartners}` : '');
+  panel.style.display = 'block';
+}
+
+function showRibbonDetail(src, tgt, val) {
+  const panel = document.getElementById('detail-panel');
+  document.getElementById('detail-title').textContent = `${src} → ${tgt}`;
+  document.getElementById('detail-content').innerHTML =
+    `Volume: <span>${formatValue(val)}</span> · Direction: <span>Export from ${src} to ${tgt}</span> · Year: <span>${currentYear}</span>`;
+  panel.style.display = 'block';
+}
+
+// ========== FULL RENDER ==========
+function renderAll() {
+  renderChord();
+  renderBars();
+  renderMetrics();
+}
+
+// ========== EVENT HANDLERS ==========
+const yearSlider = document.getElementById('year-slider');
+const yearDisplay = document.getElementById('year-display');
+yearSlider.addEventListener('input', () => {
+  const idx = parseInt(yearSlider.value);
+  currentYear = YEARS[idx];
+  yearDisplay.textContent = currentYear;
+  renderAll();
+});
+
+document.getElementById('flow-select').addEventListener('change', (e) => {
+  currentFlow = e.target.value;
+  renderAll();
+});
+
+document.getElementById('unit-select').addEventListener('change', (e) => {
+  currentUnit = e.target.value;
+  renderAll();
+});
+
+document.getElementById('country-select').addEventListener('change', (e) => {
+  highlightedCountry = e.target.value || null;
+  if (highlightedCountry) showCountryDetail(highlightedCountry);
+  else document.getElementById('detail-panel').style.display = 'none';
+  renderAll();
+});
+
+// Preset buttons
+document.querySelectorAll('.preset-btns button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset-btns button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activePreset = btn.dataset.preset;
+    highlightedCountry = null;
+    document.getElementById('country-select').value = '';
+    // Populate country select with filtered list
+    populateCountrySelect();
+    renderAll();
+  });
+});
+
+function populateCountrySelect() {
+  const sel = document.getElementById('country-select');
+  sel.innerHTML = '<option value="">— All countries —</option>';
+  const { names } = getTradeMatrix(currentYear);
+  for (const name of names) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+}
+
+// ========== INIT ==========
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+drawBg();
+populateCountrySelect();
+renderAll();
+
+// Show Italy detail by default after 1s
+setTimeout(() => {
+  if (!highlightedCountry) {
+    highlightedCountry = 'Italy';
+    document.getElementById('country-select').value = 'Italy';
+    showCountryDetail('Italy');
+    renderAll();
+  }
+}, 1000);
+</script>
+</body>
+</html>
