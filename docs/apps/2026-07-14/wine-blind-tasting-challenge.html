@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Blind Tasting Challenge — Can You Identify the Wine?</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0d0a08;
+    --bg-card: #1a1410;
+    --bg-card-hover: #241c14;
+    --border: #3a2c20;
+    --text: #f0e8dc;
+    --text-muted: #9a8870;
+    --accent: #c9a060;
+    --accent-glow: rgba(201, 160, 96, 0.2);
+    --red-wine: #6c1f2e;
+    --red-wine-light: #8c2a3e;
+    --white-wine: #d4c46a;
+    --white-wine-light: #e4d48a;
+    --rose-wine: #e88a8a;
+    --rose-wine-light: #f0a0a0;
+    --success: #5a9a5a;
+    --error: #c94a4a;
+    --gold: #d4af37;
+  }
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  #app {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  /* --- Game Header --- */
+  .game-header {
+    text-align: center;
+    padding: 30px 0 20px;
+  }
+  .game-header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    text-shadow: 0 2px 20px var(--accent-glow);
+    letter-spacing: 0.02em;
+  }
+  .game-header p {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* --- Score Bar --- */
+  .score-bar {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    padding: 12px 20px;
+    margin-bottom: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .score-item {
+    text-align: center;
+  }
+  .score-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-family: system-ui, sans-serif;
+  }
+  .score-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 2px;
+  }
+  .score-value.streak { color: var(--gold); }
+  .score-value.accuracy { color: var(--success); }
+
+  /* --- Wine Glass Visualization --- */
+  .glass-stage {
+    position: relative;
+    width: 100%;
+    height: 380px;
+    background: radial-gradient(ellipse at center top, rgba(60, 40, 20, 0.3), transparent 70%), var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .glass-stage::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,255,255,0.005) 20px, rgba(255,255,255,0.005) 40px);
+    pointer-events: none;
+  }
+  #glass-svg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px;
+    height: 320px;
+    z-index: 2;
+  }
+  #aroma-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .glass-label {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    color: var(--text-muted);
+    z-index: 3;
+    letter-spacing: 0.05em;
+  }
+  .reveal-banner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .reveal-banner .reveal-type {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .reveal-banner .reveal-varietal {
+    font-size: 18px;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .reveal-banner .reveal-region {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .reveal-banner .reveal-correct {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+  }
+  .reveal-banner .reveal-correct.yes { background: rgba(90, 154, 90, 0.2); color: var(--success); border: 1px solid var(--success); }
+  .reveal-banner .reveal-correct.no { background: rgba(201, 74, 74, 0.2); color: var(--error); border: 1px solid var(--error); }
+
+  /* --- Clue Panel --- */
+  .clue-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .clue-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .clue-header h2 {
+    font-size: 16px;
+    color: var(--accent);
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .reveal-btn {
+    background: var(--bg-card-hover);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: system-ui, sans-serif;
+    transition: all 0.2s;
+  }
+  .reveal-btn:hover {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .clue-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 600px) {
+    .clue-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .clue-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .clue-card.locked {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .clue-card.unlocked {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .clue-card.unlocked:hover {
+    border-color: var(--accent);
+    background: var(--bg-card-hover);
+  }
+  .clue-card .clue-icon {
+    font-size: 24px;
+    margin-bottom: 6px;
+  }
+  .clue-card .clue-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-family: system-ui, sans-serif;
+    margin-bottom: 4px;
+  }
+  .clue-card .clue-value {
+    font-size: 14px;
+    color: var(--text);
+    font-weight: 600;
+    font-family: system-ui, sans-serif;
+    min-height: 18px;
+  }
+  .clue-card .clue-locked-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: system-ui, sans-serif;
+  }
+
+  /* --- Answer Panel --- */
+  .answer-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .answer-panel h2 {
+    font-size: 16px;
+    color: var(--accent);
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+    margin-bottom: 14px;
+    letter-spacing: 0.03em;
+  }
+  .answer-row {
+    margin-bottom: 12px;
+  }
+  .answer-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-family: system-ui, sans-serif;
+    margin-bottom: 6px;
+  }
+  .option-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .option-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: system-ui, sans-serif;
+    transition: all 0.2s;
+  }
+  .option-btn:hover {
+    border-color: var(--accent);
+    background: var(--bg-card-hover);
+  }
+  .option-btn.selected {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .option-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .submit-btn {
+    display: block;
+    width: 100%;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: system-ui, sans-serif;
+    cursor: pointer;
+    margin-top: 12px;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+  }
+  .submit-btn:hover {
+    background: var(--gold);
+    transform: scale(1.01);
+  }
+  .submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* --- Feedback Panel --- */
+  .feedback-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .feedback-panel.show { display: block; }
+  .feedback-panel h2 {
+    font-size: 16px;
+    color: var(--accent);
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .feedback-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+  }
+  .feedback-row:last-child { border-bottom: none; }
+  .feedback-label { color: var(--text-muted); }
+  .feedback-correct { color: var(--success); font-weight: 600; }
+  .feedback-wrong { color: var(--error); font-weight: 600; }
+  .feedback-your { color: var(--text); }
+
+  /* --- Next Button --- */
+  .next-btn {
+    display: block;
+    width: 100%;
+    background: var(--bg-card);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: system-ui, sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .next-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  /* --- Game Over Screen --- */
+  .game-over {
+    text-align: center;
+    padding: 40px 20px;
+    display: none;
+  }
+  .game-over.show { display: block; }
+  .game-over h1 {
+    font-size: 36px;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .game-over .final-score {
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--gold);
+    margin: 20px 0;
+  }
+  .game-over .rank-text {
+    font-size: 22px;
+    color: var(--accent);
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .game-over .rank-desc {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+  .game-over .restart-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 14px 36px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: system-ui, sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .game-over .restart-btn:hover {
+    background: var(--gold);
+    transform: scale(1.05);
+  }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    #app { padding: 12px; }
+    .glass-stage { height: 320px; }
+    #glass-svg { width: 160px; height: 280px; }
+    .game-header h1 { font-size: 24px; }
+    .score-bar { gap: 16px; padding: 10px 12px; }
+    .score-value { font-size: 20px; }
+    .clue-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .clue-card { padding: 10px; }
+    .clue-card .clue-icon { font-size: 20px; }
+    .clue-card .clue-value { font-size: 12px; }
+    .reveal-banner .reveal-type { font-size: 22px; }
+    .reveal-banner .reveal-varietal { font-size: 15px; }
+    .game-over h1 { font-size: 28px; }
+    .game-over .final-score { font-size: 44px; }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="app">
+  <!-- Game Header -->
+  <div class="game-header">
+    <h1>🍷 Blind Tasting Challenge</h1>
+    <p>You're a sommelier — use the clues to identify each mystery wine</p>
+  </div>
+
+  <!-- Score Bar -->
+  <div class="score-bar">
+    <div class="score-item">
+      <div class="score-label">Round</div>
+      <div class="score-value" id="round-val">1 / 8</div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">Score</div>
+      <div class="score-value" id="score-val">0</div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">Streak</div>
+      <div class="score-value streak" id="streak-val">0</div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">Accuracy</div>
+      <div class="score-value accuracy" id="accuracy-val">—</div>
+    </div>
+  </div>
+
+  <!-- Glass Visualization -->
+  <div class="glass-stage" id="glass-stage">
+    <canvas id="aroma-canvas"></canvas>
+    <svg id="glass-svg" viewBox="0 0 200 320" xmlns="http://www.w3.org/2000/svg">
+      <!-- Glass outline -->
+      <path id="glass-path" d="M 55 10 Q 55 15, 65 25 L 85 180 Q 85 200, 100 210 Q 115 200, 115 180 L 135 25 Q 145 15, 145 10 Z"
+        fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+      <!-- Wine fill -->
+      <clipPath id="glass-clip">
+        <path d="M 55 10 Q 55 15, 65 25 L 85 180 Q 85 200, 100 210 Q 115 200, 115 180 L 135 25 Q 145 15, 145 10 Z"/>
+      </clipPath>
+      <g clip-path="url(#glass-clip)">
+        <rect id="wine-fill" x="0" y="40" width="200" height="280" fill="#6c1f2e" opacity="0.85"/>
+        <rect id="wine-surface" x="0" y="40" width="200" height="3" fill="rgba(255,255,255,0.15)"/>
+      </g>
+      <!-- Stem -->
+      <line x1="100" y1="210" x2="100" y2="290" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+      <!-- Base -->
+      <ellipse cx="100" cy="295" rx="35" ry="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+    </svg>
+    <div class="glass-label" id="glass-label">Mystery Wine — examine the clues below</div>
+    <div class="reveal-banner" id="reveal-banner">
+      <div class="reveal-type" id="reveal-type"></div>
+      <div class="reveal-varietal" id="reveal-varietal"></div>
+      <div class="reveal-region" id="reveal-region"></div>
+      <div class="reveal-correct" id="reveal-correct"></div>
+    </div>
+  </div>
+
+  <!-- Clue Panel -->
+  <div class="clue-panel" id="clue-panel">
+    <div class="clue-header">
+      <h2>🔍 Tasting Clues — tap to reveal</h2>
+      <button class="reveal-btn" id="reveal-all-btn">Reveal All Clues</button>
+    </div>
+    <div class="clue-grid" id="clue-grid">
+      <!-- Clue cards generated by JS -->
+    </div>
+  </div>
+
+  <!-- Answer Panel -->
+  <div class="answer-panel" id="answer-panel">
+    <h2>🎯 Your Assessment</h2>
+    <div class="answer-row">
+      <div class="answer-label">Wine Type</div>
+      <div class="option-row" id="type-options"></div>
+    </div>
+    <div class="answer-row">
+      <div class="answer-label">Varietal / Grape</div>
+      <div class="option-row" id="varietal-options"></div>
+    </div>
+    <div class="answer-row">
+      <div class="answer-label">Region / Origin</div>
+      <div class="option-row" id="region-options"></div>
+    </div>
+    <button class="submit-btn" id="submit-btn" disabled>Submit Your Guess</button>
+  </div>
+
+  <!-- Feedback Panel -->
+  <div class="feedback-panel" id="feedback-panel">
+    <h2>📋 Tasting Notes</h2>
+    <div id="feedback-content"></div>
+    <button class="next-btn" id="next-btn" style="margin-top: 16px;">Next Wine →</button>
+  </div>
+
+  <!-- Game Over -->
+  <div class="game-over" id="game-over">
+    <h1>🍷 Tasting Complete!</h1>
+    <div class="rank-text" id="rank-text"></div>
+    <div class="final-score" id="final-score">0</div>
+    <div class="rank-desc" id="rank-desc"></div>
+    <button class="restart-btn" id="restart-btn">Play Again</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// --- Wine Database ---
+const WINES = [
+  {
+    name: "Cabernet Sauvignon",
+    type: "Red",
+    varietal: "Cabernet Sauvignon",
+    region: "Bordeaux, France",
+    color: "#6c1f2e",
+    colorLight: "#8c2a3e",
+    clues: {
+      sight: "Deep ruby, opaque core, slow legs",
+      aroma: "Blackcurrant, cedar, graphite, menthol",
+      palate: "Full-bodied, high tannin, dark fruit, herbaceous edge",
+      structure: "14% ABV, high acidity, firm tannins",
+      age: "5–20 years",
+      temp: "16–18°C"
+    },
+    fact: "The world's most planted premium red grape, originating from a chance crossing of Cabernet Franc and Sauvignon Blanc in 17th-century France."
+  },
+  {
+    name: "Chardonnay (Oaked)",
+    type: "White",
+    varietal: "Chardonnay",
+    region: "Burgundy, France",
+    color: "#d4c46a",
+    colorLight: "#e4d48a",
+    clues: {
+      sight: "Golden straw, viscous legs, slight green rim",
+      aroma: "Butter, toasted oak, baked apple, vanilla",
+      palate: "Full-bodied, creamy, baked orchard fruit, buttery finish",
+      structure: "13.5% ABV, medium+ acidity, MLF influence",
+      age: "2–10 years",
+      temp: "10–13°C"
+    },
+    fact: "Chardonnay is the chameleon of white grapes — oaked styles from Burgundy's Côte de Beaune set the benchmark for barrel-fermented whites worldwide."
+  },
+  {
+    name: "Pinot Noir",
+    type: "Red",
+    varietal: "Pinot Noir",
+    region: "Burgundy, France",
+    color: "#9a2030",
+    colorLight: "#ba3040",
+    clues: {
+      sight: "Garnet, translucent, thin rim",
+      aroma: "Red cherry, forest floor, mushroom, rose petal",
+      palate: "Light-bodied, silky tannin, red berry, earthy spice",
+      structure: "13% ABV, high acidity, low tannin",
+      age: "3–15 years",
+      temp: "14–16°C"
+    },
+    fact: "Pinot Noir is notoriously difficult to cultivate but produces some of the world's most sought-after wines in Burgundy's Côte d'Or."
+  },
+  {
+    name: "Riesling",
+    type: "White",
+    varietal: "Riesling",
+    region: "Mosel, Germany",
+    color: "#c8d46a",
+    colorLight: "#d8e48a",
+    clues: {
+      sight: "Pale lemon, water-white edges, slow legs",
+      aroma: "Lime, green apple, petrol, wet slate",
+      palate: "Light-bodied, bracing acidity, citrus, mineral, off-dry",
+      structure: "11% ABV, very high acidity, no tannin, RS 8–20 g/L",
+      age: "5–30+ years",
+      temp: "8–11°C"
+    },
+    fact: "Riesling's naturally high acidity and sugar-acidity balance allow it to age for decades, developing complex petrol/kerosene notes (TDN)."
+  },
+  {
+    name: "Syrah / Shiraz",
+    type: "Red",
+    varietal: "Syrah",
+    region: "Barossa Valley, Australia",
+    color: "#5c1a26",
+    colorLight: "#7c2a36",
+    clues: {
+      sight: "Inky purple, opaque, staining legs",
+      aroma: "Blackberry, black pepper, meat, leather",
+      palate: "Full-bodied, medium+ tannin, dark berry, peppery spice",
+      structure: "14.5% ABV, medium acidity, plush tannins",
+      age: "5–25 years",
+      temp: "16–18°C"
+    },
+    fact: "Called Syrah in France and Shiraz in Australia — Barossa Valley's old-vine Shiraz (some vines 150+ years old) is the region's signature."
+  },
+  {
+    name: "Sauvignon Blanc",
+    type: "White",
+    varietal: "Sauvignon Blanc",
+    region: "Marlborough, New Zealand",
+    color: "#d4e44a",
+    colorLight: "#e4f46a",
+    clues: {
+      sight: "Pale lemon-green, bright, watery edges",
+      aroma: "Passionfruit, gooseberry, grass, grapefruit",
+      palate: "Light-bodied, crisp acidity, tropical fruit, herbaceous",
+      structure: "12.5% ABV, high acidity, no tannin, bone dry",
+      age: "1–3 years",
+      temp: "7–10°C"
+    },
+    fact: "Marlborough Sauvignon Blanc's distinctive passionfruit and gooseberry character comes from the region's abundant sunlight and cool nights."
+  },
+  {
+    name: "Grenache",
+    type: "Red",
+    varietal: "Grenache",
+    region: "Châteauneuf-du-Pape, France",
+    color: "#7c2a2e",
+    colorLight: "#9c3a3e",
+    clues: {
+      sight: "Medium ruby, garnet rim, medium legs",
+      aroma: "Strawberry, raspberry, garrigue, white pepper",
+      palate: "Medium-full body, medium tannin, red fruit, spicy, warming",
+      structure: "14% ABV, medium acidity, round tannins, high alcohol",
+      age: "3–15 years",
+      temp: "15–17°C"
+    },
+    fact: "Grenache is the most planted red grape in Spain and the dominant variety in Châteauneuf-du-Pape blends, thriving in hot, dry, windy conditions."
+  },
+  {
+    name: "Prosecco",
+    type: "Sparkling",
+    varietal: "Glera",
+    region: "Veneto, Italy",
+    color: "#e8d44a",
+    colorLight: "#f0e06a",
+    clues: {
+      sight: "Pale straw, persistent fine bubbles, frothy mousse",
+      aroma: "Green apple, pear, white peach, floral",
+      palate: "Light-bodied, refreshing acidity, orchard fruit, off-dry",
+      structure: "11% ABV, medium acidity, 3 bar pressure, RS 12–17 g/L",
+      age: "Drink young (1–2 years)",
+      temp: "6–8°C"
+    },
+    fact: "Prosecco is made via the Charmat (tank) method, where the second fermentation happens in pressurized tanks rather than individual bottles."
+  },
+  {
+    name: "Malbec",
+    type: "Red",
+    varietal: "Malbec",
+    region: "Mendoza, Argentina",
+    color: "#5c1020",
+    colorLight: "#7c2030",
+    clues: {
+      sight: "Deep violet, opaque, dark core",
+      aroma: "Black plum, blueberry, violet, cocoa",
+      palate: "Full-bodied, medium tannin, dark berry, smooth, velvety",
+      structure: "14% ABV, medium acidity, round tannins",
+      age: "3–12 years",
+      temp: "16–18°C"
+    },
+    fact: "Malbec nearly went extinct in its French homeland (Cahors) after the 1956 frost but found a spectacular second life in Argentina's high-altitude vineyards."
+  },
+  {
+    name: "Gewürztraminer",
+    type: "White",
+    varietal: "Gewürztraminer",
+    region: "Alsace, France",
+    color: "#e8d07a",
+    colorLight: "#f0e09a",
+    clues: {
+      sight: "Deep gold, slight copper tinge, viscous",
+      aroma: "Lychee, rose, ginger, exotic spice, Turkish delight",
+      palate: "Full-bodied, low acidity, opulent fruit, spice, slightly oily",
+      structure: "13.5% ABV, low acidity, no tannin, off-dry possible",
+      age: "2–8 years",
+      temp: "10–12°C"
+    },
+    fact: "Gewürztraminer's unmistakable lychee and rose aroma comes from its high levels of terpenes — the same compounds found in Muscat."
+  }
+];
+
+// --- Game State ---
+let state = {
+  round: 0,
+  maxRounds: 8,
+  score: 0,
+  streak: 0,
+  correct: 0,
+  total: 0,
+  wines: [],
+  current: null,
+  cluesRevealed: {},
+  selected: { type: null, varietal: null, region: null },
+  submitted: false
+};
+
+// --- Shuffled array ---
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// --- Clue definitions ---
+const CLUE_DEFS = [
+  { key: 'sight', icon: '👁️', title: 'Visual' },
+  { key: 'aroma', icon: '👃', title: 'Aroma' },
+  { key: 'palate', icon: '👅', title: 'Palate' },
+  { key: 'structure', icon: '⚗️', title: 'Structure' },
+  { key: 'age', icon: '📅', title: 'Age Potential' },
+  { key: 'temp', icon: '🌡️', title: 'Serving Temp' }
+];
+
+// --- Build clue cards ---
+function buildClueGrid() {
+  const grid = document.getElementById('clue-grid');
+  grid.innerHTML = '';
+  CLUE_DEFS.forEach((def, idx) => {
+    const card = document.createElement('div');
+    card.className = 'clue-card locked';
+    card.dataset.key = def.key;
+    card.innerHTML = `
+      <div class="clue-icon">${def.icon}</div>
+      <div class="clue-title">${def.title}</div>
+      <div class="clue-value" id="clue-val-${def.key}"></div>
+      <div class="clue-locked-text" id="clue-lock-${def.key}">🔒 Tap to reveal</div>
+    `;
+    card.addEventListener('click', () => revealClue(def.key));
+    grid.appendChild(card);
+  });
+}
+
+// --- Reveal a clue ---
+function revealClue(key) {
+  if (state.submitted) return;
+  if (state.cluesRevealed[key]) return;
+  state.cluesRevealed[key] = true;
+
+  const valEl = document.getElementById('clue-val-' + key);
+  const lockEl = document.getElementById('clue-lock-' + key);
+  const card = document.querySelector(`.clue-card[data-key="${key}"]`);
+
+  card.classList.remove('locked');
+  card.classList.add('unlocked');
+
+  valEl.textContent = state.current.clues[key];
+  lockEl.textContent = '';
+
+  // Animate reveal with GSAP
+  gsap.fromTo(valEl, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' });
+  gsap.fromTo(card, { backgroundColor: 'rgba(201, 160, 96, 0.15)' }, { backgroundColor: 'rgba(0,0,0,0)', duration: 0.8 });
+}
+
+// --- Reveal all clues ---
+function revealAllClues() {
+  if (state.submitted) return;
+  CLUE_DEFS.forEach(def => revealClue(def.key));
+}
+
+// --- Build answer options ---
+function buildAnswerOptions() {
+  const types = ['Red', 'White', 'Sparkling'];
+  const varietals = [...new Set(WINES.map(w => w.varietal))];
+  const regions = [...new Set(WINES.map(w => w.region))];
+
+  function fill(containerId, options, group) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    const shuffled = shuffle(options);
+    shuffled.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'option-btn';
+      btn.textContent = opt;
+      btn.dataset.value = opt;
+      btn.dataset.group = group;
+      btn.addEventListener('click', () => selectOption(btn, group));
+      container.appendChild(btn);
+    });
+  }
+
+  fill('type-options', types, 'type');
+  fill('varietal-options', varietals, 'varietal');
+  fill('region-options', regions, 'region');
+}
+
+// --- Select an option ---
+function selectOption(btn, group) {
+  if (state.submitted) return;
+  const container = btn.parentElement;
+  container.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  state.selected[group] = btn.dataset.value;
+  checkSubmitReady();
+}
+
+// --- Check if submit is ready ---
+function checkSubmitReady() {
+  const ready = state.selected.type && state.selected.varietal && state.selected.region;
+  document.getElementById('submit-btn').disabled = !ready;
+}
+
+// --- Submit guess ---
+function submitGuess() {
+  if (state.submitted) return;
+  state.submitted = true;
+  state.total++;
+
+  // Calculate score
+  let points = 0;
+  const typeCorrect = state.selected.type === state.current.type;
+  const varietalCorrect = state.selected.varietal === state.current.varietal;
+  const regionCorrect = state.selected.region === state.current.region;
+
+  // Scoring: 3 pts for type, 5 pts for varietal, 2 pts for region
+  if (typeCorrect) points += 3;
+  if (varietalCorrect) points += 5;
+  if (regionCorrect) points += 2;
+
+  // Bonus for not using all clues (efficiency bonus)
+  const usedClues = Object.keys(state.cluesRevealed).length;
+  if (usedClues <= 3) points += 2; // efficiency bonus
+
+  const allCorrect = typeCorrect && varietalCorrect && regionCorrect;
+  if (allCorrect) {
+    points += 3; // perfect bonus
+    state.streak++;
+    state.correct++;
+  } else {
+    state.streak = 0;
+  }
+
+  state.score += points;
+
+  // Show reveal banner
+  showReveal(allCorrect, points);
+
+  // Show feedback
+  showFeedback(typeCorrect, varietalCorrect, regionCorrect, usedClues, points);
+
+  // Update score
+  updateScore();
+
+  // Hide answer panel, show feedback
+  document.getElementById('answer-panel').style.display = 'none';
+  document.getElementById('feedback-panel').classList.add('show');
+}
+
+// --- Show reveal banner ---
+function showReveal(allCorrect, points) {
+  const banner = document.getElementById('reveal-banner');
+  document.getElementById('reveal-type').textContent = state.current.type;
+  document.getElementById('reveal-varietal').textContent = state.current.varietal;
+  document.getElementById('reveal-region').textContent = state.current.region;
+
+  const correctEl = document.getElementById('reveal-correct');
+  if (allCorrect) {
+    correctEl.textContent = `✓ Perfect! +${points} pts`;
+    correctEl.className = 'reveal-correct yes';
+  } else {
+    correctEl.textContent = `Partial: +${points} pts`;
+    correctEl.className = 'reveal-correct no';
+  }
+
+  document.getElementById('glass-label').textContent = `Answer: ${state.current.name}`;
+
+  gsap.fromTo(banner, { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.4)' });
+}
+
+// --- Show feedback panel ---
+function showFeedback(typeOk, varOk, regOk, usedClues, points) {
+  const content = document.getElementById('feedback-content');
+  const clueText = usedClues <= 3 ? `Yes (${usedClues} clues — efficiency bonus +2)` : `No (${usedClues} clues used)`;
+  const perfectText = (typeOk && varOk && regOk) ? 'Yes (+3 bonus)' : 'No';
+
+  content.innerHTML = `
+    <div class="feedback-row">
+      <span class="feedback-label">Type: ${state.selected.type}</span>
+      <span class="${typeOk ? 'feedback-correct' : 'feedback-wrong'}">${typeOk ? '✓ Correct (+3)' : '✗ Wrong'}</span>
+    </div>
+    <div class="feedback-row">
+      <span class="feedback-label">Varietal: ${state.selected.varietal}</span>
+      <span class="${varOk ? 'feedback-correct' : 'feedback-wrong'}">${varOk ? '✓ Correct (+5)' : '✗ Wrong'}</span>
+    </div>
+    <div class="feedback-row">
+      <span class="feedback-label">Region: ${state.selected.region}</span>
+      <span class="${regOk ? 'feedback-correct' : 'feedback-wrong'}">${regOk ? '✓ Correct (+2)' : '✗ Wrong'}</span>
+    </div>
+    <div class="feedback-row">
+      <span class="feedback-label">Efficiency bonus (≤3 clues)</span>
+      <span class="${usedClues <= 3 ? 'feedback-correct' : 'feedback-your'}">${usedClues <= 3 ? '✓ +2' : '—'}</span>
+    </div>
+    <div class="feedback-row">
+      <span class="feedback-label">Perfect tasting bonus</span>
+      <span class="${(typeOk && varOk && regOk) ? 'feedback-correct' : 'feedback-your'}">${(typeOk && varOk && regOk) ? '✓ +3' : '—'}</span>
+    </div>
+    <div class="feedback-row" style="border-top: 2px solid var(--border); margin-top: 4px; padding-top: 10px;">
+      <span class="feedback-label" style="font-weight: 600; color: var(--accent);">Total this round</span>
+      <span class="feedback-correct" style="font-size: 16px;">+${points} pts</span>
+    </div>
+    <div style="margin-top: 14px; padding: 12px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);">
+      <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; font-family: system-ui, sans-serif;">📚 Did You Know?</div>
+      <div style="font-size: 13px; color: var(--text); font-family: system-ui, sans-serif; line-height: 1.5;">${state.current.fact}</div>
+    </div>
+  `;
+}
+
+// --- Update score display ---
+function updateScore() {
+  document.getElementById('round-val').textContent = `${Math.min(state.round + 1, state.maxRounds)} / ${state.maxRounds}`;
+  document.getElementById('score-val').textContent = state.score;
+  document.getElementById('streak-val').textContent = state.streak;
+  const acc = state.total > 0 ? Math.round((state.correct / state.total) * 100) + '%' : '—';
+  document.getElementById('accuracy-val').textContent = acc;
+}
+
+// --- Next round ---
+function nextRound() {
+  state.round++;
+  if (state.round >= state.maxRounds) {
+    gameOver();
+    return;
+  }
+
+  // Hide feedback
+  document.getElementById('feedback-panel').classList.remove('show');
+  document.getElementById('answer-panel').style.display = 'block';
+
+  // Reset state
+  state.current = state.wines[state.round];
+  state.cluesRevealed = {};
+  state.selected = { type: null, varietal: null, region: null };
+  state.submitted = false;
+
+  // Reset UI
+  document.getElementById('reveal-banner').style.opacity = '0';
+  document.getElementById('glass-label').textContent = 'Mystery Wine — examine the clues below';
+  document.getElementById('submit-btn').disabled = true;
+
+  // Reset options
+  document.querySelectorAll('.option-btn').forEach(b => {
+    b.classList.remove('selected');
+    b.disabled = false;
+  });
+
+  // Rebuild clue grid
+  buildClueGrid();
+
+  // Update wine color in glass
+  updateGlassWine();
+
+  // Update score
+  updateScore();
+
+  // Animate glass transition
+  gsap.fromTo('#glass-svg', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' });
+}
+
+// --- Game over ---
+function gameOver() {
+  document.getElementById('feedback-panel').classList.remove('show');
+  document.getElementById('answer-panel').style.display = 'none';
+  document.getElementById('glass-stage').style.display = 'none';
+  document.getElementById('clue-panel').style.display = 'none';
+  document.getElementById('game-over').classList.add('show');
+
+  const maxPossible = state.maxRounds * 13; // 3+5+2+3+2 = 15? Actually max per round = 3+5+2+2+3 = 15
+  const pct = Math.round((state.score / (state.maxRounds * 15)) * 100);
+
+  let rank, desc;
+  if (pct >= 85) {
+    rank = "🏆 Master Sommelier";
+    desc = "Extraordinary palate — you'd pass the Court of Master Sommeliers exam blind!";
+  } else if (pct >= 70) {
+    rank = "🥇 Advanced Sommelier";
+    desc = "Impressive tasting skills — you clearly know your way around a wine list.";
+  } else if (pct >= 50) {
+    rank = "🥈 Certified Wine Enthusiast";
+    desc = "Solid foundation — keep practicing and trust your senses.";
+  } else if (pct >= 30) {
+    rank = "🥉 Aspiring Taster";
+    desc = "You're on the right track — every great sommelier started here!";
+  } else {
+    rank = "🍷 Curious Beginner";
+    desc = "Blind tasting is hard! The more you taste, the better you'll get.";
+  }
+
+  document.getElementById('rank-text').textContent = rank;
+  document.getElementById('rank-desc').textContent = desc;
+
+  // Animate final score counter
+  const scoreEl = document.getElementById('final-score');
+  scoreEl.textContent = '0';
+  gsap.to({ val: 0 }, {
+    val: state.score,
+    duration: 1.2,
+    ease: 'power2.out',
+    onUpdate: function() {
+      scoreEl.textContent = Math.round(this.targets()[0].val);
+    }
+  });
+}
+
+// --- Update glass wine color ---
+function updateGlassWine() {
+  const fill = document.getElementById('wine-fill');
+  const surface = document.getElementById('wine-surface');
+
+  // Animate color transition
+  gsap.to(fill, {
+    attr: { fill: state.current.color },
+    duration: 0.6,
+    ease: 'power2.inOut'
+  });
+  gsap.to(surface, {
+    duration: 0.6,
+    ease: 'power2.inOut'
+  });
+  // Set surface highlight color based on wine color
+  surface.setAttribute('fill', 'rgba(255,255,255,0.15)');
+}
+
+// --- Aroma particle canvas (decorative) ---
+let aromaCanvas, aromaCtx, aromaParticles = [], aromaAnimId;
+
+function initAromaCanvas() {
+  aromaCanvas = document.getElementById('aroma-canvas');
+  aromaCtx = aromaCanvas.getContext('2d');
+  resizeAromaCanvas();
+  startAromaLoop();
+}
+
+function resizeAromaCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const stage = document.getElementById('glass-stage');
+  aromaCanvas.width = stage.clientWidth * dpr;
+  aromaCanvas.height = stage.clientHeight * dpr;
+  aromaCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function startAromaLoop() {
+  cancelAnimationFrame(aromaAnimId);
+  aromaLoop();
+}
+
+function aromaLoop() {
+  const w = aromaCanvas.width / (window.devicePixelRatio || 1);
+  const h = aromaCanvas.height / (window.devicePixelRatio || 1);
+  aromaCtx.clearRect(0, 0, w, h);
+
+  // Spawn new particles
+  if (Math.random() < 0.4 && aromaParticles.length < 30 && !state.submitted) {
+    const cx = w / 2;
+    const glassTop = h * 0.15;
+    aromaParticles.push({
+      x: cx + (Math.random() - 0.5) * 40,
+      y: glassTop,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -0.3 - Math.random() * 0.5,
+      life: 1,
+      size: 1 + Math.random() * 2,
+      hue: state.current ? getAromaHue() : 40
+    });
+  }
+
+  // Update and draw
+  for (let i = aromaParticles.length - 1; i >= 0; i--) {
+    const p = aromaParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx += (Math.random() - 0.5) * 0.05;
+    p.life -= 0.005;
+
+    if (p.life <= 0) {
+      aromaParticles.splice(i, 1);
+      continue;
+    }
+
+    const alpha = p.life * 0.4;
+    aromaCtx.beginPath();
+    aromaCtx.arc(p.x, p.y, p.size * (1 + (1 - p.life) * 1.5), 0, Math.PI * 2);
+    aromaCtx.fillStyle = `hsla(${p.hue}, 60%, 65%, ${alpha})`;
+    aromaCtx.fill();
+  }
+
+  aromaAnimId = requestAnimationFrame(aromaLoop);
+}
+
+function getAromaHue() {
+  if (!state.current) return 40;
+  if (state.current.type === 'Red') return 10 + Math.random() * 20; // warm reds
+  if (state.current.type === 'White') return 50 + Math.random() * 30; // yellow-gold
+  if (state.current.type === 'Sparkling') return 45 + Math.random() * 20;
+  return 40;
+}
+
+// --- Initialize game ---
+function initGame() {
+  state = {
+    round: 0,
+    maxRounds: 8,
+    score: 0,
+    streak: 0,
+    correct: 0,
+    total: 0,
+    wines: shuffle(WINES).slice(0, 8),
+    current: null,
+    cluesRevealed: {},
+    selected: { type: null, varietal: null, region: null },
+    submitted: false
+  };
+
+  state.current = state.wines[0];
+
+  // Show all panels
+  document.getElementById('glass-stage').style.display = 'block';
+  document.getElementById('clue-panel').style.display = 'block';
+  document.getElementById('answer-panel').style.display = 'block';
+  document.getElementById('game-over').classList.remove('show');
+
+  // Build UI
+  buildClueGrid();
+  buildAnswerOptions();
+  updateGlassWine();
+  updateScore();
+
+  // Reset reveal banner
+  document.getElementById('reveal-banner').style.opacity = '0';
+  document.getElementById('glass-label').textContent = 'Mystery Wine — examine the clues below';
+  document.getElementById('submit-btn').disabled = true;
+  document.querySelectorAll('.option-btn').forEach(b => {
+    b.classList.remove('selected');
+    b.disabled = false;
+  });
+
+  // Animate entrance
+  gsap.fromTo('.glass-stage', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6 });
+  gsap.fromTo('.clue-panel', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, delay: 0.1 });
+  gsap.fromTo('.answer-panel', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, delay: 0.2 });
+}
+
+// --- Event listeners ---
+document.getElementById('submit-btn').addEventListener('click', submitGuess);
+document.getElementById('next-btn').addEventListener('click', nextRound);
+document.getElementById('reveal-all-btn').addEventListener('click', revealAllClues);
+document.getElementById('restart-btn').addEventListener('click', () => {
+  initGame();
+});
+
+// --- Resize handler ---
+window.addEventListener('resize', () => {
+  resizeAromaCanvas();
+});
+
+// --- Start ---
+initGame();
+initAromaCanvas();
+</script>
+</body>
+</html>
