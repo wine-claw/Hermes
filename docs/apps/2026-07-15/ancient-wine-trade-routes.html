@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Ancient Mediterranean Wine Trade Routes</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; }
+  body {
+    background: #0d0a08;
+    color: #d4c4a8;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  .disclaimer {
+    background: #1a1610;
+    border-bottom: 1px solid #3a3020;
+    color: #c9a060;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    font-family: system-ui, sans-serif;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  #app-header {
+    text-align: center;
+    padding: 1rem 1rem 0.5rem;
+  }
+  #app-header h1 {
+    font-size: clamp(1.3rem, 4vw, 1.8rem);
+    color: #e8c987;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.3rem;
+  }
+  #app-header .subtitle {
+    font-size: 0.85rem;
+    color: #a09078;
+    font-style: italic;
+  }
+
+  #canvas-container {
+    position: relative;
+    width: 100%;
+    max-width: 960px;
+    margin: 0 auto;
+    height: 55vh;
+    min-height: 350px;
+    max-height: 600px;
+    border: 1px solid #3a2e1e;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0a0806;
+  }
+  #map-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+  }
+  #map-canvas:active { cursor: grabbing; }
+
+  #ui-layer {
+    position: relative;
+    max-width: 960px;
+    margin: 0.5rem auto 0;
+    padding: 0 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .panel {
+    background: rgba(20, 16, 12, 0.92);
+    border: 1px solid #3a2e1e;
+    border-radius: 8px;
+    padding: 0.85rem;
+  }
+  .panel h3 {
+    font-size: 0.82rem;
+    color: #c9a060;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid #3a2e1e;
+    padding-bottom: 0.3rem;
+  }
+
+  #controls {
+    flex: 1;
+    min-width: 240px;
+    max-width: 320px;
+  }
+  #controls label {
+    display: block;
+    font-size: 0.78rem;
+    color: #a09078;
+    margin-bottom: 0.15rem;
+    margin-top: 0.5rem;
+  }
+  #controls label:first-of-type { margin-top: 0; }
+  #controls select,
+  #controls input[type="range"] {
+    width: 100%;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.35rem;
+    background: #1a1610;
+    color: #d4c4a8;
+    border: 1px solid #3a2e1e;
+    border-radius: 4px;
+    font-family: 'Georgia', serif;
+  }
+  #controls input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: #2a2218;
+    border-radius: 3px;
+    padding: 0;
+    cursor: pointer;
+  }
+  #controls input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #c9a060;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  #controls input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #c9a060;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+  .control-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.4rem;
+  }
+  .control-row button {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.78rem;
+    background: #2a2218;
+    color: #d4c4a8;
+    border: 1px solid #4a3a28;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Georgia', serif;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .control-row button:hover {
+    background: #3a2e1e;
+    border-color: #c9a060;
+  }
+  .control-row button.active {
+    background: #c9a060;
+    color: #1a1610;
+    border-color: #c9a060;
+    font-weight: bold;
+  }
+
+  #metrics {
+    flex: 1.5;
+    min-width: 280px;
+  }
+  #metrics dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.2rem 0.8rem;
+    font-size: 0.8rem;
+  }
+  #metrics dt {
+    color: #a09078;
+    font-style: italic;
+  }
+  #metrics dd {
+    color: #d4c4a8;
+    text-align: right;
+  }
+  #metrics .highlight { color: #e8c987; font-weight: bold; }
+
+  #info-panel {
+    flex: 1;
+    min-width: 280px;
+    max-width: 400px;
+  }
+  #info-panel .city-name {
+    font-size: 1.1rem;
+    color: #e8c987;
+    margin-bottom: 0.2rem;
+  }
+  #info-panel .city-region {
+    font-size: 0.78rem;
+    color: #a09078;
+    font-style: italic;
+    margin-bottom: 0.5rem;
+  }
+  #info-panel .city-desc {
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: #c9b890;
+  }
+  #info-panel .placeholder {
+    color: #6a5a48;
+    font-style: italic;
+    font-size: 0.82rem;
+  }
+
+  #legend {
+    max-width: 960px;
+    margin: 0.5rem auto;
+    padding: 0 1rem;
+    font-size: 0.75rem;
+    color: #a09078;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(26, 22, 16, 0.95);
+    border: 1px solid #c9a060;
+    border-radius: 4px;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.78rem;
+    color: #e8c987;
+    z-index: 50;
+    white-space: nowrap;
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    #canvas-container {
+      height: 42vh;
+      min-height: 260px;
+      max-height: 380px;
+    }
+    #ui-layer {
+      flex-direction: column;
+    }
+    #controls, #metrics, #info-panel {
+      max-width: 100%;
+      width: 100%;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="app-header">
+  <h1>Ancient Mediterranean Wine Trade Routes</h1>
+  <div class="subtitle">From Phoenician amphorae to Roman dolia — trace the sea lanes that carried wine across the Mare Nostrum (800 BC – 200 AD)</div>
+</div>
+
+<div id="canvas-container">
+  <canvas id="map-canvas"></canvas>
+  <div id="tooltip"></div>
+</div>
+
+<div id="legend">
+  <div class="legend-item"><span class="legend-dot" style="background:#e8c987"></span> Major wine port</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#c9a060"></span> Secondary port</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#7a6a50"></span> Inland trade node</div>
+  <div class="legend-item"><span style="color:#4a8ac9; font-size:14px;">▬</span> Sea trade route</div>
+  <div class="legend-item"><span style="color:#8a6a3a; font-size:14px;">▬</span> Land trade route</div>
+</div>
+
+<div id="ui-layer">
+  <div class="panel" id="controls">
+    <h3>Settings</h3>
+    <label>Era</label>
+    <select id="era-select">
+      <option value="phoenician">Phoenician Era (800–600 BC)</option>
+      <option value="greek">Greek Colonization (600–400 BC)</option>
+      <option value="hellenistic" selected>Hellenistic (400–100 BC)</option>
+      <option value="roman">Roman Imperial (100 BC–200 AD)</option>
+    </select>
+    <label>Trade Volume Visualization</label>
+    <div class="control-row">
+      <button id="btn-trade" class="active">Show Routes</button>
+      <button id="btn-amphorae">Show Amphorae</button>
+    </div>
+    <label>Animation Speed</label>
+    <input type="range" id="speed-slider" min="0.2" max="3" step="0.1" value="1">
+    <label>Map Zoom</label>
+    <input type="range" id="zoom-slider" min="0.8" max="2.5" step="0.1" value="1.3">
+  </div>
+
+  <div class="panel" id="metrics">
+    <h3>Trade Intelligence</h3>
+    <dl>
+      <dt>Active Routes</dt><dd id="m-routes" class="highlight">—</dd>
+      <dt>Total Ports</dt><dd id="m-ports" class="highlight">—</dd>
+      <dt>Major Exporters</dt><dd id="m-exporters">—</dd>
+      <dt>Top Destination</dt><dd id="m-dest">—</dd>
+      <dt>Amphorae in Transit</dt><dd id="m-amphorae">—</dd>
+      <dt>Dominant Power</dt><dd id="m-power" class="highlight">—</dd>
+    </dl>
+  </div>
+
+  <div class="panel" id="info-panel">
+    <h3>Port Information</h3>
+    <div id="info-content"><div class="placeholder">Click a port on the map to see details…</div></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ============================================================
+  // DATA: Mediterranean cities and trade routes
+  // ============================================================
+
+  const CITIES = [
+    // Major wine production/trade centers
+    {name: "Tyre", x: 0.62, y: 0.42, type: "major", region: "Phoenicia", era: ["phoenician","greek","hellenistic","roman"],
+     desc: "Queen of Phoenician cities. Tyrian merchants pioneered maritime wine trade, exporting Levantine wines in amphorae across the Mediterranean from the 9th century BC. Their glassware was also prized by wine merchants."},
+    {name: "Sidon", x: 0.61, y: 0.41, type: "major", region: "Phoenicia", era: ["phoenician","greek","hellenistic","roman"],
+     desc: "Sister city to Tyre. Sidon was famed for its purple dye (murex) and its wine trade. Phoenician ships from Sidon carried wine to Egypt, Crete, and the Aegean."},
+    {name: "Carthage", x: 0.40, y: 0.55, type: "major", region: "North Africa", era: ["phoenician","greek","hellenistic"],
+     desc: "Great Phoenician colony (c. 814 BC). Carthage controlled western Mediterranean wine trade for centuries, distributing wines from North Africa, Sicily, and Iberia through its vast merchant fleet."},
+    {name: "Athens", x: 0.56, y: 0.40, type: "major", region: "Attica, Greece", era: ["greek","hellenistic","roman"],
+     desc: "Center of the wine symposium culture. Athens imported wines from Chios, Lesbos, and Thasos, while Attic black-figure amphorae served as the standard shipping container of the Classical era."},
+    {name: "Rome", x: 0.50, y: 0.43, type: "major", region: "Latium, Italy", era: ["hellenistic","roman"],
+     desc: "By the 2nd century BC, Rome had become the Mediterranean's greatest wine consumer and distributor. The Tiber carried wine from Campania and Latium to the city's wharves. Falernian, Caecuban, and Setine were prized."},
+    {name: "Pompeii", x: 0.49, y: 0.44, type: "major", region: "Campania, Italy", era: ["hellenistic","roman"],
+     desc: "Buried by Vesuvius in 79 AD, Pompeii's excavations reveal over 200 wine shops (thermopolia) and vast vineyards on its slopes. Campanian Falernian was the most celebrated wine of the Roman world."},
+    {name: "Massalia", x: 0.36, y: 0.38, type: "major", region: "Gaul (Marseille)", era: ["greek","hellenistic","roman"],
+     desc: "Founded by Phocaeans c. 600 BC. Massalia was the gateway for wine into Gaul, distributing Greek and later Roman wines up the Rhône to Celtic tribes. The site of the earliest known French vineyards."},
+    {name: "Alexandria", x: 0.58, y: 0.50, type: "major", region: "Egypt", era: ["hellenistic","roman"],
+     desc: "Founded by Alexander 331 BC. Alexandria's harbor handled massive wine shipments — Egyptian Mareotic wine was famous, and the city served as a hub between Aegean, Levantine, and African trade."},
+    {name: "Rhodes", x: 0.60, y: 0.45, type: "major", region: "Aegean", era: ["greek","hellenistic","roman"],
+     desc: "Island naval power. Rhodian wine was exported in distinctive handle-stamped amphorae found across the Mediterranean. Rhodes was a key transshipment node between Egypt, Anatolia, and the Aegean."},
+    {name: "Chios", x: 0.57, y: 0.40, type: "major", region: "Aegean", era: ["phoenician","greek","hellenistic","roman"],
+     desc: "Perhaps the most famous Greek wine of antiquity. Chian wine amphorae have been found from Egypt to southern France. The island claimed to be the birthplace of Homer, and its wine was praised by him."},
+    {name: "Thasos", x: 0.57, y: 0.36, type: "major", region: "Thrace", era: ["greek","hellenistic","roman"],
+     desc: "Island off Thrace. Thasian wine was celebrated for its quality. The island's amphora workshops stamped each jar with the magistrate's name — an early form of appellation control."},
+    {name: "Tarraco", x: 0.28, y: 0.48, type: "secondary", region: "Hispania (Tarragona)", era: ["hellenistic","roman"],
+     desc: "Roman provincial capital of Hispania Tarraconensis. Tarraconensis wines were exported across the empire, and Tarraco's harbor shipped Iberian wines to Rome and Gaul."},
+    {name: "Gades", x: 0.20, y: 0.52, type: "secondary", region: "Hispania (Cádiz)", era: ["phoenician","greek","hellenistic","roman"],
+     desc: "Phoenician colony (Gadir) at the Pillars of Hercules. Gateway to the Atlantic — traded wines with the Balearics, Lusitania, and North Africa. Famous for its garum (fish sauce) as much as its wine."},
+    {name: "Sybaris", x: 0.51, y: 0.48, type: "secondary", region: "Magna Graecia", era: ["greek","hellenistic"],
+     desc: "Achaean colony in southern Italy (c. 720 BC). So wealthy that 'sybarite' became synonymous with luxury. Its fertile plains produced abundant wine before being destroyed by Croton in 510 BC."},
+    {name: "Syracuse", x: 0.52, y: 0.47, type: "major", region: "Sicily", era: ["greek","hellenistic","roman"],
+     desc: "Most powerful Greek city in the West. Syracuse controlled the Strait of Messina and the Sicilian wine trade. Its colony influence spread viticulture across Sicily."},
+    {name: "Panormus", x: 0.48, y: 0.49, type: "secondary", region: "Sicily (Palermo)", era: ["phoenician","greek","hellenistic","roman"],
+     desc: "Phoenician trading post, later Greek and Roman. Key node for Sicilian wine exports — the island was one of the most prolific wine-producing regions of antiquity."},
+    {name: "Byzantium", x: 0.64, y: 0.36, type: "secondary", region: "Bosphorus", era: ["greek","hellenistic","roman"],
+     desc: "Founded by Megara c. 660 BC. Controlled the grain and wine route between the Black Sea and the Aegean. Collected tolls on every ship passing through the Bosphorus."},
+    {name: "Knossos", x: 0.56, y: 0.46, type: "secondary", region: "Crete", era: ["phoenician","greek","hellenistic","roman"],
+     desc: "Minoan capital. Wine production on Crete dates to 2000 BC. By the Classical period, Cretan wine was traded through Knossos and the island's ports to Egypt and the Aegean."},
+    {name: "Puteoli", x: 0.49, y: 0.45, type: "secondary", region: "Campania (Pozzuoli)", era: ["hellenistic","roman"],
+     desc: "Main commercial harbor of Rome before Ostia was expanded. Puteoli received grain and wine from Alexandria and the East. Its bay hosted the largest wine transshipment operations in Italy."},
+    {name: "Ostia", x: 0.48, y: 0.42, type: "secondary", region: "Latium", era: ["roman"],
+     desc: "Rome's port at the Tiber mouth. Expanded by Claudius and Trajan. By the 2nd century AD, Ostia handled the bulk of Rome's wine imports — from Gaul, Spain, North Africa, and the Aegean."},
+    {name: "Narbo", x: 0.34, y: 0.40, type: "secondary", region: "Gallia Narbonensis (Narbonne)", era: ["roman"],
+     desc: "First Roman colony outside Italy (118 BC). Narbo was the export hub for Gallic wines, shipping amphorae and barrels down the Aude to the Mediterranean. Gallia Narbonensis became Rome's most important wine province."},
+    {name: "Burdigala", x: 0.30, y: 0.40, type: "secondary", region: "Gallia Aquitania (Bordeaux)", era: ["roman"],
+     desc: "Roman Bordeaux. Viticulture reached Bordeaux under Roman rule. The Biturica grape, mentioned by Columella, was an early ancestor of modern Cabernet varieties — planted here 2,000 years ago."},
+    {name: "Arelate", x: 0.35, y: 0.39, type: "secondary", region: "Gallia (Arles)", era: ["roman"],
+     desc: "Roman colony on the Rhône delta. Arelate was the major transshipment point between Mediterranean sea routes and Rhône river traffic, distributing wine throughout Gaul."},
+    {name: "Panticapaeum", x: 0.68, y: 0.32, type: "secondary", region: "Bosporan Kingdom (Crimea)", era: ["greek","hellenistic","roman"],
+     desc: "Milesian colony on the Black Sea. The Bosporan Kingdom exported vast quantities of grain and wine to Athens and the Aegean. Crimean viticulture flourished under Greek and Roman influence."},
+    {name: "Leptis Magna", x: 0.43, y: 0.54, type: "secondary", region: "North Africa (Libya)", era: ["hellenistic","roman"],
+     desc: "Phoenician colony, later a Roman city. Leptis Magna exported African olive oil and wine. Its magnificent harbor was expanded by Septimius Severus, a native son."},
+    {name: "Ostia-Portus", x: 0.48, y: 0.42, type: "secondary", region: "Latium", era: ["roman"],
+     desc: "Portus was Claudius's artificial harbor, expanded by Trajan. Together with Ostia it handled most of Rome's wine imports. Excavations reveal massive dolia (wine storage jars) installations."},
+  ];
+
+  // Trade routes: {from, to, era[], type: "sea"|"land", volume}
+  const ROUTES = [
+    // Phoenician era routes
+    {from: "Tyre", to: "Carthage", era: ["phoenician","greek","hellenistic"], type: "sea", volume: 0.9},
+    {from: "Sidon", to: "Knossos", era: ["phoenician","greek"], type: "sea", volume: 0.7},
+    {from: "Tyre", to: "Knossos", era: ["phoenician","greek"], type: "sea", volume: 0.6},
+    {from: "Carthage", to: "Gades", era: ["phoenician","greek","hellenistic"], type: "sea", volume: 0.8},
+    {from: "Tyre", to: "Chios", era: ["phoenician","greek","hellenistic"], type: "sea", volume: 0.7},
+    {from: "Tyre", to: "Alexandria", era: ["phoenician","greek","hellenistic","roman"], type: "sea", volume: 0.6},
+    {from: "Sidon", to: "Syracuse", era: ["phoenician","greek"], type: "sea", volume: 0.5},
+    {from: "Carthage", to: "Panormus", era: ["phoenician","greek","hellenistic"], type: "sea", volume: 0.7},
+    {from: "Carthage", to: "Syracuse", era: ["phoenician","greek","hellenistic"], type: "sea", volume: 0.6},
+    {from: "Gades", to: "Tarraco", era: ["phoenician","greek","hellenistic","roman"], type: "sea", volume: 0.4},
+
+    // Greek era routes
+    {from: "Chios", to: "Athens", era: ["greek","hellenistic","roman"], type: "sea", volume: 1.0},
+    {from: "Thasos", to: "Athens", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.9},
+    {from: "Thasos", to: "Byzantium", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.6},
+    {from: "Chios", to: "Rhodes", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.5},
+    {from: "Rhodes", to: "Alexandria", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.8},
+    {from: "Massalia", to: "Athens", era: ["greek","hellenistic"], type: "sea", volume: 0.5},
+    {from: "Massalia", to: "Rome", era: ["hellenistic","roman"], type: "sea", volume: 0.4},
+    {from: "Syracuse", to: "Athens", era: ["greek","hellenistic"], type: "sea", volume: 0.6},
+    {from: "Syracuse", to: "Rhodes", era: ["greek","hellenistic"], type: "sea", volume: 0.4},
+    {from: "Sybaris", to: "Athens", era: ["greek","hellenistic"], type: "sea", volume: 0.5},
+    {from: "Sybaris", to: "Syracuse", era: ["greek","hellenistic"], type: "sea", volume: 0.4},
+    {from: "Knossos", to: "Alexandria", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.5},
+    {from: "Knossos", to: "Rhodes", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.4},
+    {from: "Panticapaeum", to: "Athens", era: ["greek","hellenistic"], type: "sea", volume: 0.5},
+    {from: "Panticapaeum", to: "Byzantium", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.6},
+    {from: "Byzantium", to: "Athens", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.5},
+    {from: "Byzantium", to: "Rhodes", era: ["greek","hellenistic","roman"], type: "sea", volume: 0.3},
+
+    // Hellenistic routes
+    {from: "Rhodes", to: "Rome", era: ["hellenistic","roman"], type: "sea", volume: 0.7},
+    {from: "Alexandria", to: "Rome", era: ["hellenistic","roman"], type: "sea", volume: 0.9},
+    {from: "Alexandria", to: "Puteoli", era: ["hellenistic","roman"], type: "sea", volume: 0.8},
+    {from: "Pompeii", to: "Rome", era: ["hellenistic","roman"], type: "land", volume: 0.8},
+    {from: "Pompeii", to: "Syracuse", era: ["hellenistic","roman"], type: "sea", volume: 0.5},
+    {from: "Pompeii", to: "Carthage", era: ["hellenistic"], type: "sea", volume: 0.4},
+    {from: "Syracuse", to: "Rome", era: ["hellenistic","roman"], type: "sea", volume: 0.5},
+    {from: "Massalia", to: "Syracuse", era: ["hellenistic"], type: "sea", volume: 0.3},
+
+    // Roman era routes
+    {from: "Narbo", to: "Rome", era: ["roman"], type: "sea", volume: 0.8},
+    {from: "Narbo", to: "Ostia", era: ["roman"], type: "sea", volume: 0.7},
+    {from: "Burdigala", to: "Narbo", era: ["roman"], type: "land", volume: 0.6},
+    {from: "Burdigala", to: "Arelate", era: ["roman"], type: "land", volume: 0.5},
+    {from: "Arelate", to: "Massalia", era: ["roman"], type: "land", volume: 0.5},
+    {from: "Arelate", to: "Narbo", era: ["roman"], type: "sea", volume: 0.4},
+    {from: "Tarraco", to: "Narbo", era: ["roman"], type: "land", volume: 0.5},
+    {from: "Tarraco", to: "Ostia", era: ["roman"], type: "sea", volume: 0.6},
+    {from: "Ostia", to: "Rome", era: ["roman"], type: "land", volume: 0.9},
+    {from: "Puteoli", to: "Rome", era: ["roman"], type: "land", volume: 0.7},
+    {from: "Leptis Magna", to: "Ostia", era: ["roman"], type: "sea", volume: 0.5},
+    {from: "Leptis Magna", to: "Alexandria", era: ["roman"], type: "sea", volume: 0.4},
+    {from: "Gades", to: "Narbo", era: ["roman"], type: "sea", volume: 0.3},
+    {from: "Tarraco", to: "Gades", era: ["roman"], type: "land", volume: 0.3},
+    {from: "Panormus", to: "Ostia", era: ["roman"], type: "sea", volume: 0.5},
+    {from: "Syracuse", to: "Ostia", era: ["roman"], type: "sea", volume: 0.4},
+  ];
+
+  // Era metadata
+  const ERA_INFO = {
+    phoenician: { label: "Phoenician Era (800–600 BC)", power: "Phoenician City-States", color: "#8a6a3a", tint: "rgba(138, 106, 58, 0.08)" },
+    greek: { label: "Greek Colonization (600–400 BC)", power: "Greek Poleis", color: "#4a8ac9", tint: "rgba(74, 138, 201, 0.08)" },
+    hellenistic: { label: "Hellenistic Period (400–100 BC)", power: "Hellenistic Kingdoms", color: "#c97050", tint: "rgba(201, 112, 80, 0.08)" },
+    roman: { label: "Roman Imperial (100 BC–200 AD)", power: "Roman Empire", color: "#c9a060", tint: "rgba(201, 160, 96, 0.10)" },
+  };
+
+  // ============================================================
+  // CANVAS & RENDERING
+  // ============================================================
+
+  const canvas = document.getElementById('map-canvas');
+  const ctx = canvas.getContext('2d');
+  const container = document.getElementById('canvas-container');
+  const tooltip = document.getElementById('tooltip');
+
+  let DPR = window.devicePixelRatio || 1;
+  let CW = 0, CH = 0; // CSS pixel dimensions
+
+  let currentEra = 'hellenistic';
+  let showTrade = true;
+  let showAmphorae = true;
+  let animSpeed = 1.0;
+  let zoom = 1.3;
+  let panX = 0, panY = 0;
+  let isDragging = false;
+  let dragStartX = 0, dragStartY = 0;
+  let panStartX = 0, panStartY = 0;
+  let selectedCity = null;
+  let hoveredCity = null;
+  let mouseX = 0, mouseY = 0;
+  let time = 0;
+
+  // Ship/amphora particles traveling along routes
+  let ships = [];
+  let waveOffset = 0;
+
+  function resize() {
+    DPR = window.devicePixelRatio || 1;
+    CW = container.clientWidth;
+    CH = container.clientHeight;
+    canvas.width = Math.max(1, Math.floor(CW * DPR));
+    canvas.height = Math.max(1, Math.floor(CH * DPR));
+    canvas.style.width = CW + 'px';
+    canvas.style.height = CH + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  // Convert map coords (0-1 space) to screen pixels with zoom & pan
+  function mapToScreen(mx, my) {
+    const cx = CW / 2 + panX;
+    const cy = CH / 2 + panY;
+    const sx = cx + (mx * CW - CW / 2) * zoom;
+    const sy = cy + (my * CH - CH / 2) * zoom;
+    return { x: sx, y: sy };
+  }
+
+  // Convert screen to map coords
+  function screenToMap(sx, sy) {
+    const cx = CW / 2 + panX;
+    const cy = CH / 2 + panY;
+    const mx = ((sx - cx) / zoom + CW / 2) / CW;
+    const my = ((sy - cy) / zoom + CH / 2) / CH;
+    return { x: mx, y: my };
+  }
+
+  // ============================================================
+  // MEDITERRANEAN COASTLINE (simplified polygon for visual context)
+  // ============================================================
+
+  const COASTLINE = [
+    // Iberia south coast
+    [0.15, 0.52], [0.20, 0.52], [0.25, 0.50], [0.28, 0.48], [0.28, 0.44],
+    // Southern France
+    [0.30, 0.40], [0.33, 0.38], [0.35, 0.39], [0.38, 0.38],
+    // Italian peninsula west coast
+    [0.42, 0.38], [0.45, 0.40], [0.46, 0.43], [0.48, 0.42], [0.49, 0.45],
+    // Southern Italy
+    [0.50, 0.47], [0.52, 0.47], [0.53, 0.44], [0.51, 0.42], [0.50, 0.40],
+    // Adriatic east coast (Italy side)
+    [0.48, 0.38], [0.46, 0.35], [0.48, 0.32], [0.50, 0.30],
+    // Adriatic top (Istria/Dalmatia)
+    [0.52, 0.30], [0.55, 0.31], [0.58, 0.33],
+    // Balkans south
+    [0.60, 0.36], [0.62, 0.38], [0.60, 0.40], [0.62, 0.42],
+    // Greece
+    [0.58, 0.41], [0.56, 0.40], [0.58, 0.42], [0.56, 0.43], [0.58, 0.44],
+    // Aegean islands to Anatolia
+    [0.60, 0.44], [0.63, 0.43], [0.65, 0.42], [0.68, 0.41],
+    // Southern Anatolia / Levant
+    [0.68, 0.44], [0.66, 0.46], [0.64, 0.48], [0.62, 0.50],
+    [0.61, 0.48], [0.60, 0.50], [0.59, 0.52],
+    // North African coast east
+    [0.55, 0.52], [0.50, 0.53], [0.45, 0.54], [0.43, 0.54],
+    // North African coast west
+    [0.40, 0.55], [0.35, 0.54], [0.30, 0.53], [0.25, 0.53], [0.20, 0.52], [0.15, 0.52],
+  ];
+
+  // Island outlines (simplified)
+  const ISLANDS = [
+    // Sicily
+    {points: [[0.47, 0.49], [0.49, 0.49], [0.51, 0.47], [0.50, 0.46], [0.48, 0.48], [0.47, 0.49]]},
+    // Crete
+    {points: [[0.54, 0.47], [0.58, 0.47], [0.58, 0.46], [0.54, 0.46], [0.54, 0.47]]},
+    // Rhodes
+    {points: [[0.60, 0.45], [0.61, 0.45], [0.61, 0.44], [0.60, 0.44]]},
+    // Chios
+    {points: [[0.566, 0.398], [0.574, 0.398], [0.574, 0.392], [0.566, 0.392]]},
+    // Thasos
+    {points: [[0.566, 0.362], [0.574, 0.362], [0.574, 0.358], [0.566, 0.358]]},
+  ];
+
+  // ============================================================
+  // SHIP PARTICLE SYSTEM
+  // ============================================================
+
+  function initShips() {
+    ships = [];
+    const activeRoutes = ROUTES.filter(r => r.era.includes(currentEra));
+    activeRoutes.forEach((r, idx) => {
+      const fromCity = CITIES.find(c => c.name === r.from);
+      const toCity = CITIES.find(c => c.name === r.to);
+      if (!fromCity || !toCity) return;
+      const count = Math.ceil(r.volume * 2); // 1-2 ships per route
+      for (let i = 0; i < count; i++) {
+        ships.push({
+          from: r.from,
+          to: r.to,
+          type: r.type,
+          progress: Math.random(),
+          speed: 0.0003 + Math.random() * 0.0002,
+          volume: r.volume,
+          offset: (Math.random() - 0.5) * 0.008,
+          size: 2 + r.volume * 3,
+        });
+      }
+    });
+  }
+
+  function getRoutePath(from, to, type) {
+    const fc = CITIES.find(c => c.name === from);
+    const tc = CITIES.find(c => c.name === to);
+    if (!fc || !tc) return null;
+
+    if (type === 'sea') {
+      // Curved path — arc away from straight line for sea routes
+      const midX = (fc.x + tc.x) / 2;
+      const midY = (fc.y + tc.y) / 2;
+      // Perpendicular offset for curve
+      const dx = tc.x - fc.x;
+      const dy = tc.y - fc.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const nx = -dy / (len || 1);
+      const ny = dx / (len || 1);
+      const curveAmount = 0.03;
+      return {
+        x0: fc.x, y0: fc.y,
+        cx: midX + nx * curveAmount,
+        cy: midY + ny * curveAmount,
+        x1: tc.x, y1: tc.y,
+      };
+    } else {
+      // Straight line for land routes with slight wiggle
+      return {
+        x0: fc.x, y0: fc.y,
+        cx: (fc.x + tc.x) / 2 + (Math.random() - 0.5) * 0.01,
+        cy: (fc.y + tc.y) / 2 + (Math.random() - 0.5) * 0.01,
+        x1: tc.x, y1: tc.y,
+      };
+    }
+  }
+
+  function bezierPoint(p, t) {
+    const mt = 1 - t;
+    return {
+      x: mt * mt * p.x0 + 2 * mt * t * p.cx + t * t * p.x1,
+      y: mt * mt * p.y0 + 2 * mt * t * p.cy + t * t * p.y1,
+    };
+  }
+
+  // ============================================================
+  // DRAWING
+  // ============================================================
+
+  function drawCoastline() {
+    ctx.save();
+
+    // Sea background with subtle gradient
+    const grad = ctx.createRadialGradient(CW * 0.45, CH * 0.45, 0, CW * 0.45, CH * 0.45, CW * 0.8);
+    grad.addColorStop(0, '#0f2a3a');
+    grad.addColorStop(0.5, '#0a1a28');
+    grad.addColorStop(1, '#060e16');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CW, CH);
+
+    // Animated wave texture
+    ctx.strokeStyle = 'rgba(40, 80, 120, 0.15)';
+    ctx.lineWidth = 0.8;
+    for (let y = 0; y < CH; y += 25) {
+      ctx.beginPath();
+      for (let x = 0; x <= CW; x += 10) {
+        const wy = y + Math.sin((x * 0.02) + waveOffset + (y * 0.05)) * 2.5;
+        if (x === 0) ctx.moveTo(x, wy);
+        else ctx.lineTo(x, wy);
+      }
+      ctx.stroke();
+    }
+
+    // Land mass
+    ctx.fillStyle = '#1a1a14';
+    ctx.strokeStyle = '#3a3020';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    COASTLINE.forEach((pt, i) => {
+      const s = mapToScreen(pt[0], pt[1]);
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Inland shading
+    ctx.save();
+    ctx.clip();
+    const landGrad = ctx.createLinearGradient(0, 0, CW, CH);
+    landGrad.addColorStop(0, 'rgba(30, 25, 15, 0.3)');
+    landGrad.addColorStop(1, 'rgba(20, 15, 10, 0.5)');
+    ctx.fillStyle = landGrad;
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.restore();
+
+    // Islands
+    ISLANDS.forEach(island => {
+      ctx.beginPath();
+      island.points.forEach((pt, i) => {
+        const s = mapToScreen(pt[0], pt[1]);
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    });
+
+    ctx.restore();
+  }
+
+  function drawRoutes() {
+    if (!showTrade) return;
+
+    const activeRoutes = ROUTES.filter(r => r.era.includes(currentEra));
+    const eraColor = ERA_INFO[currentEra].color;
+
+    activeRoutes.forEach(r => {
+      const path = getRoutePath(r.from, r.to, r.type);
+      if (!path) return;
+
+      const s0 = mapToScreen(path.x0, path.y0);
+      const sc = mapToScreen(path.cx, path.cy);
+      const s1 = mapToScreen(path.x1, path.y1);
+
+      // Route line
+      ctx.save();
+      if (r.type === 'sea') {
+        ctx.strokeStyle = eraColor.replace(')', ', 0.35)').replace('rgb', 'rgba');
+        // Handle hex colors
+        if (eraColor[0] === '#') {
+          const hex = eraColor;
+          const r2 = parseInt(hex.slice(1, 3), 16);
+          const g2 = parseInt(hex.slice(3, 5), 16);
+          const b2 = parseInt(hex.slice(5, 7), 16);
+          ctx.strokeStyle = 'rgba(' + r2 + ',' + g2 + ',' + b2 + ',0.35)';
+        }
+        ctx.lineWidth = 1 + r.volume * 2;
+        ctx.setLineDash([6, 4]);
+        ctx.lineDashOffset = -waveOffset * 8;
+      } else {
+        ctx.strokeStyle = 'rgba(138, 106, 58, 0.3)';
+        ctx.lineWidth = 1 + r.volume * 1.5;
+        ctx.setLineDash([3, 3]);
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(s0.x, s0.y);
+      ctx.quadraticCurveTo(sc.x, sc.y, s1.x, s1.y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  function drawShips() {
+    if (!showAmphorae) return;
+
+    const eraColor = ERA_INFO[currentEra].color;
+
+    ships.forEach(ship => {
+      ship.progress += ship.speed * animSpeed;
+      if (ship.progress > 1) {
+        ship.progress = 0;
+        // Re-randomize path slightly
+        ship.offset = (Math.random() - 0.5) * 0.008;
+      }
+
+      const path = getRoutePath(ship.from, ship.to, ship.type);
+      if (!path) return;
+
+      const pos = bezierPoint(path, ship.progress);
+      const s = mapToScreen(pos.x, pos.y);
+
+      // Draw ship/amphora as small glowing dot
+      ctx.save();
+
+      // Glow
+      const glowR = ship.size * 3 * zoom;
+      const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, glowR);
+      if (eraColor[0] === '#') {
+        const r = parseInt(eraColor.slice(1, 3), 16);
+        const g = parseInt(eraColor.slice(3, 5), 16);
+        const b = parseInt(eraColor.slice(5, 7), 16);
+        grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.6)');
+        grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+      } else {
+        grad.addColorStop(0, eraColor);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+      }
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Core dot
+      ctx.fillStyle = eraColor;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, ship.size * zoom * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Trail
+      const trailLen = 0.03;
+      const trailStart = Math.max(0, ship.progress - trailLen);
+      for (let t = trailStart; t < ship.progress; t += trailLen / 5) {
+        const tp = bezierPoint(path, t);
+        const ts = mapToScreen(tp.x, tp.y);
+        const alpha = (t - trailStart) / trailLen * 0.3;
+        if (eraColor[0] === '#') {
+          const r = parseInt(eraColor.slice(1, 3), 16);
+          const g = parseInt(eraColor.slice(3, 5), 16);
+          const b = parseInt(eraColor.slice(5, 7), 16);
+          ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+        } else {
+          ctx.fillStyle = eraColor.replace(')', ',' + alpha + ')').replace('rgb', 'rgba');
+        }
+        ctx.beginPath();
+        ctx.arc(ts.x, ts.y, ship.size * zoom * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    });
+  }
+
+  function drawCities() {
+    const activeCities = CITIES.filter(c => c.era.includes(currentEra));
+
+    activeCities.forEach(city => {
+      const s = mapToScreen(city.x, city.y);
+      const isHovered = hoveredCity === city;
+      const isSelected = selectedCity && selectedCity.name === city.name;
+
+      let color, radius;
+      if (city.type === 'major') {
+        color = '#e8c987';
+        radius = 5 * zoom;
+      } else {
+        color = '#c9a060';
+        radius = 3.5 * zoom;
+      }
+
+      // Pulsing ring for major cities
+      if (city.type === 'major') {
+        const pulse = (Math.sin(time * 0.002 + city.x * 10) + 1) * 0.5;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(232, 201, 135, ' + (0.15 + pulse * 0.15) + ')';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, radius + 4 + pulse * 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Selection ring
+      if (isSelected) {
+        ctx.save();
+        ctx.strokeStyle = '#e8c987';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, radius + 8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Hover highlight
+      if (isHovered) {
+        ctx.save();
+        ctx.strokeStyle = '#e8c987';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, radius + 5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // City dot
+      ctx.save();
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = color;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Inner highlight
+      ctx.fillStyle = 'rgba(255, 255, 230, 0.6)';
+      ctx.beginPath();
+      ctx.arc(s.x - radius * 0.3, s.y - radius * 0.3, radius * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Label for major cities or hovered/selected
+      if (city.type === 'major' || isHovered || isSelected) {
+        ctx.save();
+        ctx.font = (city.type === 'major' ? 'bold ' : '') + (10 * Math.min(zoom, 1.5)) + 'px Georgia, serif';
+        ctx.fillStyle = isHovered || isSelected ? '#fff8e0' : '#c9b890';
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 3;
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.fillText(city.name, s.x, s.y + radius + 12);
+        ctx.restore();
+      }
+    });
+  }
+
+  function drawEraOverlay() {
+    const era = ERA_INFO[currentEra];
+    ctx.save();
+    ctx.fillStyle = era.tint;
+    ctx.fillRect(0, 0, CW, CH);
+
+    // Decorative border tint
+    ctx.strokeStyle = era.color;
+    ctx.globalAlpha = 0.15;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(1.5, 1.5, CW - 3, CH - 3);
+    ctx.restore();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, CW, CH);
+    drawCoastline();
+    drawEraOverlay();
+    drawRoutes();
+    drawShips();
+    drawCities();
+  }
+
+  // ============================================================
+  // INTERACTION
+  // ============================================================
+
+  function findCityAt(sx, sy) {
+    const activeCities = CITIES.filter(c => c.era.includes(currentEra));
+    let closest = null;
+    let minDist = 20; // pixel threshold
+    activeCities.forEach(city => {
+      const s = mapToScreen(city.x, city.y);
+      const dist = Math.sqrt((s.x - sx) ** 2 + (s.y - sy) ** 2);
+      const radius = (city.type === 'major' ? 5 : 3.5) * zoom + 8;
+      if (dist < radius && dist < minDist) {
+        minDist = dist;
+        closest = city;
+      }
+    });
+    return closest;
+  }
+
+  function updateTooltip() {
+    if (hoveredCity) {
+      const s = mapToScreen(hoveredCity.x, hoveredCity.y);
+      tooltip.style.display = 'block';
+      tooltip.style.left = (s.x + 12) + 'px';
+      tooltip.style.top = (s.y - 30) + 'px';
+      tooltip.textContent = hoveredCity.name;
+    } else {
+      tooltip.style.display = 'none';
+    }
+  }
+
+  function selectCity(city) {
+    selectedCity = city;
+    const info = document.getElementById('info-content');
+    if (!city) {
+      info.innerHTML = '<div class="placeholder">Click a port on the map to see details…</div>';
+      return;
+    }
+    info.innerHTML =
+      '<div class="city-name">' + city.name + '</div>' +
+      '<div class="city-region">' + city.region + '</div>' +
+      '<div class="city-desc">' + city.desc + '</div>';
+  }
+
+  // Mouse events
+  canvas.addEventListener('mousedown', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+
+    const city = findCityAt(mouseX, mouseY);
+    if (city) {
+      selectCity(city);
+      return;
+    }
+
+    isDragging = true;
+    dragStartX = mouseX;
+    dragStartY = mouseY;
+    panStartX = panX;
+    panStartY = panY;
+  });
+
+  canvas.addEventListener('mousemove', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+
+    if (isDragging) {
+      panX = panStartX + (mouseX - dragStartX);
+      panY = panStartY + (mouseY - dragStartY);
+    } else {
+      const city = findCityAt(mouseX, mouseY);
+      hoveredCity = city;
+      canvas.style.cursor = city ? 'pointer' : 'grab';
+      updateTooltip();
+    }
+  });
+
+  canvas.addEventListener('mouseup', function() {
+    isDragging = false;
+  });
+
+  canvas.addEventListener('mouseleave', function() {
+    isDragging = false;
+    hoveredCity = null;
+    tooltip.style.display = 'none';
+  });
+
+  // Touch events
+  let lastTouchDist = 0;
+
+  canvas.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.touches[0].clientX - rect.left;
+      mouseY = e.touches[0].clientY - rect.top;
+      const city = findCityAt(mouseX, mouseY);
+      if (city) {
+        selectCity(city);
+        hoveredCity = city;
+        updateTooltip();
+        return;
+      }
+      isDragging = true;
+      dragStartX = mouseX;
+      dragStartY = mouseY;
+      panStartX = panX;
+      panStartY = panY;
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    if (e.touches.length === 1 && isDragging) {
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.touches[0].clientX - rect.left;
+      mouseY = e.touches[0].clientY - rect.top;
+      panX = panStartX + (mouseX - dragStartX);
+      panY = panStartY + (mouseY - dragStartY);
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (lastTouchDist > 0) {
+        zoom = Math.max(0.8, Math.min(2.5, zoom * (dist / lastTouchDist)));
+        document.getElementById('zoom-slider').value = zoom.toFixed(1);
+      }
+      lastTouchDist = dist;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', function() {
+    isDragging = false;
+    lastTouchDist = 0;
+  });
+
+  // ============================================================
+  // UI CONTROLS
+  // ============================================================
+
+  document.getElementById('era-select').addEventListener('change', function(e) {
+    currentEra = e.target.value;
+    if (selectedCity && !selectedCity.era.includes(currentEra)) {
+      selectCity(null);
+    }
+    initShips();
+    updateMetrics();
+  });
+
+  document.getElementById('btn-trade').addEventListener('click', function() {
+    showTrade = !showTrade;
+    this.classList.toggle('active', showTrade);
+  });
+
+  document.getElementById('btn-amphorae').addEventListener('click', function() {
+    showAmphorae = !showAmphorae;
+    this.classList.toggle('active', showAmphorae);
+  });
+
+  document.getElementById('speed-slider').addEventListener('input', function(e) {
+    animSpeed = parseFloat(e.target.value);
+  });
+
+  document.getElementById('zoom-slider').addEventListener('input', function(e) {
+    zoom = parseFloat(e.target.value);
+  });
+
+  // ============================================================
+  // METRICS
+  // ============================================================
+
+  function updateMetrics() {
+    const activeRoutes = ROUTES.filter(r => r.era.includes(currentEra));
+    const activeCities = CITIES.filter(c => c.era.includes(currentEra));
+    const exporters = {};
+    activeRoutes.forEach(r => {
+      exporters[r.from] = (exporters[r.from] || 0) + r.volume;
+    });
+    const sortedExporters = Object.keys(exporters).sort((a, b) => exporters[b] - exporters[a]);
+    const destCounts = {};
+    activeRoutes.forEach(r => {
+      destCounts[r.to] = (destCounts[r.to] || 0) + 1;
+    });
+    const topDest = Object.keys(destCounts).sort((a, b) => destCounts[b] - destCounts[a])[0] || '—';
+
+    document.getElementById('m-routes').textContent = activeRoutes.length;
+    document.getElementById('m-ports').textContent = activeCities.length;
+    document.getElementById('m-exporters').textContent = sortedExporters.slice(0, 3).join(', ') || '—';
+    document.getElementById('m-dest').textContent = topDest;
+    document.getElementById('m-amphorae').textContent = ships.length;
+    document.getElementById('m-power').textContent = ERA_INFO[currentEra].power;
+  }
+
+  // Initialize trade toggle
+  document.getElementById('btn-trade').classList.toggle('active', showTrade);
+  document.getElementById('btn-amphorae').classList.toggle('active', showAmphorae);
+
+  // ============================================================
+  // ANIMATION LOOP
+  // ============================================================
+
+  function animate(ts) {
+    time = ts;
+    waveOffset += 0.01 * animSpeed;
+    draw();
+    updateTooltip();
+    requestAnimationFrame(animate);
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
+
+  window.addEventListener('resize', resize);
+  resize();
+  initShips();
+  updateMetrics();
+  requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>
