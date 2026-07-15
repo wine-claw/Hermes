@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Food & Wine Pairing Explorer — Interactive Compatibility Matrix</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0a1a;
+    --surface: #1a1530;
+    --surface2: #221a3d;
+    --border: #3a2f55;
+    --text: #e0d8f0;
+    --muted: #9890b0;
+    --accent: #c77dff;
+    --accent2: #ff6b9d;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+  }
+
+  .disclaimer {
+    background: #1a1620; border-bottom: 1px solid #3a3020;
+    color: #c9a060; padding: 0.75rem 1rem; text-align: center;
+    font-size: 0.85rem; font-family: system-ui, sans-serif;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+
+  #ui-layer {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+    overflow-y: auto; padding: 0;
+  }
+
+  .panel {
+    background: rgba(26, 21, 48, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    pointer-events: auto;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px;
+    width: 300px; max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    padding: 1.1rem;
+  }
+
+  #metrics {
+    position: absolute; top: 12px; right: 12px;
+    width: 340px; max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    padding: 1.1rem;
+  }
+
+  .panel h2 {
+    font-size: 0.92rem; font-weight: 700; color: var(--accent);
+    margin-bottom: 0.7rem; text-transform: uppercase;
+    letter-spacing: 0.04em; border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+
+  .ctrl-group { margin-bottom: 0.85rem; }
+  .ctrl-group label {
+    display: block; font-size: 0.78rem; color: var(--muted);
+    margin-bottom: 0.3rem; font-weight: 600;
+  }
+
+  select, button {
+    width: 100%; padding: 0.5rem 0.6rem;
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 0.85rem; cursor: pointer; font-family: inherit;
+    outline: none;
+  }
+  select:hover, button:hover { border-color: var(--accent); }
+  select:focus, button:focus { border-color: var(--accent2); }
+
+  .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+  .slider-row input[type="range"] {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 6px; background: var(--border); border-radius: 3px;
+    outline: none;
+  }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px;
+    background: var(--accent); border-radius: 50%; cursor: pointer;
+  }
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; background: var(--accent);
+    border-radius: 50%; cursor: pointer; border: none;
+  }
+  .slider-val {
+    font-size: 0.78rem; color: var(--accent); font-weight: 700;
+    min-width: 2.2rem; text-align: right;
+  }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .chip {
+    padding: 0.25rem 0.55rem; border-radius: 6px;
+    font-size: 0.72rem; font-weight: 600; cursor: pointer;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); transition: all 0.15s;
+  }
+  .chip.active {
+    background: var(--accent); color: #fff;
+    border-color: var(--accent);
+  }
+  .chip:hover { border-color: var(--accent); }
+
+  .preset-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .preset-btn {
+    padding: 0.3rem 0.6rem; border-radius: 8px;
+    font-size: 0.75rem; font-weight: 600;
+    background: linear-gradient(135deg, var(--surface2), var(--surface));
+    border: 1px solid var(--border); color: var(--text);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .score-circle {
+    width: 72px; height: 72px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; font-weight: 800;
+    margin: 0 auto 0.6rem;
+    position: relative;
+  }
+  .score-circle::before {
+    content: ''; position: absolute; inset: -4px;
+    border-radius: 50%; border: 3px solid var(--border);
+  }
+  .score-circle.s-good { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+  .score-circle.s-good::before { border-color: var(--green); }
+  .score-circle.s-ok { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+  .score-circle.s-ok::before { border-color: var(--amber); }
+  .score-circle.s-poor { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+  .score-circle.s-poor::before { border-color: var(--red); }
+
+  .score-label { text-align: center; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.6rem; }
+
+  .pairing-bar { margin-bottom: 0.4rem; }
+  .pairing-bar .pbar-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.75rem; margin-bottom: 0.15rem;
+  }
+  .pairing-bar .pbar-label span:first-child { color: var(--text); }
+  .pairing-bar .pbar-label span:last-child { color: var(--accent); font-weight: 700; }
+  .pairing-bar .pbar-track {
+    height: 5px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  .pairing-bar .pbar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .bridge-section { margin-top: 0.6rem; }
+  .bridge-section h3 {
+    font-size: 0.75rem; color: var(--muted); text-transform: uppercase;
+    margin-bottom: 0.3rem; letter-spacing: 0.03em;
+  }
+  .bridge-list { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+  .bridge-item {
+    padding: 0.2rem 0.5rem; border-radius: 5px;
+    font-size: 0.72rem; background: var(--surface2);
+    border: 1px solid var(--border); color: var(--text);
+  }
+
+  .tip-box {
+    margin-top: 0.6rem; padding: 0.6rem;
+    background: rgba(199, 125, 255, 0.08);
+    border: 1px solid rgba(199, 125, 255, 0.25);
+    border-radius: 8px;
+    font-size: 0.78rem; color: var(--text); line-height: 1.5;
+  }
+
+  .chart-wrap {
+    position: relative; height: 200px; margin-top: 0.5rem;
+  }
+
+  .matrix-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    margin-top: 0.4rem;
+  }
+  .matrix-cell {
+    aspect-ratio: 1; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem; font-weight: 700; color: #fff;
+    cursor: pointer; transition: transform 0.1s;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+  .matrix-cell:hover { transform: scale(1.15); z-index: 5; }
+  .matrix-header {
+    font-size: 0.62rem; color: var(--muted); text-align: center;
+    padding: 0.15rem 0; font-weight: 600;
+  }
+  .matrix-row-label {
+    font-size: 0.62rem; color: var(--muted); text-align: right;
+    padding-right: 0.25rem; display: flex; align-items: center;
+    justify-content: flex-end;
+  }
+
+  #pairing-matrix {
+    display: grid;
+    grid-template-columns: 50px repeat(8, 1fr);
+    gap: 2px;
+    margin-top: 0.3rem;
+  }
+
+  .section-divider {
+    height: 1px; background: var(--border);
+    margin: 0.8rem 0;
+  }
+
+  .pairing-recommendation {
+    margin-top: 0.5rem; padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    font-size: 0.8rem; font-weight: 600;
+    text-align: center;
+  }
+  .rec-good { background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3); color: var(--green); }
+  .rec-ok { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); color: var(--amber); }
+  .rec-poor { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.3); color: var(--red); }
+
+  #bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 40vh !important;
+      min-height: 260px;
+      max-height: 380px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    #bg-canvas { position: relative !important; width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; overflow: visible; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<canvas id="bg-canvas"></canvas>
+
+<div id="ui-layer">
+  <div id="controls" class="panel">
+    <h2>🍷 Food & Wine Pairing Explorer</h2>
+
+    <div class="ctrl-group">
+      <label>Wine Style</label>
+      <select id="wine-select">
+        <option value="cabernet">Cabernet Sauvignon — Bold Red</option>
+        <option value="merlot">Merlot — Medium Red</option>
+        <option value="pinot-noir">Pinot Noir — Light Red</option>
+        <option value="syrah">Syrah / Shiraz — Full Red</option>
+        <option value="malbec">Malbec — Medium-Full Red</option>
+        <option value="tempranillo">Tempranillo — Rioja Red</option>
+        <option value="nebbiolo">Nebbiolo — Barolo Red</option>
+        <option value="chardonnay-oaked">Oaked Chardonnay — Full White</option>
+        <option value="chardonnay-unoaked">Unoaked Chardonnay — White</option>
+        <option value="sauvignon-blanc">Sauvignon Blanc — Crisp White</option>
+        <option value="riesling-dry">Dry Riesling — Aromatic White</option>
+        <option value="riesling-sweet">Sweet Riesling — Aromatic White</option>
+        <option value="gewurztraminer">Gewürztraminer — Aromatic White</option>
+        <option value="pinot-grigio">Pinot Grigio — Light White</option>
+        <option value="champagne">Champagne / Sparkling</option>
+        <option value="prosecco">Prosecco — Sparkling</option>
+        <option value="rose">Rosé — Dry</option>
+        <option value="port">Port — Fortified</option>
+        <option value="sherry-dry">Dry Sherry — Fortified</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Food Category</label>
+      <select id="food-select">
+        <option value="beef-steak">Beef Steak — Grilled</option>
+        <option value="lamb">Lamb — Roasted</option>
+        <option value="pork">Pork — Roast/Chop</option>
+        <option value="duck">Duck — Confit/Seared</option>
+        <option value="chicken">Chicken — Roasted</option>
+        <option value="turkey">Turkey — Roasted</option>
+        <option value="salmon">Salmon — Grilled</option>
+        <option value="tuna">Tuna — Seared</option>
+        <option value="white-fish">White Fish — Baked</option>
+        <option value="shellfish">Shellfish — Shrimp/Lobster</option>
+        <option value="oysters">Oysters — Raw</option>
+        <option value="sushi">Sushi / Sashimi</option>
+        <option value="pasta-tomato">Pasta — Tomato Sauce</option>
+        <option value="pasta-cream">Pasta — Cream Sauce</option>
+        <option value="pasta-pesto">Pasta — Pesto</option>
+        <option value="pizza">Pizza — Margherita</option>
+        <option value="curry-mild">Curry — Mild (Korma/Tikka)</option>
+        <option value="curry-spicy">Curry — Spicy (Vindaloo)</option>
+        <option value="thai">Thai — Sweet/Spicy</option>
+        <option value="chinese">Chinese — Sweet & Sour</option>
+        <option value="mexican">Mexican — Tacos/Burritos</option>
+        <option value="bbq-ribs">BBQ Ribs — Smoky</option>
+        <option value="cheese-hard">Hard Cheese — Aged Cheddar/Parmesan</option>
+        <option value="cheese-soft">Soft Cheese — Brie/Camembert</option>
+        <option value="cheese-blue">Blue Cheese — Roquefort/Gorgonzola</option>
+        <option value="cheese-goat">Goat Cheese — Fresh</option>
+        <option value="charcuterie">Charcuterie — Cured Meats</option>
+        <option value="vegetable-roast">Roasted Vegetables</option>
+        <option value="salad-green">Green Salad — Vinaigrette</option>
+        <option value="dessert-chocolate">Chocolate Dessert</option>
+        <option value="dessert-fruit">Fruit Dessert / Tart</option>
+        <option value="dessert-creme">Crème Brûlée / Custard</option>
+      </select>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="ctrl-group">
+      <label>Preparation Method</label>
+      <div class="chip-row" id="prep-chips">
+        <div class="chip active" data-prep="grilled">Grilled</div>
+        <div class="chip" data-prep="roasted">Roasted</div>
+        <div class="chip" data-prep="raw">Raw</div>
+        <div class="chip" data-prep="fried">Fried</div>
+        <div class="chip" data-prep="smoked">Smoked</div>
+        <div class="chip" data-prep="steamed">Steamed</div>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Sauce Intensity</label>
+      <div class="slider-row">
+        <input type="range" id="sauce-slider" min="0" max="100" value="50">
+        <span class="slider-val" id="sauce-val">50</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Spice Level</label>
+      <div class="slider-row">
+        <input type="range" id="spice-slider" min="0" max="100" value="20">
+        <span class="slider-val" id="spice-val">20</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Acidity in Dish</label>
+      <div class="slider-row">
+        <input type="range" id="acid-slider" min="0" max="100" value="35">
+        <span class="slider-val" id="acid-val">35</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Sweetness in Dish</label>
+      <div class="slider-row">
+        <input type="range" id="sweet-slider" min="0" max="100" value="15">
+        <span class="slider-val" id="sweet-val">15</span>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="ctrl-group">
+      <label>Quick Presets</label>
+      <div class="preset-row">
+        <button class="preset-btn" data-preset="steak">🥩 Steak Night</button>
+        <button class="preset-btn" data-preset="seafood">🦐 Seafood</button>
+        <button class="preset-btn" data-preset="spicy">🌶️ Spicy Asian</button>
+        <button class="preset-btn" data-preset="cheese">🧀 Cheese Board</button>
+        <button class="preset-btn" data-preset="dessert">🍫 Dessert</button>
+        <button class="preset-btn" data-preset="thanksgiving">🦃 Thanksgiving</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="metrics" class="panel">
+    <h2>📊 Pairing Analysis</h2>
+
+    <div id="score-display">
+      <div class="score-circle s-good" id="score-circle">82</div>
+      <div class="score-label" id="score-label">Excellent Pairing</div>
+    </div>
+
+    <div id="recommendation-box" class="pairing-recommendation rec-good">
+      Classic combination
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="radar-chart"></canvas>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div id="pairing-bars">
+      <div class="pairing-bar">
+        <div class="pbar-label"><span>Weight Match</span><span id="bar-weight">85%</span></div>
+        <div class="pbar-track"><div class="pbar-fill" id="fill-weight" style="width:85%;background:var(--accent);"></div></div>
+      </div>
+      <div class="pairing-bar">
+        <div class="pbar-label"><span>Acidity Balance</span><span id="bar-acidity">75%</span></div>
+        <div class="pbar-track"><div class="pbar-fill" id="fill-acidity" style="width:75%;background:var(--accent2);"></div></div>
+      </div>
+      <div class="pairing-bar">
+        <div class="pbar-label"><span>Tannin vs Protein</span><span id="bar-tannin">80%</span></div>
+        <div class="pbar-track"><div class="pbar-fill" id="fill-tannin" style="width:80%;background:#8b5cf6;"></div></div>
+      </div>
+      <div class="pairing-bar">
+        <div class="pbar-label"><span>Sweetness Harmony</span><span id="bar-sweet">70%</span></div>
+        <div class="pbar-track"><div class="pbar-fill" id="fill-sweet" style="width:70%;background:#ec4899;"></div></div>
+      </div>
+      <div class="pairing-bar">
+        <div class="pbar-label"><span>Aroma Bridge</span><span id="bar-aroma">65%</span></div>
+        <div class="pbar-track"><div class="pbar-fill" id="fill-aroma" style="width:65%;background:#06b6d4;"></div></div>
+      </div>
+      <div class="pairing-bar">
+        <div class="pbar-label"><span>Spice Tolerance</span><span id="bar-spice">60%</span></div>
+        <div class="pbar-track"><div class="pbar-fill" id="fill-spice" style="width:60%;background:#f59e0b;"></div></div>
+      </div>
+    </div>
+
+    <div class="bridge-section">
+      <h3>🔗 Flavor Bridge Compounds</h3>
+      <div class="bridge-list" id="bridge-list">
+        <div class="bridge-item">Maillard (grilled)</div>
+        <div class="bridge-item">Black pepper</div>
+        <div class="bridge-item">Dark berry</div>
+      </div>
+    </div>
+
+    <div class="tip-box" id="tip-box">
+      The bold tannins of Cabernet Sauvignon bind to proteins in steak, softening the wine while the fat coats the palate. Grilled flavors bridge with the wine's dark fruit and cedar notes.
+    </div>
+
+    <div class="section-divider"></div>
+
+    <h3 style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;margin-bottom:0.3rem;letter-spacing:0.03em;">Compatibility Matrix</h3>
+    <div id="pairing-matrix"></div>
+  </div>
+</div>
+
+<script>
+// ===== WINE PROFILES =====
+const WINES = {
+  'cabernet': { name: 'Cabernet Sauvignon', type: 'Bold Red', body: 95, acidity: 70, tannin: 90, sweetness: 5, alcohol: 85, aroma: ['blackcurrant','cedar','mint','graphite','bell pepper'], color: '#722f37' },
+  'merlot': { name: 'Merlot', type: 'Medium Red', body: 75, acidity: 60, tannin: 65, sweetness: 8, alcohol: 78, aroma: ['plum','cherry','chocolate','vanilla'], color: '#8b4050' },
+  'pinot-noir': { name: 'Pinot Noir', type: 'Light Red', body: 55, acidity: 72, tannin: 40, sweetness: 6, alcohol: 72, aroma: ['cherry','raspberry','mushroom','forest floor','rose'], color: '#a04050' },
+  'syrah': { name: 'Syrah / Shiraz', type: 'Full Red', body: 90, acidity: 62, tannin: 82, sweetness: 6, alcohol: 88, aroma: ['blackberry','pepper','smoke','meat','violet'], color: '#6b2f3f' },
+  'malbec': { name: 'Malbec', type: 'Medium-Full Red', body: 80, acidity: 58, tannin: 70, sweetness: 10, alcohol: 82, aroma: ['blackberry','plum','violet','cocoa','leather'], color: '#7d3f4f' },
+  'tempranillo': { name: 'Tempranillo', type: 'Rioja Red', body: 72, acidity: 60, tannin: 68, sweetness: 7, alcohol: 78, aroma: ['cherry','dill','leather','tobacco','vanilla'], color: '#8a4a3a' },
+  'nebbiolo': { name: 'Nebbiolo', type: 'Barolo Red', body: 78, acidity: 85, tannin: 95, sweetness: 4, alcohol: 85, aroma: ['rose','tar','truffle','cherry','dried herb'], color: '#9a5040' },
+  'chardonnay-oaked': { name: 'Oaked Chardonnay', type: 'Full White', body: 80, acidity: 50, tannin: 5, sweetness: 12, alcohol: 80, aroma: ['butter','oak','vanilla','baked apple','toast'], color: '#d4a050' },
+  'chardonnay-unoaked': { name: 'Unoaked Chardonnay', type: 'White', body: 65, acidity: 58, tannin: 3, sweetness: 8, alcohol: 75, aroma: ['green apple','citrus','pear','melon'], color: '#d4b860' },
+  'sauvignon-blanc': { name: 'Sauvignon Blanc', type: 'Crisp White', body: 45, acidity: 88, tannin: 2, sweetness: 5, alcohol: 68, aroma: ['grapefruit','gooseberry','grass','passion fruit','herb'], color: '#9ec850' },
+  'riesling-dry': { name: 'Dry Riesling', type: 'Aromatic White', body: 50, acidity: 92, tannin: 2, sweetness: 15, alcohol: 65, aroma: ['lime','green apple','petrol','white peach','slate'], color: '#b8d870' },
+  'riesling-sweet': { name: 'Sweet Riesling', type: 'Aromatic White', body: 55, acidity: 85, tannin: 2, sweetness: 65, alcohol: 60, aroma: ['honey','apricot','peach','lime','orange blossom'], color: '#d8c850' },
+  'gewurztraminer': { name: 'Gewürztraminer', type: 'Aromatic White', body: 60, acidity: 45, tannin: 3, sweetness: 30, alcohol: 72, aroma: ['lychee','rose','ginger','turmeric','cinnamon'], color: '#d8a060' },
+  'pinot-grigio': { name: 'Pinot Grigio', type: 'Light White', body: 40, acidity: 65, tannin: 2, sweetness: 6, alcohol: 62, aroma: ['lemon','pear','almond','white flower'], color: '#c8d070' },
+  'champagne': { name: 'Champagne', type: 'Sparkling', body: 55, acidity: 85, tannin: 3, sweetness: 10, alcohol: 72, aroma: ['brioche','citrus','apple','almond','yeast'], color: '#e8d860' },
+  'prosecco': { name: 'Prosecco', type: 'Sparkling', body: 45, acidity: 70, tannin: 2, sweetness: 25, alcohol: 65, aroma: ['pear','apple','white flower','peach'], color: '#f0e070' },
+  'rose': { name: 'Rosé', type: 'Dry Rosé', body: 48, acidity: 65, tannin: 15, sweetness: 8, alcohol: 68, aroma: ['strawberry','raspberry','rose','citrus','melon'], color: '#e07080' },
+  'port': { name: 'Port', type: 'Fortified', body: 98, acidity: 50, tannin: 75, sweetness: 85, alcohol: 95, aroma: ['blackberry','chocolate','plum','fig','caramel'], color: '#5a2030' },
+  'sherry-dry': { name: 'Dry Sherry', type: 'Fortified', body: 70, acidity: 55, tannin: 10, sweetness: 15, alcohol: 85, aroma: ['almond','saline','yeast','hazelnut','orange peel'], color: '#c8a040' },
+};
+
+// ===== FOOD PROFILES =====
+const FOODS = {
+  'beef-steak': { name: 'Beef Steak', cat: 'Red Meat', weight: 95, protein: 95, fat: 70, acidity: 20, sweetness: 5, spice: 5, aroma: ['maillard','umami','iron','char','black pepper'] },
+  'lamb': { name: 'Lamb', cat: 'Red Meat', weight: 85, protein: 85, fat: 65, acidity: 20, sweetness: 5, spice: 10, aroma: ['gamey','rosemary','garlic','umami','earth'] },
+  'pork': { name: 'Pork', cat: 'White Meat', weight: 70, protein: 75, fat: 55, acidity: 20, sweetness: 10, spice: 5, aroma: ['pork fat','sage','apple','umami','caramel'] },
+  'duck': { name: 'Duck', cat: 'Red Meat', weight: 78, protein: 80, fat: 75, acidity: 20, sweetness: 10, spice: 5, aroma: ['gamey','fat','cherry','orange','hoisin'] },
+  'chicken': { name: 'Chicken', cat: 'White Meat', weight: 55, protein: 70, fat: 35, acidity: 20, sweetness: 5, spice: 5, aroma: ['poultry','light umami','herb','lemon','butter'] },
+  'turkey': { name: 'Turkey', cat: 'White Meat', weight: 55, protein: 70, fat: 25, acidity: 20, sweetness: 5, spice: 5, aroma: ['poultry','sage','cranberry','umami','bread'] },
+  'salmon': { name: 'Salmon', cat: 'Fish', weight: 60, protein: 70, fat: 55, acidity: 25, sweetness: 10, spice: 5, aroma: ['oily fish','dill','lemon','umami','sea'] },
+  'tuna': { name: 'Tuna', cat: 'Fish', weight: 65, protein: 80, fat: 40, acidity: 25, sweetness: 5, spice: 5, aroma: ['meaty fish','sesame','soy','umami','sea'] },
+  'white-fish': { name: 'White Fish', cat: 'Fish', weight: 35, protein: 60, fat: 15, acidity: 30, sweetness: 5, spice: 5, aroma: ['delicate fish','lemon','herb','butter','sea'] },
+  'shellfish': { name: 'Shellfish', cat: 'Seafood', weight: 45, protein: 65, fat: 20, acidity: 35, sweetness: 15, spice: 5, aroma: ['sweet shellfish','butter','lemon','brine','herb'] },
+  'oysters': { name: 'Oysters', cat: 'Seafood', weight: 25, protein: 50, fat: 10, acidity: 40, sweetness: 20, spice: 5, aroma: ['brine','sea','mineral','lemon','cucumber'] },
+  'sushi': { name: 'Sushi', cat: 'Seafood', weight: 35, protein: 55, fat: 15, acidity: 45, sweetness: 15, spice: 10, aroma: ['rice','soy','wasabi','fish','nori'] },
+  'pasta-tomato': { name: 'Pasta Tomato', cat: 'Pasta', weight: 55, protein: 40, fat: 30, acidity: 60, sweetness: 15, spice: 10, aroma: ['tomato','basil','garlic','olive oil','cheese'] },
+  'pasta-cream': { name: 'Pasta Cream', cat: 'Pasta', weight: 65, protein: 45, fat: 60, acidity: 25, sweetness: 10, spice: 5, aroma: ['cream','butter','parmesan','nutmeg','mushroom'] },
+  'pasta-pesto': { name: 'Pasta Pesto', cat: 'Pasta', weight: 50, protein: 40, fat: 45, acidity: 35, sweetness: 8, spice: 5, aroma: ['basil','pine nut','garlic','olive oil','parmesan'] },
+  'pizza': { name: 'Pizza', cat: 'Pasta', weight: 60, protein: 45, fat: 40, acidity: 50, sweetness: 15, spice: 15, aroma: ['tomato','mozzarella','basil','char','olive oil'] },
+  'curry-mild': { name: 'Curry Mild', cat: 'Spicy', weight: 60, protein: 50, fat: 45, acidity: 40, sweetness: 25, spice: 50, aroma: ['turmeric','coriander','coconut','cumin','ginger'] },
+  'curry-spicy': { name: 'Curry Spicy', cat: 'Spicy', weight: 65, protein: 50, fat: 45, acidity: 40, sweetness: 15, spice: 90, aroma: ['chili','cumin','turmeric','cardamom','clove'] },
+  'thai': { name: 'Thai', cat: 'Spicy', weight: 50, protein: 45, fat: 35, acidity: 55, sweetness: 35, spice: 70, aroma: ['lemongrass','lime','chili','coconut','fish sauce'] },
+  'chinese': { name: 'Chinese', cat: 'Spicy', weight: 55, protein: 50, fat: 40, acidity: 45, sweetness: 45, spice: 30, aroma: ['soy','ginger','five spice','plum','sesame'] },
+  'mexican': { name: 'Mexican', cat: 'Spicy', weight: 58, protein: 50, fat: 40, acidity: 45, sweetness: 15, spice: 55, aroma: ['chili','cumin','cilantro','lime','avocado'] },
+  'bbq-ribs': { name: 'BBQ Ribs', cat: 'BBQ', weight: 80, protein: 75, fat: 65, acidity: 40, sweetness: 40, spice: 25, aroma: ['smoke','bbq sauce','paprika','char','molasses'] },
+  'cheese-hard': { name: 'Hard Cheese', cat: 'Cheese', weight: 65, protein: 80, fat: 70, acidity: 20, sweetness: 5, spice: 0, aroma: ['nutty','umami','salt','crystal','caramel'] },
+  'cheese-soft': { name: 'Soft Cheese', cat: 'Cheese', weight: 50, protein: 50, fat: 75, acidity: 20, sweetness: 10, spice: 0, aroma: ['creamy','butter','mushroom','earth','brioche'] },
+  'cheese-blue': { name: 'Blue Cheese', cat: 'Cheese', weight: 70, protein: 55, fat: 80, acidity: 25, sweetness: 10, spice: 5, aroma: ['blue mold','salt','sharp','umami','pepper'] },
+  'cheese-goat': { name: 'Goat Cheese', cat: 'Cheese', weight: 40, protein: 50, fat: 55, acidity: 55, sweetness: 5, spice: 0, aroma: ['goat milk','citrus','herb','cream','earth'] },
+  'charcuterie': { name: 'Charcuterie', cat: 'Cured', weight: 60, protein: 65, fat: 70, acidity: 25, sweetness: 10, spice: 15, aroma: ['cured meat','fat','salt','smoke','garlic'] },
+  'vegetable-roast': { name: 'Roast Veg', cat: 'Vegetarian', weight: 40, protein: 25, fat: 30, acidity: 40, sweetness: 25, spice: 5, aroma: ['caramelized','olive oil','herb','char','earth'] },
+  'salad-green': { name: 'Green Salad', cat: 'Vegetarian', weight: 20, protein: 15, fat: 15, acidity: 65, sweetness: 10, spice: 0, aroma: ['green','vinaigrette','herb','lemon','olive oil'] },
+  'dessert-chocolate': { name: 'Chocolate', cat: 'Dessert', weight: 75, protein: 20, fat: 65, acidity: 20, sweetness: 85, spice: 5, aroma: ['cocoa','vanilla','dark chocolate','caramel','coffee'] },
+  'dessert-fruit': { name: 'Fruit Tart', cat: 'Dessert', weight: 50, protein: 20, fat: 35, acidity: 45, sweetness: 75, spice: 5, aroma: ['fruit','pastry','cream','vanilla','cinnamon'] },
+  'dessert-creme': { name: 'Crème Brûlée', cat: 'Dessert', weight: 55, protein: 25, fat: 50, acidity: 20, sweetness: 80, spice: 0, aroma: ['caramel','vanilla','cream','egg','burnt sugar'] },
+};
+
+// ===== PREP MODIFIERS =====
+const PREP_MODS = {
+  grilled: { weight: +10, aroma: ['maillard','char','smoke'], acidity: +5 },
+  roasted: { weight: +5, aroma: ['caramelized','maillard'], acidity: 0 },
+  raw: { weight: -15, aroma: ['fresh','clean'], acidity: +10 },
+  fried: { weight: +10, aroma: ['fried','crispy'], acidity: -5 },
+  smoked: { weight: +5, aroma: ['smoke','wood'], acidity: 0 },
+  steamed: { weight: -5, aroma: ['clean','delicate'], acidity: +5 },
+};
+
+// ===== FLAVOR BRIDGE MAP =====
+const BRIDGE_MAP = {
+  'maillard': ['cabernet','syrah','malbec','tempranillo','nebbiolo','port'],
+  'char': ['cabernet','syrah','malbec','port'],
+  'smoke': ['syrah','tempranillo','port'],
+  'black pepper': ['syrah','nebbiolo','cabernet'],
+  'umami': ['cabernet','merlot','nebbiolo','tempranillo','sherry-dry'],
+  'gamey': ['pinot-noir','syrah','nebbiolo'],
+  'rosemary': ['tempranillo','nebbiolo','cabernet'],
+  'garlic': ['syrah','tempranillo','sauvignon-blanc'],
+  'lemon': ['sauvignon-blanc','riesling-dry','champagne','pinot-grigio','chardonnay-unoaked'],
+  'butter': ['chardonnay-oaked','chardonnay-unoaked','champagne'],
+  'cream': ['chardonnay-oaked','riesling-sweet','gewurztraminer'],
+  'brine': ['champagne','sauvignon-blanc','sherry-dry','riesling-dry'],
+  'sea': ['sauvignon-blanc','champagne','chablis','pinot-grigio','riesling-dry'],
+  'tomato': ['chianti','tempranillo','sangiovese','cabernet','merlot'],
+  'basil': ['sauvignon-blanc','pinot-grigio','vermentino','tempranillo'],
+  'chili': ['riesling-sweet','gewurztraminer','prosecco','rose'],
+  'coconut': ['gewurztraminer','riesling-sweet','torrontes'],
+  'turmeric': ['gewurztraminer','riesling-sweet'],
+  'ginger': ['gewurztraminer','riesling-dry','riesling-sweet'],
+  'lemongrass': ['sauvignon-blanc','riesling-dry','gewurztraminer'],
+  'soy': ['syrah','pinot-noir','riesling-dry','sherry-dry'],
+  'cocoa': ['port','malbec','cabernet','merlot'],
+  'vanilla': ['port','chardonnay-oaked','riesling-sweet'],
+  'caramel': ['port','sherry-dry','chardonnay-oaked'],
+  'blue mold': ['port','sauternes','riesling-sweet'],
+  'goat milk': ['sauvignon-blanc','riesling-dry','champagne'],
+  'nutty': ['sherry-dry','chardonnay-oaked','champagne'],
+  'saline': ['sherry-dry','champagne','sauvignon-blanc'],
+  'fruit': ['riesling-sweet','moscato','prosecco','rose','port'],
+  'cranberry': ['pinot-noir','rose','cranberry'],
+  'apple': ['chardonnay-unoaked','pinot-grigio','champagne','riesling-dry'],
+  'cherry': ['pinot-noir','tempranillo','nebbiolo','merlot'],
+  'mushroom': ['pinot-noir','nebbiolo','tempranillo','chardonnay-oaked'],
+  'earth': ['pinot-noir','nebbiolo','tempranillo','syrah'],
+  'forest floor': ['pinot-noir','nebbiolo'],
+  'rose': ['nebbiolo','gewurztraminer','rose','pinot-noir'],
+  'lychee': ['gewurztraminer','riesling-sweet'],
+  'honey': ['riesling-sweet','port','champagne'],
+  'cinnamon': ['gewurztraminer','port','tempranillo'],
+  'clove': ['gewurztraminer','syrah','port'],
+  'cardamom': ['gewurztraminer','riesling-sweet'],
+  'cumin': ['tempranillo','syrah','malbec'],
+  'cilantro': ['sauvignon-blanc','gewurztraminer'],
+  'avocado': ['sauvignon-blanc','chardonnay-unoaked'],
+  'olive oil': ['sauvignon-blanc','tempranillo','chardonnay-unoaked'],
+  'pork fat': ['pinot-noir','syrah','chardonnay-oaked'],
+  'paprika': ['tempranillo','syrah','malbec'],
+  'molasses': ['port','syrah','malbec'],
+  'fish sauce': ['riesling-dry','gewurztraminer','sauvignon-blanc'],
+  'nori': ['sauvignon-blanc','riesling-dry','champagne'],
+  'wasabi': ['riesling-dry','sauvignon-blanc','champagne'],
+  'rice': ['sauvignon-blanc','pinot-grigio','riesling-dry'],
+  'vinaigrette': ['sauvignon-blanc','riesling-dry','champagne'],
+  'parmesan': ['tempranillo','chardonnay-oaked','champagne','sherry-dry'],
+  'hoisin': ['syrah','pinot-noir','malbec'],
+  'orange': ['riesling-sweet','gewurztraminer','champagne','prosecco'],
+  'peach': ['riesling-sweet','prosecco','rose','gewurztraminer'],
+  'pear': ['pinot-grigio','chardonnay-unoaked','champagne'],
+  'almond': ['sherry-dry','champagne','chardonnay-oaked'],
+  'yeast': ['champagne','sherry-dry'],
+  'brioche': ['champagne','chardonnay-oaked'],
+  'hazelnut': ['sherry-dry','chardonnay-oaked'],
+  'orange peel': ['sherry-dry','riesling-sweet','prosecco'],
+  'dark chocolate': ['port','cabernet','malbec'],
+  'coffee': ['port','malbec','cabernet'],
+  'burnt sugar': ['port','sherry-dry','chardonnay-oaked'],
+  'egg': ['champagne','chardonnay-oaked','riesling-sweet'],
+  'pastry': ['riesling-sweet','champagne','chardonnay-oaked'],
+  'delicate fish': ['sauvignon-blanc','pinot-grigio','chablis','riesling-dry'],
+  'meaty fish': ['pinot-noir','syrah','tempranillo'],
+  'oily fish': ['chardonnay-unoaked','pinot-noir','sauvignon-blanc'],
+  'sweet shellfish': ['chardonnay-unoaked','champagne','sauvignon-blanc'],
+  'poultry': ['pinot-noir','chardonnay-oaked','chardonnay-unoaked','merlot'],
+  'sage': ['tempranillo','nebbiolo','chardonnay-oaked'],
+  'iron': ['cabernet','nebbiolo','malbec'],
+  'cured meat': ['syrah','tempranillo','nebbiolo','sherry-dry'],
+  'salt': ['sherry-dry','champagne','port'],
+  'sharp': ['port','riesling-sweet','sauternes'],
+  'green': ['sauvignon-blanc','pinot-grigio','verdejo'],
+  'crystal': ['port','sherry-dry','champagne'],
+  'fresh': ['sauvignon-blanc','pinot-grigio','riesling-dry','champagne'],
+  'clean': ['sauvignon-blanc','pinot-grigio','champagne'],
+  'fried': ['champagne','riesling-dry','sauvignon-blanc'],
+  'crispy': ['champagne','pinot-grigio','prosecco'],
+  'caramelized': ['tempranillo','pinot-noir','chardonnay-oaked','port'],
+  'wood': ['syrah','tempranillo','cabernet'],
+  'mineral': ['riesling-dry','champagne','sauvignon-blanc'],
+  'cucumber': ['sauvignon-blanc','riesling-dry','champagne'],
+  'white flower': ['prosecco','pinot-grigio','gewurztraminer'],
+  'plum': ['merlot','malbec','cabernet','port'],
+  'blackberry': ['syrah','malbec','cabernet','port'],
+  'blackcurrant': ['cabernet','merlot'],
+  'raspberry': ['pinot-noir','rose','merlot'],
+  'strawberry': ['rose','pinot-noir','prosecco'],
+  'graphite': ['cabernet','nebbiolo'],
+  'cedar': ['cabernet','tempranillo'],
+  'mint': ['cabernet','merlot'],
+  'bell pepper': ['cabernet','merlot'],
+  'violet': ['malbec','syrah','nebbiolo'],
+  'chocolate': ['port','malbec','merlot','cabernet'],
+  'leather': ['tempranillo','nebbiolo','syrah','cabernet'],
+  'tobacco': ['tempranillo','cabernet','nebbiolo'],
+  'tar': ['nebbiolo','syrah'],
+  'truffle': ['nebbiolo','pinot-noir','tempranillo'],
+  'dried herb': ['nebbiolo','tempranillo','cabernet'],
+  'baked apple': ['chardonnay-oaked','riesling-sweet'],
+  'toast': ['chardonnay-oaked','champagne'],
+  'oak': ['chardonnay-oaked','tempranillo','cabernet'],
+  'grass': ['sauvignon-blanc'],
+  'passion fruit': ['sauvignon-blanc','riesling-sweet'],
+  'herb': ['sauvignon-blanc','tempranillo','pinot-grigio'],
+  'lime': ['riesling-dry','riesling-sweet','sauvignon-blanc'],
+  'petrol': ['riesling-dry','riesling-sweet'],
+  'slate': ['riesling-dry','riesling-sweet'],
+  'white peach': ['riesling-sweet','riesling-dry','prosecco'],
+  'apricot': ['riesling-sweet','port'],
+  'orange blossom': ['riesling-sweet','gewurztraminer','prosecco'],
+  'dill': ['tempranillo','sauvignon-blanc'],
+  'cinnamon_': ['gewurztraminer','port'],
+  'pine nut': ['sauvignon-blanc','chardonnay-unoaked'],
+  'mozzarella': ['tempranillo','sauvignon-blanc','pinot-grigio'],
+  'five spice': ['syrah','gewurztraminer','riesling-sweet'],
+  'avocado_': ['sauvignon-blanc','chardonnay-unoaked'],
+  'sesame': ['syrah','riesling-dry','sherry-dry'],
+  'plum_': ['merlot','malbec','port'],
+  'cranberry_': ['pinot-noir','rose'],
+  'fish': ['sauvignon-blanc','pinot-grigio','riesling-dry','champagne'],
+  'soy_': ['syrah','pinot-noir','riesling-dry'],
+  'coriander': ['gewurztraminer','riesling-sweet','sauvignon-blanc'],
+  'cream_': ['chardonnay-oaked','gewurztraminer'],
+};
+
+// ===== STATE =====
+let state = {
+  wine: 'cabernet',
+  food: 'beef-steak',
+  prep: 'grilled',
+  sauce: 50,
+  spice: 20,
+  acid: 35,
+  sweet: 15,
+};
+
+let radarChart = null;
+
+// ===== PAIRING SCORING =====
+function computePairing(wineKey, foodKey, prep, sauce, spice, acid, sweet) {
+  const wine = WINES[wineKey];
+  const food = FOODS[foodKey];
+  if (!wine || !food) return null;
+
+  const prepMod = PREP_MODS[prep] || PREP_MODS['grilled'];
+  const foodWeight = Math.max(10, Math.min(100, food.weight + (prepMod.weight || 0)));
+  const foodAcid = Math.max(0, Math.min(100, food.acidity + (prepMod.acidity || 0) + acid * 0.3));
+  const foodSweet = Math.max(0, Math.min(100, food.sweetness + sweet * 0.4));
+  const foodSpice = Math.max(0, Math.min(100, food.spice + spice * 0.7));
+  const foodFat = food.fat;
+  const foodProtein = food.protein;
+
+  // 1. Weight / Body Match (25%)
+  const weightDiff = Math.abs(wine.body - foodWeight);
+  let weightScore = Math.max(0, 100 - weightDiff * 1.8);
+  // Light wine with heavy food penalty
+  if (wine.body < 50 && foodWeight > 70) weightScore *= 0.6;
+  // Heavy wine with light food penalty
+  if (wine.body > 80 && foodWeight < 35) weightScore *= 0.6;
+
+  // 2. Acidity Balance (20%)
+  // Wine acidity should be >= food acidity for the wine to taste fresh
+  const acidDiff = wine.acidity - foodAcid;
+  let acidityScore;
+  if (acidDiff >= 0) {
+    acidityScore = Math.max(50, 100 - acidDiff * 0.8);
+  } else {
+    acidityScore = Math.max(20, 100 + acidDiff * 2.5);
+  }
+
+  // 3. Tannin vs Protein/Fat (20%)
+  let tanninScore;
+  if (wine.tannin > 60) {
+    // High tannin needs protein + fat to soften
+    if (foodProtein > 60 && foodFat > 40) {
+      tanninScore = 90;
+    } else if (foodProtein > 50) {
+      tanninScore = 70;
+    } else if (foodProtein > 30) {
+      tanninScore = 50;
+    } else {
+      tanninScore = 25; // tannin clashes with light food
+    }
+    // Tannin + spicy food = bad
+    if (foodSpice > 60) tanninScore *= 0.4;
+    // Tannin + salty cheese = good
+    if (foodKey === 'cheese-hard' || foodKey === 'cheese-blue') tanninScore = Math.max(tanninScore, 85);
+  } else if (wine.tannin > 30) {
+    tanninScore = 75; // medium tannin is flexible
+    if (foodSpice > 70) tanninScore *= 0.7;
+  } else {
+    tanninScore = 80; // low tannin is generally safe
+    // but low tannin + heavy red meat = less ideal
+    if (foodProtein > 80 && foodFat > 60) tanninScore = 55;
+  }
+
+  // 4. Sweetness Harmony (15%)
+  // Wine should be at least as sweet as the food
+  const sweetDiff = wine.sweetness - foodSweet;
+  let sweetScore;
+  if (sweetDiff >= -5) {
+    sweetScore = 90;
+  } else if (sweetDiff >= -20) {
+    sweetScore = 60;
+  } else if (sweetDiff >= -40) {
+    sweetScore = 35;
+  } else {
+    sweetScore = 15;
+  }
+  // Sweet food + dry wine = bitter/astringent
+  if (foodSweet > 50 && wine.sweetness < 15) sweetScore *= 0.3;
+  // Sweet wine + sweet dessert = good
+  if (foodSweet > 60 && wine.sweetness > 50) sweetScore = 92;
+
+  // 5. Aroma Bridge (10%)
+  let aromaOverlap = 0;
+  let bridgeCompounds = [];
+  const foodAromas = [...(food.aroma || []), ...((prepMod.aroma || []))];
+  for (const fa of foodAromas) {
+    const bridge = BRIDGE_MAP[fa];
+    if (bridge && bridge.includes(wineKey)) {
+      aromaOverlap++;
+      bridgeCompounds.push(fa);
+    }
+  }
+  let aromaScore = Math.min(100, 30 + aromaOverlap * 25);
+
+  // 6. Spice Tolerance (10%)
+  let spiceScore;
+  if (foodSpice < 20) {
+    spiceScore = 90; // no spice issue
+  } else if (foodSpice < 40) {
+    // mild spice: off-dry or low tannin good
+    if (wine.sweetness > 15 && wine.tannin < 50) spiceScore = 85;
+    else if (wine.tannin < 40) spiceScore = 70;
+    else spiceScore = 45;
+  } else if (foodSpice < 70) {
+    // medium spice: need sweetness or low alcohol
+    if (wine.sweetness > 30 && wine.tannin < 30) spiceScore = 88;
+    else if (wine.alcohol < 70 && wine.tannin < 50) spiceScore = 65;
+    else if (wine.tannin > 60) spiceScore = 20;
+    else spiceScore = 40;
+  } else {
+    // very spicy: need sweet + low alcohol + low tannin
+    if (wine.sweetness > 40 && wine.alcohol < 72 && wine.tannin < 30) spiceScore = 90;
+    else if (wine.sweetness > 20 && wine.tannin < 40) spiceScore = 60;
+    else if (wine.tannin > 50 || wine.alcohol > 85) spiceScore = 15;
+    else spiceScore = 35;
+  }
+
+  // Sauce intensity modifies weight
+  const sauceFactor = sauce / 100;
+  const effectiveWeight = weightScore * (1 - sauceFactor * 0.15) + (100 - Math.abs(wine.body - (foodWeight + sauceFactor * 15)) * 1.5) * sauceFactor * 0.15;
+
+  const overall = Math.round(
+    effectiveWeight * 0.25 +
+    acidityScore * 0.20 +
+    tanninScore * 0.20 +
+    sweetScore * 0.15 +
+    aromaScore * 0.10 +
+    spiceScore * 0.10
+  );
+
+  return {
+    overall: Math.max(0, Math.min(100, overall)),
+    weight: Math.round(effectiveWeight),
+    acidity: Math.round(acidityScore),
+    tannin: Math.round(tanninScore),
+    sweet: Math.round(sweetScore),
+    aroma: Math.round(aromaScore),
+    spice: Math.round(spiceScore),
+    bridges: bridgeCompounds,
+    wine: wine,
+    food: food,
+  };
+}
+
+// ===== RECOMMENDATION TEXT =====
+function getRecommendation(score, wine, food) {
+  if (score >= 80) {
+    const tips = [
+      `Classic combination — the ${wine.name} complements ${food.name} beautifully.`,
+      `Excellent match! The ${wine.name} and ${food.name} create a harmonious balance.`,
+      `Outstanding pairing — ${wine.name} enhances the flavors of ${food.name}.`,
+    ];
+    return { text: tips[Math.floor(Math.random() * tips.length)], class: 'rec-good', label: 'Excellent Pairing' };
+  } else if (score >= 60) {
+    return { text: `Good match. The ${wine.name} works well with ${food.name}, though not a textbook classic.`, class: 'rec-ok', label: 'Good Pairing' };
+  } else if (score >= 40) {
+    return { text: `Acceptable, but the ${wine.name} and ${food.name} don't fully harmonize. Consider a different wine.`, class: 'rec-ok', label: 'Marginal Pairing' };
+  } else {
+    return { text: `Poor match — the ${wine.name} clashes with ${food.name}. Try a different style.`, class: 'rec-poor', label: 'Poor Pairing' };
+  }
+}
+
+// ===== TIP GENERATION =====
+function generateTip(score, wine, food, prep, spice, sweet) {
+  const tips = [];
+  if (wine.tannin > 60 && food.protein > 60 && food.fat > 40) {
+    tips.push(`The bold tannins of ${wine.name} bind to proteins and fat in ${food.name}, softening the wine while the fat coats the palate.`);
+  }
+  if (wine.tannin > 60 && spice > 50) {
+    tips.push(`Warning: high tannin combined with spicy food amplifies heat and bitterness. An off-dry, low-tannin wine would be better here.`);
+  }
+  if (wine.acidity > 70 && food.acidity < 30) {
+    tips.push(`The high acidity of ${wine.name} cuts through the richness of ${food.name}, refreshing the palate between bites.`);
+  }
+  if (wine.acidity < food.acidity) {
+    tips.push(`The food is more acidic than the wine, making ${wine.name} taste flat. Choose a crisper, higher-acid wine.`);
+  }
+  if (sweet > 40 && wine.sweetness < 15) {
+    tips.push(`Sweet food with dry wine makes the wine taste bitter and thin. A slightly sweet wine would balance better.`);
+  }
+  if (wine.sweetness > 50 && sweet < 20) {
+    tips.push(`The sweetness of ${wine.name} is best enjoyed with a dessert of similar sweetness — try a fruit tart or chocolate.`);
+  }
+  if (spice > 60 && wine.sweetness > 30 && wine.tannin < 30) {
+    tips.push(`The slight sweetness and low tannin of ${wine.name} tames the chili heat beautifully — a classic Asian food pairing strategy.`);
+  }
+  if (wine.body > 80 && food.weight < 40) {
+    tips.push(`The full body of ${wine.name} overwhelms the delicate ${food.name}. A lighter wine would let the food shine.`);
+  }
+  if (wine.body < 50 && food.weight > 70) {
+    tips.push(`The light ${wine.name} gets lost beside the robust ${food.name}. Consider a fuller-bodied wine.`);
+  }
+  if (prep === 'smoked' && wine.tannin < 30) {
+    tips.push(`Smoked foods pair well with wines that have smoky notes themselves — consider Syrah or a lightly oaked wine.`);
+  }
+  if (prep === 'raw' && wine.body > 70) {
+    tips.push(`Raw, delicate dishes are overpowered by heavy wines. Stick to crisp, light whites or sparkling.`);
+  }
+  if (food.cat === 'Cheese' && food.name.includes('Blue') && wine.sweetness > 50) {
+    tips.push(`Sweet wine with blue cheese is one of the great classic pairings — the salt and sweet create magic.`);
+  }
+  if (food.cat === 'Seafood' && wine.tannin > 50) {
+    tips.push(`Tannin reacts with fish oils to create a metallic taste. Choose a low-tannin white or light red for seafood.`);
+  }
+  if (score >= 85 && tips.length === 0) {
+    tips.push(`This is a textbook pairing — the weight, acidity, tannin, and aromatic profile all align for a harmonious experience.`);
+  }
+  if (tips.length === 0) {
+    tips.push(`The pairing is workable. Focus on the preparation and sauce to fine-tune the balance — grilled foods love bolder wines, while steamed dishes prefer lighter styles.`);
+  }
+  return tips[0];
+}
+
+// ===== MATRIX DATA =====
+const MATRIX_WINES = ['cabernet','pinot-noir','syrah','chardonnay-oaked','sauvignon-blanc','riesling-dry','champagne','port'];
+const MATRIX_FOODS = ['beef-steak','lamb','duck','salmon','white-fish','shellfish','pasta-tomato','curry-spicy','thai','cheese-hard','cheese-blue','cheese-goat','charcuterie','dessert-chocolate','dessert-fruit'];
+
+// ===== UPDATE =====
+function update() {
+  const result = computePairing(state.wine, state.food, state.prep, state.sauce, state.spice, state.acid, state.sweet);
+  if (!result) return;
+
+  const rec = getRecommendation(result.overall, result.wine, result.food);
+  const tip = generateTip(result.overall, result.wine, result.food, state.prep, state.spice, state.sweet);
+
+  // Score circle
+  const sc = document.getElementById('score-circle');
+  sc.textContent = result.overall;
+  sc.className = 'score-circle ' + (result.overall >= 70 ? 's-good' : result.overall >= 45 ? 's-ok' : 's-poor');
+
+  document.getElementById('score-label').textContent = rec.label;
+
+  // Recommendation
+  const recBox = document.getElementById('recommendation-box');
+  recBox.textContent = rec.text;
+  recBox.className = 'pairing-recommendation ' + rec.class;
+
+  // Bars
+  const bars = ['weight','acidity','tannin','sweet','aroma','spice'];
+  const colors = ['var(--accent)','var(--accent2)','#8b5cf6','#ec4899','#06b6d4','#f59e0b'];
+  bars.forEach((b, i) => {
+    document.getElementById('bar-' + b).textContent = result[b] + '%';
+    document.getElementById('fill-' + b).style.width = result[b] + '%';
+    document.getElementById('fill-' + b).style.background = colors[i];
+  });
+
+  // Bridges
+  const bridgeList = document.getElementById('bridge-list');
+  if (result.bridges.length > 0) {
+    bridgeList.innerHTML = result.bridges.map(b => `<div class="bridge-item">${b}</div>`).join('');
+  } else {
+    bridgeList.innerHTML = '<div class="bridge-item" style="opacity:0.5;">No direct aroma bridge</div>';
+  }
+
+  // Tip
+  document.getElementById('tip-box').textContent = tip;
+
+  // Radar chart
+  updateRadar(result);
+
+  // Matrix
+  updateMatrix();
+}
+
+function updateRadar(result) {
+  const ctx = document.getElementById('radar-chart').getContext('2d');
+  const data = {
+    labels: ['Weight', 'Acidity', 'Tannin', 'Sweet', 'Aroma', 'Spice'],
+    datasets: [{
+      label: 'Pairing Score',
+      data: [+result.weight, +result.acidity, +result.tannin, +result.sweet, +result.aroma, +result.spice],
+      backgroundColor: 'rgba(199, 125, 255, 0.15)',
+      borderColor: '#c77dff',
+      borderWidth: 2,
+      pointBackgroundColor: '#c77dff',
+      pointBorderColor: '#fff',
+      pointRadius: 3,
+    }]
+  };
+
+  if (radarChart) {
+    radarChart.data = data;
+    radarChart.update();
+  } else {
+    radarChart = new Chart(ctx, {
+      type: 'radar',
+      data: data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          r: {
+            min: 0, max: 100,
+            ticks: { display: false, stepSize: 25 },
+            grid: { color: 'rgba(255,255,255,0.08)' },
+            angleLines: { color: 'rgba(255,255,255,0.08)' },
+            pointLabels: {
+              color: '#9890b0',
+              font: { size: 10, weight: '600' }
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+function scoreColor(score) {
+  if (score >= 75) return 'rgba(74, 222, 128, 0.85)';
+  if (score >= 55) return 'rgba(251, 191, 36, 0.85)';
+  if (score >= 35) return 'rgba(248, 113, 113, 0.6)';
+  return 'rgba(248, 113, 113, 0.35)';
+}
+
+function updateMatrix() {
+  const container = document.getElementById('pairing-matrix');
+  let html = '<div class="matrix-header"></div>';
+  // Wine headers (abbreviated)
+  const wineLabels = ['Cab','Pinot','Syrah','Oak Ch','Sauv Blanc','Riesling','Champ','Port'];
+  MATRIX_WINES.forEach(w => {
+    const wl = wineLabels[MATRIX_WINES.indexOf(w)];
+    html += `<div class="matrix-header" title="${WINES[w].name}">${wl}</div>`;
+  });
+
+  // Food rows
+  MATRIX_FOODS.forEach(fk => {
+    const fl = FOODS[fk].name.length > 12 ? FOODS[fk].name.substring(0, 11) + '…' : FOODS[fk].name;
+    html += `<div class="matrix-row-label">${fl}</div>`;
+    MATRIX_WINES.forEach(wk => {
+      const r = computePairing(wk, fk, 'grilled', 50, 20, 30, 15);
+      const bg = scoreColor(r.overall);
+      const isCurrent = (wk === state.wine && fk === state.food);
+      html += `<div class="matrix-cell" style="background:${bg};${isCurrent ? 'outline:2px solid #fff;outline-offset:1px;' : ''}" title="${WINES[wk].name} × ${FOODS[fk].name}: ${r.overall}/100" data-wine="${wk}" data-food="${fk}">${r.overall}</div>`;
+    });
+  });
+
+  container.innerHTML = html;
+
+  // Click handlers
+  container.querySelectorAll('.matrix-cell').forEach(cell => {
+    cell.addEventListener('click', function() {
+      const w = this.getAttribute('data-wine');
+      const f = this.getAttribute('data-food');
+      document.getElementById('wine-select').value = w;
+      document.getElementById('food-select').value = f;
+      state.wine = w;
+      state.food = f;
+      update();
+    });
+  });
+}
+
+// ===== EVENT HANDLERS =====
+document.getElementById('wine-select').addEventListener('change', function() {
+  state.wine = this.value;
+  update();
+});
+
+document.getElementById('food-select').addEventListener('change', function() {
+  state.food = this.value;
+  // Auto-set prep based on food
+  const food = FOODS[state.food];
+  if (food.cat === 'Seafood' || food.cat === 'Fish') {
+    if (state.prep === 'grilled' || state.prep === 'roasted') {
+      // keep
+    } else {
+      setPrep('steamed');
+    }
+  }
+  update();
+});
+
+document.querySelectorAll('#prep-chips .chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    setPrep(this.getAttribute('data-prep'));
+  });
+});
+
+function setPrep(prep) {
+  state.prep = prep;
+  document.querySelectorAll('#prep-chips .chip').forEach(c => {
+    c.classList.toggle('active', c.getAttribute('data-prep') === prep);
+  });
+  update();
+}
+
+['sauce','spice','acid','sweet'].forEach(key => {
+  const slider = document.getElementById(key + '-slider');
+  const val = document.getElementById(key + '-val');
+  slider.addEventListener('input', function() {
+    state[key] = +this.value;
+    val.textContent = this.value;
+    update();
+  });
+});
+
+// Presets
+const PRESETS = {
+  steak: { wine: 'cabernet', food: 'beef-steak', prep: 'grilled', sauce: 60, spice: 10, acid: 20, sweet: 5 },
+  seafood: { wine: 'sauvignon-blanc', food: 'shellfish', prep: 'steamed', sauce: 40, spice: 5, acid: 50, sweet: 10 },
+  spicy: { wine: 'riesling-sweet', food: 'thai', prep: 'steamed', sauce: 50, spice: 70, acid: 55, sweet: 35 },
+  cheese: { wine: 'cabernet', food: 'cheese-hard', prep: 'raw', sauce: 20, spice: 0, acid: 15, sweet: 5 },
+  dessert: { wine: 'port', food: 'dessert-chocolate', prep: 'raw', sauce: 10, spice: 5, acid: 15, sweet: 85 },
+  thanksgiving: { wine: 'pinot-noir', food: 'turkey', prep: 'roasted', sauce: 50, spice: 5, acid: 25, sweet: 15 },
+};
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const preset = PRESETS[this.getAttribute('data-preset')];
+    if (!preset) return;
+    state = { ...preset };
+    document.getElementById('wine-select').value = state.wine;
+    document.getElementById('food-select').value = state.food;
+    document.getElementById('sauce-slider').value = state.sauce;
+    document.getElementById('sauce-val').textContent = state.sauce;
+    document.getElementById('spice-slider').value = state.spice;
+    document.getElementById('spice-val').textContent = state.spice;
+    document.getElementById('acid-slider').value = state.acid;
+    document.getElementById('acid-val').textContent = state.acid;
+    document.getElementById('sweet-slider').value = state.sweet;
+    document.getElementById('sweet-val').textContent = state.sweet;
+    setPrep(state.prep);
+  });
+});
+
+// ===== BACKGROUND CANVAS — DECORATIVE WINE GLASS PARTICLES =====
+(function() {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR;
+  let particles = [];
+  let blobs = [];
+
+  function resize() {
+    const container = document.getElementById('canvas-container') || canvas.parentElement;
+    DPR = window.devicePixelRatio || 1;
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.scale(DPR, DPR);
+    initParticles();
+  }
+
+  function initParticles() {
+    particles = [];
+    const count = Math.min(60, Math.floor(W * H / 25000));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 2 + 1,
+        hue: 270 + Math.random() * 40,
+        alpha: Math.random() * 0.3 + 0.1,
+        pulse: Math.random() * Math.PI * 2,
+      });
+    }
+
+    blobs = [];
+    for (let i = 0; i < 4; i++) {
+      blobs.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: 150 + Math.random() * 200,
+        vx: (Math.random() - 0.5) * 0.15,
+        vy: (Math.random() - 0.5) * 0.15,
+        hue: [270, 320, 200, 340][i],
+        alpha: 0.04 + Math.random() * 0.03,
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Background gradient
+    const grad = ctx.createRadialGradient(W * 0.3, H * 0.4, 0, W * 0.5, H * 0.5, Math.max(W, H));
+    grad.addColorStop(0, '#150b28');
+    grad.addColorStop(0.5, '#0f0a1a');
+    grad.addColorStop(1, '#08050f');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Floating blobs
+    for (const b of blobs) {
+      b.x += b.vx;
+      b.y += b.vy;
+      if (b.x < -b.r) b.x = W + b.r;
+      if (b.x > W + b.r) b.x = -b.r;
+      if (b.y < -b.r) b.y = H + b.r;
+      if (b.y > H + b.r) b.y = -b.r;
+
+      const bg = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      bg.addColorStop(0, `hsla(${b.hue}, 70%, 50%, ${b.alpha})`);
+      bg.addColorStop(1, `hsla(${b.hue}, 70%, 50%, 0)`);
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Particles
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.pulse += 0.02;
+      if (p.x < 0) p.x = W;
+      if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H;
+      if (p.y > H) p.y = 0;
+
+      const pulseAlpha = p.alpha * (0.6 + Math.sin(p.pulse) * 0.4);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 80%, 70%, ${pulseAlpha})`;
+      ctx.fill();
+
+      // Glow
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+      const gg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+      gg.addColorStop(0, `hsla(${p.hue}, 80%, 70%, ${pulseAlpha * 0.15})`);
+      gg.addColorStop(1, `hsla(${p.hue}, 80%, 70%, 0)`);
+      ctx.fillStyle = gg;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  draw();
+})();
+
+// ===== INIT =====
+update();
+</script>
+</body>
+</html>
