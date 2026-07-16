@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Climate Shift & Wine Region Suitability Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.17/paper-full.min.js"></script>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{ background:#0d1419; color:#d4e0ee; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.55; overflow-x:hidden; }
+
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  header{ text-align:center; padding:1.2rem 1rem 0.8rem; }
+  header h1{ font-size:clamp(1.3rem,4vw,1.8rem); color:#e8f0fa; font-weight:600; }
+  header p{ color:#7a8a9a; font-size:0.82rem; margin-top:0.3rem; }
+
+  /* DESKTOP layout */
+  #canvas-container{ position:fixed; inset:0; z-index:0; background:#0d1419; }
+  #canvas-container canvas{ width:100% !important; height:100% !important; display:block; }
+
+  #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+
+  .panel{
+    position:absolute; background:rgba(18,26,34,0.92); border:1px solid #2a3a4a;
+    border-radius:10px; padding:0.85rem 1rem; pointer-events:auto; backdrop-filter:blur(8px);
+  }
+
+  #controls{ top:12px; left:12px; width:290px; max-height:calc(100vh - 24px); overflow-y:auto; }
+  #metrics{ top:12px; right:12px; width:240px; }
+
+  .panel h2{ font-size:0.82rem; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.55rem; border-bottom:1px solid #1e2a38; padding-bottom:0.4rem; }
+
+  .ctrl-group{ margin-bottom:0.7rem; }
+  .ctrl-group label{ display:block; font-size:0.76rem; color:#8b9ba8; margin-bottom:0.25rem; font-weight:500; }
+  .ctrl-group .val{ float:right; color:#c9a060; font-weight:600; font-variant-numeric:tabular-nums; }
+
+  input[type=range]{ width:100%; height:28px; -webkit-appearance:none; appearance:none; background:transparent; cursor:pointer; }
+  input[type=range]::-webkit-slider-runnable-track{ height:4px; background:#1e2a38; border-radius:2px; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; margin-top:-6px; border-radius:50%; background:#c9a060; border:2px solid #2a3a4a; }
+  input[type=range]::-moz-range-track{ height:4px; background:#1e2a38; border-radius:2px; }
+  input[type=range]::-moz-range-thumb{ width:14px; height:14px; border-radius:50%; background:#c9a060; border:2px solid #2a3a4a; }
+
+  .btn-row{ display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.5rem; }
+  .btn{ background:#1a2530; border:1px solid #2a3a4a; color:#a4b4c4; padding:0.4rem 0.65rem; border-radius:6px; font-size:0.74rem; cursor:pointer; pointer-events:auto; transition:all .12s; }
+  .btn:hover{ border-color:#58a6ff; color:#d4e0ee; }
+  .btn.active{ background:#1e3a5a; border-color:#58a6ff; color:#58a6ff; font-weight:600; }
+
+  .metric-row{ display:flex; justify-content:space-between; align-items:center; padding:0.3rem 0; border-bottom:1px solid #162028; font-size:0.78rem; }
+  .metric-row:last-child{ border-bottom:none; }
+  .metric-label{ color:#8b9ba8; }
+  .metric-val{ color:#e8f0fa; font-weight:600; font-variant-numeric:tabular-nums; }
+  .metric-val.good{ color:#6ec86e; }
+  .metric-val.warn{ color:#e8c060; }
+  .metric-val.bad{ color:#e87858; }
+
+  .legend{ margin-top:0.6rem; padding-top:0.5rem; border-top:1px solid #1e2a38; }
+  .legend-title{ font-size:0.7rem; color:#7a8a9a; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.35rem; }
+  .legend-item{ display:flex; align-items:center; gap:0.4rem; font-size:0.73rem; margin-bottom:0.25rem; color:#a4b4c4; }
+  .legend-dot{ width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+
+  #time-display{ text-align:center; font-size:1.1rem; font-weight:700; color:#c9a060; margin-bottom:0.3rem; font-variant-numeric:tabular-nums; }
+  #scenario-badge{ text-align:center; font-size:0.72rem; color:#8b9ba8; margin-bottom:0.5rem; }
+
+  /* Play controls */
+  #play-controls{ position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:0.6rem; pointer-events:auto; background:rgba(18,26,34,0.92); border:1px solid #2a3a4a; border-radius:24px; padding:0.45rem 1rem; }
+  #play-controls button{ background:none; border:none; color:#c9a060; font-size:1.1rem; cursor:pointer; padding:0.2rem 0.3rem; border-radius:4px; }
+  #play-controls button:hover{ color:#e8d090; }
+  #play-controls .year-readout{ color:#d4e0ee; font-size:0.85rem; font-weight:600; font-variant-numeric:tabular-nums; min-width:4rem; text-align:center; }
+
+  /* MOBILE */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    #canvas-container canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #play-controls {
+      position: relative !important; bottom: auto !important; left: auto !important;
+      transform: none; margin: 0.5rem auto; width: fit-content;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<header>
+  <h1>Climate Shift & Wine Region Suitability Explorer</h1>
+  <p>Paper.js interactive visualization of global climate change impact on wine-growing regions</p>
+</header>
+
+<div id="canvas-container">
+  <canvas id="paper-canvas" resize></canvas>
+</div>
+
+<div id="ui-layer">
+  <div class="panel" id="controls">
+    <h2>Climate Parameters</h2>
+    <div id="time-display">2025 AD</div>
+    <div id="scenario-badge">RCP 4.5 — Moderate emissions</div>
+    <div class="ctrl-group">
+      <label>Year <span class="val" id="year-val">2025</span></label>
+      <input type="range" id="year-slider" min="2025" max="2100" value="2025" step="1">
+    </div>
+    <div class="ctrl-group">
+      <label>Emissions Scenario</label>
+      <div class="btn-row" id="scenario-btns">
+        <button class="btn active" data-scenario="rcp45">RCP 4.5</button>
+        <button class="btn" data-scenario="rcp85">RCP 8.5</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>Temperature Anomaly <span class="val" id="temp-anom">+0.0°C</span></label>
+      <input type="range" id="temp-slider" min="0" max="5" value="0" step="0.1">
+    </div>
+    <div class="ctrl-group">
+      <label>CO₂ ppm <span class="val" id="co2-val">420</span></label>
+      <input type="range" id="co2-slider" min="380" max="900" value="420" step="5">
+    </div>
+    <div class="ctrl-group">
+      <label>Precipitation Change <span class="val" id="precip-val">0%</span></label>
+      <input type="range" id="precip-slider" min="-40" max="30" value="0" step="1">
+    </div>
+    <div class="ctrl-group">
+      <label>Selected Region</label>
+      <div class="btn-row" id="region-btns" style="display:block;">
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-title">Suitability Zones</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2a6e3e"></div> Optimal</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8ac050"></div> Good</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e8c050"></div> Marginal</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e87838"></div> Unsuitable</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a03030"></div> Lost</div>
+    </div>
+  </div>
+
+  <div class="panel" id="metrics">
+    <h2>Region Analysis</h2>
+    <div class="metric-row"><span class="metric-label">Region</span><span class="metric-val" id="m-region">Bordeaux</span></div>
+    <div class="metric-row"><span class="metric-label">Latitude</span><span class="metric-val" id="m-lat">45.0°N</span></div>
+    <div class="metric-row"><span class="metric-label">Current GDD</span><span class="metric-val" id="m-gdd-base">1380</span></div>
+    <div class="metric-row"><span class="metric-label">Shifted GDD</span><span class="metric-val" id="m-gdd-shift">1380</span></div>
+    <div class="metric-row"><span class="metric-label">Suitability</span><span class="metric-val" id="m-suit">Optimal</span></div>
+    <div class="metric-row"><span class="metric-label">Δ Temperature</span><span class="metric-val" id="m-dtemp">+0.0°C</span></div>
+    <div class="metric-row"><span class="metric-label">Heat Stress Days</span><span class="metric-val" id="m-heat">3</span></div>
+    <div class="metric-row"><span class="metric-label">Drought Risk</span><span class="metric-val" id="m-drought">Low</span></div>
+    <div class="metric-row"><span class="metric-label">Vintage Quality</span><span class="metric-val" id="m-quality">8.5/10</span></div>
+    <div class="metric-row"><span class="metric-label">New Frontier</span><span class="metric-val" id="m-frontier">—</span></div>
+  </div>
+
+  <div id="play-controls">
+    <button id="play-btn" title="Play/Pause animation">▶</button>
+    <span class="year-readout" id="play-year">2025</span>
+    <button id="reset-btn" title="Reset to 2025">⟲</button>
+  </div>
+</div>
+
+<script>
+// Wine regions data — name, lat, lon, base GDD (growing degree days), base temp, optimal range
+const REGIONS = [
+  { name: 'Bordeaux',        lat: 45.0,  lon: -0.6,  gdd: 1380, baseT: 13.8, optMin: 1200, optMax: 1700, variety: 'Cabernet/Merlot', color: '#8a3a3a' },
+  { name: 'Burgundy',         lat: 47.0,  lon: 4.8,   gdd: 1100, baseT: 12.5, optMin: 950,  optMax: 1450, variety: 'Pinot Noir/Chard', color: '#8a5a3a' },
+  { name: 'Champagne',        lat: 49.0,  lon: 4.0,   gdd: 950,  baseT: 11.2, optMin: 800,  optMax: 1300, variety: 'Chard/PN', color: '#c8c0a0' },
+  { name: 'Mosel',            lat: 50.0,  lon: 7.0,   gdd: 850,  baseT: 10.5, optMin: 700,  optMax: 1150, variety: 'Riesling', color: '#a0c0a0' },
+  { name: 'Napa Valley',      lat: 38.3,  lon: -122.3, gdd: 1750, baseT: 16.5, optMin: 1500, optMax: 2100, variety: 'Cabernet', color: '#6a2a2a' },
+  { name: 'Barossa Valley',   lat: -34.5, lon: 138.9, gdd: 1850, baseT: 17.2, optMin: 1600, optMax: 2150, variety: 'Shiraz', color: '#5a1a1a' },
+  { name: 'Marlborough',      lat: -41.5, lon: 174.0, gdd: 1200, baseT: 13.0, optMin: 1050, optMax: 1500, variety: 'Sauvignon B', color: '#6aaa6a' },
+  { name: 'Mendoza',          lat: -33.0, lon: -68.8, gdd: 1700, baseT: 16.0, optMin: 1450, optMax: 2000, variety: 'Malbec', color: '#8a4a4a' },
+  { name: 'Douro Valley',      lat: 41.2,  lon: -7.5,  gdd: 1650, baseT: 15.8, optMin: 1400, optMax: 1950, variety: 'Port/Touriga', color: '#7a3a2a' },
+  { name: 'Tuscany',          lat: 43.4,  lon: 11.0,  gdd: 1550, baseT: 15.0, optMin: 1350, optMax: 1850, variety: 'Sangiovese', color: '#9a4a3a' },
+  { name: 'Piedmont',         lat: 44.8,  lon: 8.0,   gdd: 1400, baseT: 14.0, optMin: 1200, optMax: 1650, variety: 'Nebbiolo', color: '#8a4a3a' },
+  { name: 'Rioja',            lat: 42.3,  lon: -2.5,  gdd: 1450, baseT: 14.2, optMin: 1250, optMax: 1700, variety: 'Tempranillo', color: '#7a3a3a' },
+  { name: 'Stellenbosch',     lat: -33.9, lon: 18.8,  gdd: 1650, baseT: 15.8, optMin: 1400, optMax: 1950, variety: 'Pinotage/Cab', color: '#6a3a4a' },
+  { name: 'Willamette Valley', lat: 45.3, lon: -123.3, gdd: 1050, baseT: 12.0, optMin: 900,  optMax: 1300, variety: 'Pinot Noir', color: '#5a7a5a' },
+  { name: 'Casablanca',       lat: -33.3, lon: -71.4, gdd: 1150, baseT: 12.8, optMin: 1000, optMax: 1400, variety: 'Sauvignon B', color: '#6a9a6a' },
+  { name: 'Eden Valley',      lat: -34.2, lon: 139.0, gdd: 1750, baseT: 16.5, optMin: 1500, optMax: 2050, variety: 'Riesling/Shiraz', color: '#5a2a2a' },
+  { name: 'Mâcon',            lat: 46.3,  lon: 4.8,   gdd: 1250, baseT: 13.0, optMin: 1050, optMax: 1550, variety: 'Chardonnay', color: '#caa050' },
+  { name: 'Catalonia',        lat: 41.5,  lon: 1.5,   gdd: 1600, baseT: 15.5, optMin: 1350, optMax: 1900, variety: 'Garnacha', color: '#8a3a2a' },
+  { name: 'Constantia',       lat: -34.0, lon: 18.4,  gdd: 1400, baseT: 13.5, optMin: 1200, optMax: 1650, variety: 'Semillon', color: '#7a6a3a' },
+  { name: 'Hunter Valley',    lat: -32.7, lon: 151.3, gdd: 1750, baseT: 16.5, optMin: 1500, optMax: 2000, variety: 'Semillon/Shiraz', color: '#6a4a3a' },
+  { name: 'Okanagan',         lat: 49.9,  lon: -119.5, gdd: 1100, baseT: 11.5, optMin: 950,  optMax: 1350, variety: 'Ice Wine/Riesling', color: '#5a8a8a' },
+  { name: 'England',          lat: 51.0,  lon: -1.0,  gdd: 800,  baseT: 10.0, optMin: 650,  optMax: 1100, variety: 'Sparkling', color: '#8aaa8a' },
+  { name: 'Tasmania',         lat: -42.0, lon: 146.5, gdd: 950,  baseT: 11.0, optMin: 800,  optMax: 1250, variety: 'Pinot/Sparkling', color: '#6a8a8a' },
+  { name: 'Patagonia',        lat: -39.0, lon: -68.0, gdd: 850,  baseT: 10.5, optMin: 700,  optMax: 1150, variety: 'Pinot/Malbec', color: '#7a9a9a' },
+  { name: 'Belgium',          lat: 50.5,  lon: 4.5,   gdd: 720,  baseT: 9.5,  optMin: 600,  optMax: 1000, variety: 'Sparkling/Trial', color: '#9abaaa' },
+];
+
+// State
+const state = {
+  year: 2025,
+  scenario: 'rcp45',
+  tempAnomaly: 0,
+  co2: 420,
+  precip: 0,
+  selectedRegion: 0,
+  playing: false,
+  playDir: 1,
+};
+
+// Compute temperature anomaly from year and scenario
+function computeTempAnomaly(year, scenario) {
+  const yearsFrom2025 = year - 2025;
+  if (scenario === 'rcp45') {
+    return Math.min(2.5, yearsFrom2025 * 0.025);
+  } else {
+    return Math.min(4.8, yearsFrom2025 * 0.045);
+  }
+}
+
+function computeCO2(year, scenario) {
+  const yearsFrom2025 = year - 2025;
+  if (scenario === 'rcp45') {
+    return Math.round(420 + yearsFrom2025 * 1.5);
+  } else {
+    return Math.round(420 + yearsFrom2025 * 4.2);
+  }
+}
+
+// Compute shifted GDD for a region
+function computeShiftedGDD(region, tempAnomaly, precip) {
+  // GDD increases roughly 1.5x temperature anomaly (growing season is ~6 months)
+  const gddIncrease = tempAnomaly * 180; // approx degree-days per °C annual warming
+  // Precipitation reduction increases heat stress but also reduces GDD slightly
+  const precipFactor = 1 + (precip / 100) * 0.05;
+  return Math.round(region.gdd * precipFactor + gddIncrease);
+}
+
+// Suitability classification
+function classifySuitability(region, shiftedGDD) {
+  const optMin = region.optMin;
+  const optMax = region.optMax;
+  const range = optMax - optMin;
+  if (shiftedGDD >= optMin && shiftedGDD <= optMax) return { label: 'Optimal', color: '#2a6e3e', code: 'optimal' };
+  if (shiftedGDD < optMin) {
+    const deficit = optMin - shiftedGDD;
+    if (deficit < range * 0.2) return { label: 'Good', color: '#8ac050', code: 'good' };
+    return { label: 'Marginal', color: '#e8c050', code: 'marginal' };
+  } else {
+    const excess = shiftedGDD - optMax;
+    if (excess < range * 0.2) return { label: 'Good', color: '#8ac050', code: 'good' };
+    if (excess < range * 0.4) return { label: 'Marginal', color: '#e8c050', code: 'marginal' };
+    if (excess < range * 0.7) return { label: 'Unsuitable', color: '#e87838', code: 'unsuitable' };
+    return { label: 'Lost', color: '#a03030', code: 'lost' };
+  }
+}
+
+// Heat stress days (>35°C during growing season)
+function computeHeatStressDays(region, tempAnomaly) {
+  const baseDays = Math.max(0, (region.baseT - 14) * 1.5);
+  const extra = tempAnomaly * 8;
+  return Math.round(Math.max(0, baseDays + extra));
+}
+
+// Drought risk
+function computeDroughtRisk(region, tempAnomaly, precip) {
+  const baseRisk = Math.max(0, (region.baseT - 13) * 0.15);
+  const tempRisk = tempAnomaly * 0.2;
+  const precipAdj = -precip / 100 * 0.3;
+  const risk = baseRisk + tempRisk + precipAdj;
+  if (risk < 0.3) return { label: 'Low', code: 'low', color: '#6ec86e' };
+  if (risk < 0.6) return { label: 'Moderate', code: 'moderate', color: '#e8c050' };
+  if (risk < 0.9) return { label: 'High', code: 'high', color: '#e87838' };
+  return { label: 'Severe', code: 'severe', color: '#a03030' };
+}
+
+// Vintage quality estimate (heuristic)
+function computeVintageQuality(region, shiftedGDD, heatStress, drought) {
+  const optCenter = (region.optMin + region.optMax) / 2;
+  const deviation = Math.abs(shiftedGDD - optCenter) / (region.optMax - region.optMin);
+  let quality = 9.0 - deviation * 4.0;
+  quality -= heatStress * 0.08;
+  if (drought.code === 'high') quality -= 0.8;
+  if (drought.code === 'severe') quality -= 1.8;
+  return Math.max(1, Math.min(10, quality));
+}
+
+// Find "new frontier" regions — areas that become suitable at this temperature
+function findNewFrontiers(tempAnomaly) {
+  // Regions at higher latitudes that were too cold but now become viable
+  const frontiers = [];
+  const candidateLats = [];
+  // For each region, check if it was unsuitable at base and becomes suitable
+  for (const r of REGIONS) {
+    const baseSuit = classifySuitability(r, r.gdd);
+    const shiftedGDD = computeShiftedGDD(r, tempAnomaly, state.precip);
+    const newSuit = classifySuitability(r, shiftedGDD);
+    if ((baseSuit.code === 'marginal' || baseSuit.code === 'good') && newSuit.code === 'optimal') {
+      frontiers.push(r.name + ' → Optimal');
+    }
+  }
+  // Also identify poleward expansion
+  if (tempAnomaly > 1.5) {
+    const newLats = Math.round(tempAnomaly * 1.5);
+    frontiers.push('+' + newLats + '° poleward viable');
+  }
+  return frontiers.length ? frontiers.join('; ') : '—';
+}
+
+// Paper.js setup
+let paperReady = false;
+let mapBounds = { minLat: 55, maxLat: -45, minLon: -140, maxLon: 155 };
+let mapWidth = 0, mapHeight = 0;
+let regionMarkers = [];
+let bgPaths = [];
+let animatedParticles = [];
+
+window.addEventListener('load', function() {
+  initPaper();
+  buildRegionButtons();
+  wireControls();
+  update();
+});
+
+function initPaper() {
+  const canvas = document.getElementById('paper-canvas');
+  paper.setup(canvas);
+  paperReady = true;
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  paper.view.onFrame = onFrame;
+  startParticleSpawn();
+}
+
+function resizeCanvas() {
+  const container = document.getElementById('canvas-container');
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  const canvas = document.getElementById('paper-canvas');
+  canvas.width = w;
+  canvas.height = h;
+  if (paperReady) {
+    paper.view.viewSize = new paper.Size(w, h);
+    paper.project.activeLayer.removeChildren();
+    drawMap();
+  }
+}
+
+function latLonToXY(lat, lon) {
+  const w = paper.view.size.width;
+  const h = paper.view.size.height;
+  // Equirectangular projection centered on wine regions
+  const xRatio = (lon - mapBounds.minLon) / (mapBounds.maxLon - mapBounds.minLon);
+  const yRatio = (mapBounds.maxLat - lat) / (mapBounds.maxLat - mapBounds.minLat);
+  // Add padding
+  const padX = w * 0.04;
+  const padY = h * 0.04;
+  const x = padX + xRatio * (w - 2 * padX);
+  const y = padY + yRatio * (h - 2 * padY);
+  return { x: x, y: y };
+}
+
+function drawMap() {
+  regionMarkers = [];
+  bgPaths = [];
+  const w = paper.view.size.width;
+  const h = paper.view.size.height;
+
+  // Background gradient
+  const bgRect = new paper.Path.Rectangle({
+    point: [0, 0],
+    size: [w, h],
+    fillColor: {
+      gradient: {
+        stops: [
+          [new paper.Color(0.04, 0.06, 0.08), 0],
+          [new paper.Color(0.08, 0.12, 0.16), 0.5],
+          [new paper.Color(0.05, 0.07, 0.09), 1]
+        ],
+        radial: true
+      },
+      origin: [w/2, h/2],
+      destination: [w, h]
+    }
+  });
+  bgPaths.push(bgRect);
+
+  // Draw latitude grid lines
+  for (let lat = 50; lat >= -40; lat -= 10) {
+    const p1 = latLonToXY(lat, mapBounds.minLon);
+    const p2 = latLonToXY(lat, mapBounds.maxLon);
+    const line = new paper.Path.Line({
+      from: [p1.x, p1.y],
+      to: [p2.x, p2.y],
+      strokeColor: new paper.Color(0.2, 0.28, 0.36, 0.15),
+      strokeWidth: 0.5
+    });
+    bgPaths.push(line);
+    // Latitude label
+    new paper.PointText({
+      point: [p1.x - 5, p1.y + 4],
+      content: lat + '°',
+      fillColor: new paper.Color(0.4, 0.5, 0.58, 0.4),
+      fontFamily: 'system-ui',
+      fontSize: 9
+    });
+  }
+
+  // Draw longitude grid lines
+  for (let lon = -120; lon <= 140; lon += 40) {
+    const p1 = latLonToXY(mapBounds.maxLat, lon);
+    const p2 = latLonToXY(mapBounds.minLat, lon);
+    const line = new paper.Path.Line({
+      from: [p1.x, p1.y],
+      to: [p2.x, p2.y],
+      strokeColor: new paper.Color(0.2, 0.28, 0.36, 0.12),
+      strokeWidth: 0.5
+    });
+    bgPaths.push(line);
+  }
+
+  // Draw simplified continent outlines (approximate)
+  drawContinents();
+
+  // Draw equator line (dashed)
+  const eqP1 = latLonToXY(0, mapBounds.minLon);
+  const eqP2 = latLonToXY(0, mapBounds.maxLon);
+  const eqLine = new paper.Path.Line({
+    from: [eqP1.x, eqP1.y],
+    to: [eqP2.x, eqP2.y],
+    strokeColor: new paper.Color(0.3, 0.4, 0.5, 0.2),
+    strokeWidth: 0.8,
+    dashArray: [4, 4]
+  });
+  bgPaths.push(eqLine);
+
+  // Draw Tropic of Cancer/Capricorn
+  for (const tLat of [23.5, -23.5]) {
+    const p1 = latLonToXY(tLat, mapBounds.minLon);
+    const p2 = latLonToXY(tLat, mapBounds.maxLon);
+    const line = new paper.Path.Line({
+      from: [p1.x, p1.y],
+      to: [p2.x, p2.y],
+      strokeColor: new paper.Color(0.35, 0.3, 0.2, 0.15),
+      strokeWidth: 0.5,
+      dashArray: [2, 6]
+    });
+    bgPaths.push(line);
+  }
+
+  // Draw region markers
+  drawRegions();
+}
+
+// Simplified continent outline points (lat, lon) for visual reference
+const CONTINENTS = [
+  // Europe
+  [[70, -10], [70, 30], [60, 35], [55, 38], [45, 40], [36, 28], [36, 10], [43, -5], [50, -10], [58, -8], [63, -5], [70, -10]],
+  // Africa
+  [[36, -10], [36, 20], [30, 35], [12, 45], [0, 42], [-15, 40], [-30, 32], [-34, 18], [-20, 12], [0, 8], [15, -15], [25, -18], [33, -10], [36, -10]],
+  // North America (simplified)
+  [[70, -140], [70, -60], [50, -55], [25, -80], [15, -90], [20, -100], [30, -120], [55, -140], [70, -140]],
+  // South America
+  [[10, -78], [12, -70], [0, -50], [-20, -40], [-40, -62], [-55, -70], [-45, -75], [-20, -72], [-5, -80], [5, -78], [10, -78]],
+  // Australia
+  [[-12, 130], [-15, 145], [-25, 153], [-38, 145], [-35, 135], [-32, 115], [-22, 113], [-15, 125], [-12, 130]],
+  // Asia (simplified western part)
+  [[70, 30], [75, 60], [70, 100], [55, 130], [45, 140], [30, 130], [20, 115], [25, 90], [35, 75], [45, 60], [50, 40], [55, 38], [70, 30]],
+];
+
+function drawContinents() {
+  for (const continent of CONTINENTS) {
+    const points = continent.map(function(c) {
+      const p = latLonToXY(c[0], c[1]);
+      return [p.x, p.y];
+    });
+    const path = new paper.Path({
+      segments: points,
+      closed: true,
+      fillColor: new paper.Color(0.1, 0.14, 0.18, 0.6),
+      strokeColor: new paper.Color(0.25, 0.35, 0.45, 0.4),
+      strokeWidth: 0.8
+    });
+    path.smooth({ type: 'continuous', factor: 0.3 });
+    bgPaths.push(path);
+  }
+}
+
+function drawRegions() {
+  regionMarkers = [];
+  for (let i = 0; i < REGIONS.length; i++) {
+    const r = REGIONS[i];
+    const pos = latLonToXY(r.lat, r.lon);
+    const shiftedGDD = computeShiftedGDD(r, state.tempAnomaly, state.precip);
+    const suit = classifySuitability(r, shiftedGDD);
+    const isSelected = i === state.selectedRegion;
+
+    // Outer glow ring
+    const glowR = isSelected ? 26 : 18;
+    const glow = new paper.Path.Circle({
+      center: [pos.x, pos.y],
+      radius: glowR,
+      fillColor: {
+        gradient: {
+          stops: [
+            [new paper.Color(hexToRgb(suit.color, 0.35)), 0],
+            [new paper.Color(hexToRgb(suit.color, 0)), 1]
+          ],
+          radial: true
+        },
+        origin: [pos.x, pos.y],
+        destination: [pos.x + glowR, pos.y]
+      }
+    });
+    regionMarkers.push({ glow: glow, region: r, idx: i });
+
+    // Main dot
+    const dot = new paper.Path.Circle({
+      center: [pos.x, pos.y],
+      radius: isSelected ? 7 : 5,
+      fillColor: suit.color,
+      strokeColor: isSelected ? '#ffffff' : '#1a2530',
+      strokeWidth: isSelected ? 2 : 1
+    });
+    regionMarkers[regionMarkers.length - 1].dot = dot;
+
+    // Pulse ring for selected
+    if (isSelected) {
+      const pulse = new paper.Path.Circle({
+        center: [pos.x, pos.y],
+        radius: 10,
+        strokeColor: new paper.Color(1, 1, 1, 0.4),
+        strokeWidth: 1.5
+      });
+      regionMarkers[regionMarkers.length - 1].pulse = pulse;
+    }
+
+    // Label
+    new paper.PointText({
+      point: [pos.x + 9, pos.y + 4],
+      content: r.name,
+      fillColor: isSelected ? '#ffffff' : '#a4b4c4',
+      fontFamily: 'system-ui',
+      fontSize: isSelected ? 11 : 9,
+      fontWeight: isSelected ? 'bold' : 'normal'
+    });
+  }
+
+  paper.view.update();
+}
+
+function hexToRgb(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b, alpha];
+}
+
+// Thermal particles — represent heat spreading across the map
+function startParticleSpawn() {
+  animatedParticles = [];
+}
+
+function onFrame(event) {
+  // Spawn heat particles
+  if (event.time > 0 && Math.random() < 0.15 + state.tempAnomaly * 0.08) {
+    spawnHeatParticle();
+  }
+
+  // Update particles
+  for (let i = animatedParticles.length - 1; i >= 0; i--) {
+    const p = animatedParticles[i];
+    p.life -= event.delta;
+    if (p.life <= 0) {
+      p.path.remove();
+      animatedParticles.splice(i, 1);
+      continue;
+    }
+    // Move particle
+    p.x += p.vx * event.delta;
+    p.y += p.vy * event.delta;
+    p.path.position = new paper.Point(p.x, p.y);
+    const alpha = Math.max(0, p.life / p.maxLife);
+    p.path.opacity = alpha * 0.6;
+    // Slight upward drift (heat rises)
+    p.vy -= 5 * event.delta;
+  }
+
+  // Animate pulse rings on selected region
+  for (const m of regionMarkers) {
+    if (m.pulse) {
+      m.pulse.scale(1 + event.delta * 0.8);
+      m.pulse.opacity *= 0.96;
+      if (m.pulse.opacity < 0.05) {
+        m.pulse.remove();
+        // Recreate pulse
+        const r = m.region;
+        const pos = latLonToXY(r.lat, r.lon);
+        m.pulse = new paper.Path.Circle({
+          center: [pos.x, pos.y],
+          radius: 10,
+          strokeColor: new paper.Color(1, 1, 1, 0.4),
+          strokeWidth: 1.5
+        });
+      }
+    }
+  }
+
+  // Animate playhead
+  if (state.playing) {
+    state.year += state.playDir;
+    if (state.year >= 2100) { state.year = 2100; state.playing = false; updatePlayButton(); }
+    if (state.year <= 2025) { state.year = 2025; state.playDir = 1; }
+    syncSlidersToYear();
+    update();
+  }
+}
+
+function spawnHeatParticle() {
+  const w = paper.view.size.width;
+  const h = paper.view.size.height;
+  // Spawn near equatorial/tropical regions (middle of map)
+  const x = Math.random() * w;
+  const y = h * 0.35 + Math.random() * h * 0.3;
+  const tempIntensity = state.tempAnomaly / 5;
+  const hue = 20 + tempIntensity * 30; // orange to red
+  const r = 2 + Math.random() * 3;
+  const p = new paper.Path.Circle({
+    center: [x, y],
+    radius: r,
+    fillColor: {
+      gradient: {
+        stops: [
+          [new paper.Color(1, 0.6 - tempIntensity * 0.3, 0.2, 0.8), 0],
+          [new paper.Color(1, 0.4, 0.1, 0), 1]
+        ],
+        radial: true
+      },
+      origin: [x, y],
+      destination: [x + r, y]
+    }
+  });
+  animatedParticles.push({
+    path: p,
+    x: x, y: y,
+    vx: (Math.random() - 0.5) * 20,
+    vy: -10 - Math.random() * 15,
+    life: 2 + Math.random() * 2,
+    maxLife: 4
+  });
+}
+
+function buildRegionButtons() {
+  const container = document.getElementById('region-btns');
+  container.innerHTML = '';
+  // Show first 12 regions as buttons, rest accessible via map click
+  const shown = REGIONS.slice(0, 12);
+  for (let i = 0; i < shown.length; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (i === state.selectedRegion ? ' active' : '');
+    btn.textContent = shown[i].name;
+    btn.addEventListener('click', function() { selectRegion(i); });
+    container.appendChild(btn);
+  }
+}
+
+function selectRegion(idx) {
+  state.selectedRegion = idx;
+  // Update active button
+  const btns = document.querySelectorAll('#region-btns .btn');
+  btns.forEach(function(b, i) { b.classList.toggle('active', i === idx); });
+  update();
+}
+
+function wireControls() {
+  var yearSlider = document.getElementById('year-slider');
+  yearSlider.addEventListener('input', function() {
+    state.year = parseInt(yearSlider.value);
+    state.playing = false;
+    updatePlayButton();
+    syncSlidersToYear();
+    update();
+  });
+
+  var tempSlider = document.getElementById('temp-slider');
+  tempSlider.addEventListener('input', function() {
+    state.tempAnomaly = parseFloat(tempSlider.value);
+    state.year = 2025; // reset year when manually adjusting temp
+    yearSlider.value = 2025;
+    update();
+  });
+
+  var co2Slider = document.getElementById('co2-slider');
+  co2Slider.addEventListener('input', function() {
+    state.co2 = parseInt(co2Slider.value);
+    update();
+  });
+
+  var precipSlider = document.getElementById('precip-slider');
+  precipSlider.addEventListener('input', function() {
+    state.precip = parseInt(precipSlider.value);
+    update();
+  });
+
+  // Scenario buttons
+  var scBtns = document.querySelectorAll('#scenario-btns .btn');
+  scBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      scBtns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      state.scenario = btn.dataset.scenario;
+      syncSlidersToYear();
+      update();
+    });
+  });
+
+  // Play button
+  document.getElementById('play-btn').addEventListener('click', function() {
+    state.playing = !state.playing;
+    if (state.year >= 2100) { state.year = 2025; syncSlidersToYear(); }
+    updatePlayButton();
+  });
+
+  // Reset button
+  document.getElementById('reset-btn').addEventListener('click', function() {
+    state.year = 2025;
+    state.playing = false;
+    state.tempAnomaly = 0;
+    state.co2 = 420;
+    state.precip = 0;
+    syncSlidersToYear();
+    updatePlayButton();
+    update();
+  });
+
+  // Canvas click — select nearest region
+  document.getElementById('paper-canvas').addEventListener('click', function(e) {
+    const rect = this.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    let nearest = -1;
+    let minDist = 999;
+    for (let i = 0; i < REGIONS.length; i++) {
+      const pos = latLonToXY(REGIONS[i].lat, REGIONS[i].lon);
+      const d = Math.sqrt((pos.x - cx) * (pos.x - cx) + (pos.y - cy) * (pos.y - cy));
+      if (d < minDist && d < 30) { minDist = d; nearest = i; }
+    }
+    if (nearest >= 0) selectRegion(nearest);
+  });
+}
+
+function syncSlidersToYear() {
+  state.tempAnomaly = computeTempAnomaly(state.year, state.scenario);
+  state.co2 = computeCO2(state.year, state.scenario);
+  document.getElementById('year-slider').value = state.year;
+  document.getElementById('year-val').textContent = state.year;
+  document.getElementById('temp-slider').value = state.tempAnomaly;
+  document.getElementById('co2-slider').value = state.co2;
+  document.getElementById('co2-val').textContent = state.co2;
+}
+
+function updatePlayButton() {
+  document.getElementById('play-btn').textContent = state.playing ? '⏸' : '▶';
+  document.getElementById('play-year').textContent = state.year;
+}
+
+function update() {
+  // Update displays
+  document.getElementById('time-display').textContent = state.year + ' AD';
+  document.getElementById('year-val').textContent = state.year;
+  document.getElementById('temp-anom').textContent = '+' + state.tempAnomaly.toFixed(1) + '°C';
+  document.getElementById('co2-val').textContent = state.co2;
+  document.getElementById('precip-val').textContent = state.precip + '%';
+  document.getElementById('play-year').textContent = state.year;
+
+  var scenarioText = state.scenario === 'rcp45' ? 'RCP 4.5 — Moderate emissions' : 'RCP 8.5 — High emissions';
+  document.getElementById('scenario-badge').textContent = scenarioText;
+
+  // Update metrics for selected region
+  var r = REGIONS[state.selectedRegion];
+  var shiftedGDD = computeShiftedGDD(r, state.tempAnomaly, state.precip);
+  var suit = classifySuitability(r, shiftedGDD);
+  var heat = computeHeatStressDays(r, state.tempAnomaly);
+  var drought = computeDroughtRisk(r, state.tempAnomaly, state.precip);
+  var quality = computeVintageQuality(r, shiftedGDD, heat, drought);
+  var frontiers = findNewFrontiers(state.tempAnomaly);
+
+  document.getElementById('m-region').textContent = r.name;
+  document.getElementById('m-lat').textContent = Math.abs(r.lat).toFixed(1) + '°' + (r.lat >= 0 ? 'N' : 'S');
+  document.getElementById('m-gdd-base').textContent = r.gdd;
+  document.getElementById('m-gdd-shift').textContent = shiftedGDD;
+
+  var suitEl = document.getElementById('m-suit');
+  suitEl.textContent = suit.label;
+  suitEl.className = 'metric-val';
+  if (suit.code === 'optimal') suitEl.classList.add('good');
+  else if (suit.code === 'good') suitEl.classList.add('good');
+  else if (suit.code === 'marginal') suitEl.classList.add('warn');
+  else suitEl.classList.add('bad');
+
+  document.getElementById('m-dtemp').textContent = '+' + state.tempAnomaly.toFixed(1) + '°C';
+  var heatEl = document.getElementById('m-heat');
+  heatEl.textContent = heat;
+  heatEl.className = 'metric-val';
+  if (heat > 20) heatEl.classList.add('bad');
+  else if (heat > 10) heatEl.classList.add('warn');
+  else heatEl.classList.add('good');
+
+  var droughtEl = document.getElementById('m-drought');
+  droughtEl.textContent = drought.label;
+  droughtEl.className = 'metric-val';
+  if (drought.code === 'low') droughtEl.classList.add('good');
+  else if (drought.code === 'moderate') droughtEl.classList.add('warn');
+  else droughtEl.classList.add('bad');
+
+  document.getElementById('m-quality').textContent = quality.toFixed(1) + '/10';
+
+  var frontierEl = document.getElementById('m-frontier');
+  frontierEl.textContent = frontiers;
+  frontierEl.style.fontSize = '0.7rem';
+  frontierEl.style.lineHeight = '1.2';
+
+  // Redraw map with new suitability
+  if (paperReady) {
+    paper.project.activeLayer.removeChildren();
+    drawMap();
+  }
+}
+</script>
+</body>
+</html>
