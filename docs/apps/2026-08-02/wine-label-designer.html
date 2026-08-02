@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Label Designer Studio</title>
+<script src="https://cdn.jsdelivr.net/npm/konva@9.3.6/konva.min.js"></script>
+<style>
+  :root {
+    --bg: #0e0b09; --surface: #1a1612; --surface2: #221c16; --border: #3a3025;
+    --text: #e8dcc8; --muted: #8a7d6b; --accent: #c9a060; --accent2: #7a5c3a;
+    --wine: #6b1a2a; --wine-light: #a02840;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    overflow: hidden; line-height: 1.5;
+  }
+
+  /* Disclaimer */
+  .disclaimer {
+    background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060;
+    padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem;
+    font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  /* Desktop layout: canvas fixed, panels float */
+  #canvas-container { position: fixed; inset: 0; z-index: 0; background: #14110d; }
+  canvas { display: block; }
+
+  #ui-layer {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+  }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px; width: 300px;
+    max-height: calc(100vh - 24px); overflow-y: auto;
+    background: rgba(26, 22, 18, 0.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; pointer-events: auto;
+    backdrop-filter: blur(10px);
+  }
+
+  #metrics {
+    position: absolute; top: 12px; right: 12px; width: 260px;
+    max-height: calc(100vh - 24px); overflow-y: auto;
+    background: rgba(26, 22, 18, 0.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; pointer-events: auto;
+    backdrop-filter: blur(10px);
+  }
+
+  /* Panel styling */
+  .panel-title {
+    font-size: 1.15rem; color: var(--accent); margin-bottom: 14px;
+    font-family: 'Georgia', serif; font-weight: bold; letter-spacing: 0.02em;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .section-label {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 14px 0 6px; font-family: system-ui, sans-serif;
+    font-weight: 600;
+  }
+  .field-row { margin-bottom: 10px; }
+  .field-row label {
+    display: block; font-size: 0.8rem; color: var(--muted);
+    margin-bottom: 4px; font-family: system-ui, sans-serif;
+  }
+  .field-row input[type="text"],
+  .field-row input[type="number"],
+  .field-row select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 6px;
+    font-size: 0.85rem; font-family: system-ui, sans-serif;
+  }
+  .field-row input[type="text"]:focus,
+  .field-row input[type="number"]:focus,
+  .field-row select:focus { outline: none; border-color: var(--accent); }
+
+  .color-row { display: flex; align-items: center; gap: 8px; }
+  .color-swatch {
+    width: 32px; height: 32px; border-radius: 6px; border: 2px solid var(--border);
+    cursor: pointer; flex-shrink: 0; transition: border-color 0.15s;
+  }
+  .color-swatch:hover { border-color: var(--accent); }
+  .color-swatch.active { border-color: var(--accent); box-shadow: 0 0 6px rgba(201, 160, 96, 0.5); }
+  .color-label { font-size: 0.8rem; color: var(--muted); font-family: system-ui, sans-serif; }
+
+  .btn {
+    display: inline-block; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 14px; border-radius: 6px; cursor: pointer;
+    font-size: 0.82rem; font-family: system-ui, sans-serif; transition: all 0.15s;
+    text-align: center;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.active { background: var(--accent2); border-color: var(--accent); color: var(--text); }
+  .btn-primary { background: var(--accent2); border-color: var(--accent); color: var(--text); font-weight: 600; }
+  .btn-primary:hover { background: var(--accent); color: #1a1612; }
+
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btn-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+
+  .preset-btn {
+    display: block; width: 100%; text-align: left; margin-bottom: 6px;
+    padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; cursor: pointer; font-size: 0.82rem;
+    font-family: system-ui, sans-serif; transition: all 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--accent); }
+  .preset-btn .preset-sub { font-size: 0.7rem; color: var(--muted); display: block; margin-top: 2px; }
+
+  .slider-row { margin-bottom: 10px; }
+  .slider-row label {
+    display: flex; justify-content: space-between; font-size: 0.8rem;
+    color: var(--muted); margin-bottom: 4px; font-family: system-ui, sans-serif;
+  }
+  .slider-row label .val { color: var(--accent); }
+  .slider-row input[type="range"] {
+    width: 100%; -webkit-appearance: none; appearance: none; height: 4px;
+    background: var(--border); border-radius: 2px; outline: none;
+  }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 2px solid var(--surface);
+  }
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%; background: var(--accent);
+    cursor: pointer; border: 2px solid var(--surface);
+  }
+
+  /* Metrics panel */
+  .metric-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; margin-bottom: 10px;
+  }
+  .metric-card h4 {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 8px; font-family: system-ui, sans-serif;
+  }
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.82rem; padding: 3px 0; font-family: system-ui, sans-serif;
+  }
+  .metric-row .mkey { color: var(--muted); }
+  .metric-row .mval { color: var(--accent); font-weight: 600; }
+
+  .bottle-preview-card {
+    text-align: center; padding: 12px;
+    background: linear-gradient(135deg, var(--surface2), var(--surface));
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px;
+  }
+  #bottle-preview-canvas { display: inline-block; }
+
+  .style-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 0.72rem; font-family: system-ui, sans-serif; font-weight: 600;
+  }
+  .style-classical { background: rgba(201, 160, 96, 0.2); color: #c9a060; border: 1px solid #c9a060; }
+  .style-modern { background: rgba(88, 166, 255, 0.15); color: #58a6ff; border: 1px solid #58a6ff; }
+  .style-minimal { background: rgba(139, 148, 158, 0.15); color: #c9d1d9; border: 1px solid #8b949e; }
+  .style-natural { background: rgba(108, 176, 100, 0.15); color: #6cb064; border: 1px solid #6cb064; }
+  .style-vintage { background: rgba(180, 120, 60, 0.15); color: #b4783c; border: 1px solid #b4783c; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--accent2); color: var(--text); padding: 10px 24px;
+    border-radius: 8px; font-size: 0.85rem; font-family: system-ui, sans-serif;
+    border: 1px solid var(--accent); z-index: 200; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .toast.show { opacity: 1; }
+
+  /* Mobile layout */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important; width: 100% !important;
+      height: 52vh !important; min-height: 320px; max-height: 480px;
+      inset: auto !important; z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent2); }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<div id="canvas-container"></div>
+<div id="ui-layer">
+  <div id="controls">
+    <div class="panel-title">🎨 Wine Label Designer</div>
+
+    <div class="section-label">Style Preset</div>
+    <button class="preset-btn" data-preset="classical">Bordeaux Classical<span class="preset-sub">Formal serif, gold accents, crest motif</span></button>
+    <button class="preset-btn" data-preset="modern">New World Modern<span class="preset-sub">Clean sans-serif, bold colors, geometric</span></button>
+    <button class="preset-btn" data-preset="minimal">Minimalist<span class="preset-sub">Lots of whitespace, thin type, single accent</span></button>
+    <button class="preset-btn" data-preset="natural">Natural Wine<span class="preset-sub">Hand-drawn feel, kraft paper, playful</span></button>
+    <button class="preset-btn" data-preset="vintage">Vintage Apothecary<span class="preset-sub">Ornate borders, script, aged paper</span></button>
+
+    <div class="section-label">Label Shape</div>
+    <div class="btn-grid-3" id="shape-buttons">
+      <button class="btn active" data-shape="rect">Rectangle</button>
+      <button class="btn" data-shape="arch">Arch Top</button>
+      <button class="btn" data-shape="oval">Oval</button>
+    </div>
+
+    <div class="section-label">Label Text</div>
+    <div class="field-row">
+      <label>Winery Name</label>
+      <input type="text" id="txt-winery" value="Château du Vallon" maxlength="40">
+    </div>
+    <div class="field-row">
+      <label>Vintage</label>
+      <input type="text" id="txt-vintage" value="2019" maxlength="8">
+    </div>
+    <div class="field-row">
+      <label>Varietal / Wine Name</label>
+      <input type="text" id="txt-varietal" value="Cabernet Sauvignon" maxlength="30">
+    </div>
+    <div class="field-row">
+      <label>Region / Appellation</label>
+      <input type="text" id="txt-region" value="Margaux, Bordeaux" maxlength="30">
+    </div>
+    <div class="field-row">
+      <label>Alcohol %</label>
+      <input type="text" id="txt-alcohol" value="13.5% vol" maxlength="12">
+    </div>
+    <div class="field-row">
+      <label>Volume</label>
+      <input type="text" id="txt-volume" value="750ml" maxlength="10">
+    </div>
+    <div class="field-row">
+      <label>Tagline (optional)</label>
+      <input type="text" id="txt-tagline" value="Grand Cru Classé" maxlength="30">
+    </div>
+
+    <div class="section-label">Typography</div>
+    <div class="field-row">
+      <label>Font Family</label>
+      <select id="sel-font">
+        <option value="Georgia">Georgia (Serif)</option>
+        <option value="'Times New Roman'">Times (Serif)</option>
+        <option value="'Courier New'">Courier (Mono)</option>
+        <option value="Palatino">Palatino (Serif)</option>
+        <option value="system-ui">System (Sans)</option>
+        <option value="'Helvetica Neue'">Helvetica (Sans)</option>
+        <option value="'Brush Script MT'">Brush Script</option>
+        <option value="'Snell Roundhand'">Snell Roundhand</option>
+      </select>
+    </div>
+    <div class="slider-row">
+      <label>Font Size — Winery <span class="val" id="fs-winery-val">28</span>px</label>
+      <input type="range" id="fs-winery" min="16" max="48" value="28">
+    </div>
+    <div class="slider-row">
+      <label>Font Size — Varietal <span class="val" id="fs-varietal-val">22</span>px</label>
+      <input type="range" id="fs-varietal" min="12" max="36" value="22">
+    </div>
+    <div class="slider-row">
+      <label>Letter Spacing <span class="val" id="ls-val">0</span>px</label>
+      <input type="range" id="ls-slider" min="-2" max="8" value="0">
+    </div>
+
+    <div class="section-label">Background Paper</div>
+    <div class="field-row">
+      <label>Paper Type</label>
+      <select id="sel-paper">
+        <option value="cream">Cream Laid</option>
+        <option value="white">White Matte</option>
+        <option value="kraft">Kraft Brown</option>
+        <option value="black">Black Matte</option>
+        <option value="ivory">Ivory Vellum</option>
+        <option value="parchment">Aged Parchment</option>
+      </select>
+    </div>
+
+    <div class="section-label">Colors</div>
+    <div class="field-row">
+      <label>Text Color</label>
+      <div class="color-row" id="text-colors">
+        <div class="color-swatch active" data-color="#1a1612" style="background:#1a1612"></div>
+        <div class="color-swatch" data-color="#c9a060" style="background:#c9a060"></div>
+        <div class="color-swatch" data-color="#8b1a1a" style="background:#8b1a1a"></div>
+        <div class="color-swatch" data-color="#2a4a2a" style="background:#2a4a2a"></div>
+        <div class="color-swatch" data-color="#4a3a6a" style="background:#4a3a6a"></div>
+        <div class="color-swatch" data-color="#e8dcc8" style="background:#e8dcc8"></div>
+      </div>
+    </div>
+    <div class="field-row">
+      <label>Accent / Border Color</label>
+      <div class="color-row" id="accent-colors">
+        <div class="color-swatch active" data-color="#c9a060" style="background:#c9a060"></div>
+        <div class="color-swatch" data-color="#8b1a1a" style="background:#8b1a1a"></div>
+        <div class="color-swatch" data-color="#2a4a2a" style="background:#2a4a2a"></div>
+        <div class="color-swatch" data-color="#4a3a6a" style="background:#4a3a6a"></div>
+        <div class="color-swatch" data-color="#1a1612" style="background:#1a1612"></div>
+        <div class="color-swatch" data-color="#d4af37" style="background:#d4af37"></div>
+      </div>
+    </div>
+
+    <div class="section-label">Decorative Motif</div>
+    <div class="btn-grid-3" id="motif-buttons">
+      <button class="btn active" data-motif="none">None</button>
+      <button class="btn" data-motif="crest">Crest</button>
+      <button class="btn" data-motif="grapes">Grapes</button>
+      <button class="btn" data-motif="wreath">Wreath</button>
+      <button class="btn" data-motif="lines">Lines</button>
+      <button class="btn" data-motif="art">Abstract</button>
+    </div>
+
+    <div class="slider-row">
+      <label>Border Thickness <span class="val" id="bt-val">2</span>px</label>
+      <input type="range" id="bt-slider" min="0" max="8" value="2">
+    </div>
+    <div class="slider-row">
+      <label>Border Inset <span class="val" id="bi-val">12</span>px</label>
+      <input type="range" id="bi-slider" min="4" max="30" value="12">
+    </div>
+    <div class="slider-row">
+      <label>Foil Effect <span class="val" id="foil-val">0</span>%</label>
+      <input type="range" id="foil-slider" min="0" max="100" value="0">
+    </div>
+
+    <div class="section-label">Actions</div>
+    <div class="btn-grid">
+      <button class="btn" id="btn-shuffle">🎲 Random</button>
+      <button class="btn-primary btn" id="btn-export">📸 Export PNG</button>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <div class="panel-title">📋 Design Analysis</div>
+
+    <div class="metric-card">
+      <h4>Current Style</h4>
+      <div style="text-align:center; margin-bottom: 8px;">
+        <span class="style-badge style-classical" id="style-badge">Classical</span>
+      </div>
+      <div class="metric-row"><span class="mkey">Design approach</span><span class="mval" id="m-approach">Formal</span></div>
+      <div class="metric-row"><span class="mkey">Era influence</span><span class="mval" id="m-era">19th c. Bordeaux</span></div>
+      <div class="metric-row"><span class="mkey">Target shelf</span><span class="mval" id="m-shelf">Premium</span></div>
+    </div>
+
+    <div class="metric-card">
+      <h4>Label Composition</h4>
+      <div class="metric-row"><span class="mkey">Shape</span><span class="mval" id="m-shape">Rectangle</span></div>
+      <div class="metric-row"><span class="mkey">Paper</span><span class="mval" id="m-paper">Cream Laid</span></div>
+      <div class="metric-row"><span class="mkey">Font</span><span class="mval" id="m-font">Georgia</span></div>
+      <div class="metric-row"><span class="mkey">Motif</span><span class="mval" id="m-motif">None</span></div>
+      <div class="metric-row"><span class="mkey">Text fields</span><span class="mval" id="m-fields">7</span></div>
+    </div>
+
+    <div class="metric-card">
+      <h4>Visual Balance Score</h4>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="flex:1; height:8px; background:var(--surface); border-radius:4px; overflow:hidden;">
+          <div id="balance-bar" style="width:75%; height:100%; background:linear-gradient(90deg, #c9a060, #d4af37); border-radius:4px; transition:width 0.3s;"></div>
+        </div>
+        <span class="mval" id="balance-score">75</span>
+      </div>
+      <div style="font-size:0.72rem; color:var(--muted); margin-top:6px; font-family:system-ui,sans-serif;" id="balance-note">Well-balanced layout</div>
+    </div>
+
+    <div class="metric-card">
+      <h4>Shelf Impact</h4>
+      <div class="metric-row"><span class="mkey">Readability (3m)</span><span class="mval" id="m-readability">Good</span></div>
+      <div class="metric-row"><span class="mkey">Color contrast</span><span class="mval" id="m-contrast">7.2:1</span></div>
+      <div class="metric-row"><span class="mkey">Info density</span><span class="mval" id="m-density">Moderate</span></div>
+      <div class="metric-row"><span class="mkey">Foil coverage</span><span class="mval" id="m-foil-cov">None</span></div>
+    </div>
+
+    <div class="metric-card">
+      <h4>Bottle Preview</h4>
+      <div class="bottle-preview-card">
+        <canvas id="bottle-preview-canvas" width="200" height="280"></canvas>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <h4>Design Tips</h4>
+      <div style="font-size:0.78rem; color:var(--muted); font-family:system-ui,sans-serif; line-height:1.5;" id="tips">
+        Try different paper textures to change the entire feel. Kraft paper works well for natural wine styles.
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast">Exported!</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // State
+  var state = {
+    shape: 'rect',
+    font: 'Georgia',
+    fsWinery: 28,
+    fsVarietal: 22,
+    letterSpacing: 0,
+    paper: 'cream',
+    textColor: '#1a1612',
+    accentColor: '#c9a060',
+    motif: 'none',
+    borderThickness: 2,
+    borderInset: 12,
+    foil: 0,
+    texts: {
+      winery: 'Château du Vallon',
+      vintage: '2019',
+      varietal: 'Cabernet Sauvignon',
+      region: 'Margaux, Bordeaux',
+      alcohol: '13.5% vol',
+      volume: '750ml',
+      tagline: 'Grand Cru Classé'
+    },
+    stylePreset: 'classical'
+  };
+
+  // Paper definitions
+  var papers = {
+    cream:     { bg: '#f5f0e0', texture: 'cream', label: 'Cream Laid' },
+    white:     { bg: '#f8f8f5', texture: 'white', label: 'White Matte' },
+    kraft:     { bg: '#c4a882', texture: 'kraft', label: 'Kraft Brown' },
+    black:     { bg: '#1a1612', texture: 'black', label: 'Black Matte' },
+    ivory:     { bg: '#f0ead8', texture: 'ivory', label: 'Ivory Vellum' },
+    parchment:  { bg: '#e8dcc0', texture: 'parchment', label: 'Aged Parchment' }
+  };
+
+  // Style presets
+  var presets = {
+    classical: {
+      shape: 'rect', font: 'Georgia', fsWinery: 28, fsVarietal: 22, letterSpacing: 1,
+      paper: 'cream', textColor: '#1a1612', accentColor: '#c9a060',
+      motif: 'crest', borderThickness: 2, borderInset: 12, foil: 0,
+      texts: { winery: 'Château du Vallon', vintage: '2019', varietal: 'Cabernet Sauvignon',
+        region: 'Margaux, Bordeaux', alcohol: '13.5% vol', volume: '750ml', tagline: 'Grand Cru Classé' },
+      approach: 'Formal', era: '19th c. Bordeaux', shelf: 'Premium', styleClass: 'classical'
+    },
+    modern: {
+      shape: 'rect', font: 'system-ui', fsWinery: 32, fsVarietal: 24, letterSpacing: 2,
+      paper: 'white', textColor: '#1a1612', accentColor: '#8b1a1a',
+      motif: 'lines', borderThickness: 0, borderInset: 20, foil: 0,
+      texts: { winery: 'VALLON', vintage: '2019', varietal: 'CABERNET',
+        region: 'MARGAUX', alcohol: '13.5%', volume: '750ML', tagline: '' },
+      approach: 'Bold', era: '21st c. Napa', shelf: 'Mid-Premium', styleClass: 'modern'
+    },
+    minimal: {
+      shape: 'rect', font: 'system-ui', fsWinery: 24, fsVarietal: 18, letterSpacing: 4,
+      paper: 'white', textColor: '#1a1612', accentColor: '#1a1612',
+      motif: 'none', borderThickness: 0, borderInset: 24, foil: 0,
+      texts: { winery: 'Vallon', vintage: '2019', varietal: 'Cabernet Sauvignon',
+        region: 'Margaux', alcohol: '', volume: '750ml', tagline: '' },
+      approach: 'Restrained', era: 'Contemporary', shelf: 'Boutique', styleClass: 'minimal'
+    },
+    natural: {
+      shape: 'rect', font: 'Courier New', fsWinery: 22, fsVarietal: 18, letterSpacing: 0,
+      paper: 'kraft', textColor: '#3a2a1a', accentColor: '#4a3a2a',
+      motif: 'grapes', borderThickness: 1, borderInset: 10, foil: 0,
+      texts: { winery: 'du Vallon', vintage: '2019', varietal: 'cabernet sauvignon',
+        region: 'margaux', alcohol: '13.5%', volume: '750ml', tagline: 'vin nature' },
+      approach: 'Playful', era: 'Natural wine', shelf: 'Natural', styleClass: 'natural'
+    },
+    vintage: {
+      shape: 'arch', font: 'Palatino', fsWinery: 26, fsVarietal: 20, letterSpacing: 1,
+      paper: 'parchment', textColor: '#3a2a1a', accentColor: '#8b1a1a',
+      motif: 'wreath', borderThickness: 3, borderInset: 10, foil: 30,
+      texts: { winery: 'Château du Vallon', vintage: 'MCMXIX', varietal: 'Cabernet Sauvignon',
+        region: 'Margaux, France', alcohol: '13.5% vol', volume: '750ml', tagline: 'Établi en 1855' },
+      approach: 'Ornate', era: 'Apothecary', shelf: 'Heritage', styleClass: 'vintage'
+    }
+  };
+
+  // Tips
+  var tipPool = [
+    'Kraft paper works well for natural wine styles.',
+    'Gold foil on cream paper creates a premium feel.',
+    'Minimal labels rely on typography and whitespace.',
+    'Arch shapes evoke heritage and tradition.',
+    'Letter spacing dramatically changes perceived formality.',
+    'High contrast text is legible from 3m on a shelf.',
+    'Crest motifs suit classic Bordeaux-style labels.',
+    'Bold sans-serif in all caps creates modern impact.',
+    'Parchment paper with script font evokes vintage apothecary.',
+    'Less text often means more perceived quality.',
+    'Foil effects simulate gold/silver hot-stamping on text and borders.',
+    'Grape motifs work well for single-varietal wines.',
+    'Wreath motifs frame the label and draw the eye inward.',
+    'Abstract art motifs suit contemporary art-series wines.'
+  ];
+
+  // Konva setup
+  var container = document.getElementById('canvas-container');
+  var stage, bgLayer, labelLayer, overlayLayer;
+  var labelW = 360, labelH = 480;
+  var stageW, stageH;
+
+  function initStage() {
+    stageW = container.clientWidth || window.innerWidth;
+    stageH = container.clientHeight || window.innerHeight;
+    stage = new Konva.Stage({ container: 'canvas-container', width: stageW, height: stageH });
+    bgLayer = new Konva.Layer();
+    labelLayer = new Konva.Layer();
+    overlayLayer = new Konva.Layer();
+    stage.add(bgLayer);
+    stage.add(labelLayer);
+    stage.add(overlayLayer);
+  }
+
+  function getLabelBounds() {
+    var aspect = labelW / labelH;
+    var availW = stageW - 80;
+    var availH = stageH - 80;
+    var w, h;
+    if (availW / aspect <= availH) {
+      w = availW; h = w / aspect;
+    } else {
+      h = availH; w = h * aspect;
+    }
+    w = Math.min(w, 420);
+    h = w / aspect;
+    var x = (stageW - w) / 2;
+    var y = (stageH - h) / 2;
+    return { x: x, y: y, w: w, h: h };
+  }
+
+  // Build background (canvas dark backdrop with subtle vignette)
+  function buildBackground() {
+    bgLayer.destroyChildren();
+    var bg = new Konva.Rect({
+      x: 0, y: 0, width: stageW, height: stageH,
+      fill: '#14110d', listening: false
+    });
+    bgLayer.add(bg);
+
+    // Vignette
+    var vignette = new Konva.Rect({
+      x: 0, y: 0, width: stageW, height: stageH,
+      fillLinearGradientStartPoint: { x: stageW/2, y: stageH/2 },
+      fillLinearGradientEndPoint: { x: 0, y: 0 },
+      fillLinearGradientColorStops: [
+        0, 'rgba(0,0,0,0)', 0.7, 'rgba(0,0,0,0.2)', 1, 'rgba(0,0,0,0.5)'
+      ],
+      listening: false
+    });
+    bgLayer.add(vignette);
+
+    // Grid dots
+    var dotR = 1;
+    var spacing = 40;
+    for (var dx = spacing/2; dx < stageW; dx += spacing) {
+      for (var dy = spacing/2; dy < stageH; dy += spacing) {
+        bgLayer.add(new Konva.Circle({
+          x: dx, y: dy, radius: dotR, fill: '#2a2218', opacity: 0.4, listening: false
+        }));
+      }
+    }
+    bgLayer.batchDraw();
+  }
+
+  // Build the label
+  function buildLabel() {
+    labelLayer.destroyChildren();
+    var b = getLabelBounds();
+    var paper = papers[state.paper];
+    var sx = b.x, sy = b.y, sw = b.w, sh = b.h;
+
+    // Label background shape
+    var labelShape;
+    if (state.shape === 'rect') {
+      labelShape = new Konva.Rect({
+        x: sx, y: sy, width: sw, height: sh,
+        fill: paper.bg, cornerRadius: 2, listening: false,
+        shadowColor: '#000', shadowBlur: 20, shadowOpacity: 0.4, shadowOffsetY: 4
+      });
+    } else if (state.shape === 'arch') {
+      // Arch top: rectangle with rounded top
+      labelShape = new Konva.Shape({
+        x: sx, y: sy, width: sw, height: sh,
+        fill: paper.bg, listening: false,
+        shadowColor: '#000', shadowBlur: 20, shadowOpacity: 0.4, shadowOffsetY: 4,
+        sceneFunc: function(ctx, shape) {
+          var w = shape.width(), h = shape.height();
+          var archR = w / 2;
+          ctx.beginPath();
+          ctx.moveTo(0, archR);
+          ctx.arc(w/2, archR, archR, Math.PI, 0, false);
+          ctx.lineTo(w, h);
+          ctx.lineTo(0, h);
+          ctx.closePath();
+          ctx.fillStrokeShape(shape);
+        }
+      });
+    } else if (state.shape === 'oval') {
+      labelShape = new Konva.Ellipse({
+        x: sx + sw/2, y: sy + sh/2, radiusX: sw/2, radiusY: sh/2,
+        fill: paper.bg, listening: false,
+        shadowColor: '#000', shadowBlur: 20, shadowOpacity: 0.4, shadowOffsetY: 4
+      });
+    }
+    labelLayer.add(labelShape);
+
+    // Paper texture overlay
+    if (state.paper === 'kraft' || state.paper === 'parchment' || state.paper === 'cream') {
+      addPaperTexture(sx, sy, sw, sh, state.shape);
+    }
+
+    // Border
+    if (state.borderThickness > 0) {
+      var bi = state.borderInset;
+      var bt = state.borderThickness;
+      var borderColor = state.foil > 20 ? applyFoilToColor(state.accentColor, state.foil) : state.accentColor;
+      var borderShape;
+      if (state.shape === 'rect') {
+        borderShape = new Konva.Rect({
+          x: sx + bi, y: sy + bi, width: sw - bi*2, height: sh - bi*2,
+          stroke: borderColor, strokeWidth: bt, cornerRadius: 1, listening: false
+        });
+      } else if (state.shape === 'arch') {
+        borderShape = new Konva.Shape({
+          x: sx, y: sy, width: sw, height: sh, listening: false,
+          stroke: borderColor, strokeWidth: bt,
+          sceneFunc: function(ctx, shape) {
+            var w = shape.width(), h = shape.height();
+            var archR = w / 2 - bi;
+            var archCY = bi + archR;
+            ctx.beginPath();
+            ctx.moveTo(bi, archCY);
+            ctx.arc(w/2, archCY, archR, Math.PI, 0, false);
+            ctx.lineTo(w - bi, h - bi);
+            ctx.lineTo(bi, h - bi);
+            ctx.closePath();
+            ctx.fillStrokeShape(shape);
+          }
+        });
+      } else if (state.shape === 'oval') {
+        borderShape = new Konva.Ellipse({
+          x: sx + sw/2, y: sy + sh/2,
+          radiusX: sw/2 - bi, radiusY: sh/2 - bi,
+          stroke: borderColor, strokeWidth: bt, listening: false
+        });
+      }
+      labelLayer.add(borderShape);
+
+      // Inner border (double line for classical)
+      if (state.stylePreset === 'classical' || state.stylePreset === 'vintage') {
+        var bi2 = bi + 4;
+        var innerBorder;
+        if (state.shape === 'rect') {
+          innerBorder = new Konva.Rect({
+            x: sx + bi2, y: sy + bi2, width: sw - bi2*2, height: sh - bi2*2,
+            stroke: borderColor, strokeWidth: 0.5, cornerRadius: 0, listening: false, opacity: 0.5
+          });
+        } else if (state.shape === 'arch') {
+          innerBorder = new Konva.Shape({
+            x: sx, y: sy, width: sw, height: sh, listening: false,
+            stroke: borderColor, strokeWidth: 0.5, opacity: 0.5,
+            sceneFunc: function(ctx, shape) {
+              var w = shape.width(), h = shape.height();
+              var archR = w / 2 - bi2;
+              var archCY = bi2 + archR;
+              ctx.beginPath();
+              ctx.moveTo(bi2, archCY);
+              ctx.arc(w/2, archCY, archR, Math.PI, 0, false);
+              ctx.lineTo(w - bi2, h - bi2);
+              ctx.lineTo(bi2, h - bi2);
+              ctx.closePath();
+              ctx.fillStrokeShape(shape);
+            }
+          });
+        } else if (state.shape === 'oval') {
+          innerBorder = new Konva.Ellipse({
+            x: sx + sw/2, y: sy + sh/2,
+            radiusX: sw/2 - bi2, radiusY: sh/2 - bi2,
+            stroke: borderColor, strokeWidth: 0.5, listening: false, opacity: 0.5
+          });
+        }
+        labelLayer.add(innerBorder);
+      }
+    }
+
+    // Motif
+    addMotif(sx, sy, sw, sh);
+
+    // Text elements
+    var textCol = state.foil > 40 ? applyFoilToColor(state.textColor, state.foil) : state.textColor;
+    var accentCol = state.foil > 20 ? applyFoilToColor(state.accentColor, state.foil) : state.accentColor;
+    var cx = sx + sw / 2;
+    var cy = sy + sh / 2;
+
+    // Layout text from top to bottom
+    var topPad = state.shape === 'arch' ? sw * 0.35 : state.borderInset + 20;
+    if (state.shape === 'oval') topPad = sw * 0.2;
+
+    // Tagline (top)
+    var yPos = sy + topPad;
+    if (state.texts.tagline) {
+      var tagline = new Konva.Text({
+        x: sx, y: yPos, width: sw, align: 'center',
+        text: state.texts.tagline.toUpperCase(),
+        fontSize: 11, fontFamily: state.font,
+        fill: accentCol, listening: false,
+        letterSpacing: Math.max(2, state.letterSpacing + 2)
+      });
+      labelLayer.add(tagline);
+      yPos += 24;
+    }
+
+    // Decorative line under tagline
+    if (state.texts.tagline || state.stylePreset === 'classical') {
+      var lineW = sw * 0.3;
+      var lineY = yPos + 2;
+      labelLayer.add(new Konva.Line({
+        points: [cx - lineW/2, lineY, cx + lineW/2, lineY],
+        stroke: accentCol, strokeWidth: 0.8, listening: false, opacity: 0.7
+      }));
+      // Small diamonds at endpoints
+      labelLayer.add(new Konva.Line({
+        points: [cx - lineW/2 - 4, lineY, cx - lineW/2, lineY - 3, cx - lineW/2 + 4, lineY, cx - lineW/2, lineY + 3, cx - lineW/2 - 4, lineY],
+        stroke: accentCol, strokeWidth: 0.6, closed: true, listening: false, opacity: 0.6
+      }));
+      labelLayer.add(new Konva.Line({
+        points: [cx + lineW/2 - 4, lineY, cx + lineW/2, lineY - 3, cx + lineW/2 + 4, lineY, cx + lineW/2, lineY + 3, cx + lineW/2 - 4, lineY],
+        stroke: accentCol, strokeWidth: 0.6, closed: true, listening: false, opacity: 0.6
+      }));
+      yPos += 16;
+    }
+
+    // Winery name (large, centered)
+    var wineryText = new Konva.Text({
+      x: sx + 20, y: yPos, width: sw - 40, align: 'center',
+      text: state.texts.winery,
+      fontSize: state.fsWinery, fontFamily: state.font,
+      fontStyle: state.stylePreset === 'modern' || state.stylePreset === 'minimal' ? 'bold' : 'normal',
+      fill: textCol, listening: false,
+      letterSpacing: state.letterSpacing
+    });
+    labelLayer.add(wineryText);
+    yPos += wineryText.height() + 14;
+
+    // Vintage (below winery)
+    var vintageText = new Konva.Text({
+      x: sx, y: yPos, width: sw, align: 'center',
+      text: state.texts.vintage,
+      fontSize: Math.round(state.fsWinery * 0.7), fontFamily: state.font,
+      fill: accentCol, listening: false,
+      letterSpacing: Math.max(1, state.letterSpacing + 1)
+    });
+    labelLayer.add(vintageText);
+    yPos += vintageText.height() + 16;
+
+    // Motif is placed between top and bottom text — handled by addMotif
+    // Middle space for motif
+    var motifSpace = sw * 0.14;
+    yPos += motifSpace;
+
+    // Varietal
+    var varietalText = new Konva.Text({
+      x: sx + 20, y: yPos, width: sw - 40, align: 'center',
+      text: state.texts.varietal,
+      fontSize: state.fsVarietal, fontFamily: state.font,
+      fontStyle: state.stylePreset === 'modern' ? 'bold' : 'italic',
+      fill: textCol, listening: false,
+      letterSpacing: state.letterSpacing
+    });
+    labelLayer.add(varietalText);
+    yPos += varietalText.height() + 10;
+
+    // Region
+    var regionText = new Konva.Text({
+      x: sx, y: yPos, width: sw, align: 'center',
+      text: state.texts.region,
+      fontSize: 13, fontFamily: state.font,
+      fill: accentCol, listening: false,
+      letterSpacing: Math.max(0.5, state.letterSpacing)
+    });
+    labelLayer.add(regionText);
+    yPos += regionText.height() + 12;
+
+    // Bottom info line
+    var bottomY = sy + sh - (state.shape === 'arch' ? state.borderInset + 10 : state.shape === 'oval' ? sw * 0.12 : state.borderInset + 14);
+    var bottomText = '';
+    if (state.texts.alcohol && state.texts.volume) {
+      bottomText = state.texts.alcohol + '  ·  ' + state.texts.volume;
+    } else if (state.texts.alcohol) {
+      bottomText = state.texts.alcohol;
+    } else if (state.texts.volume) {
+      bottomText = state.texts.volume;
+    }
+    if (bottomText) {
+      var bt = new Konva.Text({
+        x: sx, y: bottomY, width: sw, align: 'center',
+        text: bottomText,
+        fontSize: 10, fontFamily: state.font,
+        fill: textCol, listening: false, opacity: 0.7,
+        letterSpacing: Math.max(0, state.letterSpacing)
+      });
+      labelLayer.add(bt);
+    }
+
+    labelLayer.batchDraw();
+  }
+
+  function applyFoilToColor(color, foilPct) {
+    // Simulate gold/silver foil by blending towards gold
+    var gold = { r: 212, g: 175, b: 55 };
+    var base = hexToRgb(color);
+    if (!base) return color;
+    var f = foilPct / 100;
+    var r = Math.round(base.r * (1-f) + gold.r * f);
+    var g = Math.round(base.g * (1-f) + gold.g * f);
+    var bl = Math.round(base.b * (1-f) + gold.b * f);
+    return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+
+  function hexToRgb(hex) {
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    return m ? { r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16) } : null;
+  }
+
+  function addPaperTexture(x, y, w, h, shape) {
+    // Subtle texture dots
+    var n = Math.floor(w * h / 800);
+    for (var i = 0; i < n; i++) {
+      var dx = x + Math.random() * w;
+      var dy = y + Math.random() * h;
+      // Clip to shape
+      if (shape === 'oval') {
+        var ox = (dx - (x + w/2)) / (w/2);
+        var oy = (dy - (y + h/2)) / (h/2);
+        if (ox*ox + oy*oy > 1) continue;
+      } else if (shape === 'arch') {
+        var archR = w/2;
+        var archCY = y + archR;
+        if (dy < archCY) {
+          var ax = (dx - (x + w/2));
+          var ay = (dy - archCY);
+          if (ax*ax + ay*ay > archR*archR) continue;
+        }
+      }
+      var opacity = 0.04 + Math.random() * 0.06;
+      var r = 0.5 + Math.random() * 1;
+      labelLayer.add(new Konva.Circle({
+        x: dx, y: dy, radius: r, fill: '#000', opacity: opacity, listening: false
+      }));
+    }
+  }
+
+  function addMotif(sx, sy, sw, sh) {
+    var cx = sx + sw / 2;
+    var motifY = sy + sh * 0.38;
+    var motifColor = state.foil > 20 ? applyFoilToColor(state.accentColor, state.foil) : state.accentColor;
+    var motifSize = sw * 0.12;
+
+    switch(state.motif) {
+      case 'crest':
+        // Shield/crest shape
+        var crestShape = new Konva.Shape({
+          x: cx - motifSize, y: motifY - motifSize, width: motifSize*2, height: motifSize*2,
+          stroke: motifColor, strokeWidth: 1.5, listening: false, fill: motifColor, opacity: 0.08,
+          sceneFunc: function(ctx, shape) {
+            var w = shape.width(), h = shape.height();
+            ctx.beginPath();
+            ctx.moveTo(w*0.5, 0);
+            ctx.lineTo(w, h*0.15);
+            ctx.lineTo(w*0.85, h*0.5);
+            ctx.lineTo(w*0.5, h);
+            ctx.lineTo(w*0.15, h*0.5);
+            ctx.lineTo(0, h*0.15);
+            ctx.closePath();
+            ctx.fillStrokeShape(shape);
+          }
+        });
+        labelLayer.add(crestShape);
+        // Inner star
+        labelLayer.add(new Konva.Star({
+          x: cx, y: motifY + motifSize * 0.1, numPoints: 5,
+          innerRadius: motifSize * 0.3, outerRadius: motifSize * 0.5,
+          stroke: motifColor, strokeWidth: 1, listening: false, fill: motifColor, opacity: 0.15
+        }));
+        break;
+
+      case 'grapes':
+        // Cluster of circles
+        var rows = [3, 4, 3, 2];
+        var grapeR = motifSize * 0.18;
+        var grapeStartY = motifY - motifSize * 0.3;
+        for (var row = 0; row < rows.length; row++) {
+          var count = rows[row];
+          var rowW = (count - 1) * grapeR * 2.2;
+          var rowY = grapeStartY + row * grapeR * 2;
+          for (var g = 0; g < count; g++) {
+            var gx = cx - rowW/2 + g * grapeR * 2.2;
+            labelLayer.add(new Konva.Circle({
+              x: gx, y: rowY, radius: grapeR,
+              stroke: motifColor, strokeWidth: 1, fill: motifColor, opacity: 0.12, listening: false
+            }));
+          }
+        }
+        // Leaf
+        labelLayer.add(new Konva.Path({
+          x: cx - motifSize * 0.5, y: grapeStartY - motifSize * 0.5,
+          data: 'M ' + (motifSize*0.5) + ' 0 Q ' + (motifSize) + ' ' + (motifSize*0.3) + ' ' + (motifSize*0.5) + ' ' + (motifSize*0.6) + ' Q 0 ' + (motifSize*0.3) + ' ' + (motifSize*0.5) + ' 0',
+          stroke: motifColor, strokeWidth: 1, listening: false, opacity: 0.5
+        }));
+        break;
+
+      case 'wreath':
+        // Oval wreath
+        labelLayer.add(new Konva.Ellipse({
+          x: cx, y: motifY, radiusX: motifSize * 1.2, radiusY: motifSize * 0.7,
+          stroke: motifColor, strokeWidth: 1.5, listening: false, dash: [3, 2]
+        }));
+        // Leaves around the wreath
+        var nLeaves = 16;
+        for (var li = 0; li < nLeaves; li++) {
+          var ang = (li / nLeaves) * Math.PI * 2;
+          var lx = cx + Math.cos(ang) * motifSize * 1.2;
+          var ly = motifY + Math.sin(ang) * motifSize * 0.7;
+          var leafSize = 3 + Math.random() * 2;
+          labelLayer.add(new Konva.Line({
+            points: [lx, ly, lx + Math.cos(ang) * leafSize, ly + Math.sin(ang) * leafSize],
+            stroke: motifColor, strokeWidth: 1.5, listening: false, opacity: 0.6
+          }));
+        }
+        break;
+
+      case 'lines':
+        // Geometric parallel lines
+        var lineCount = 5;
+        var lineSpacing = motifSize * 0.3;
+        var lineStartX = cx - motifSize;
+        for (var li2 = 0; li2 < lineCount; li2++) {
+          var ly2 = motifY - motifSize * 0.5 + li2 * lineSpacing;
+          var len = motifSize * 2 * (1 - li2 * 0.12);
+          labelLayer.add(new Konva.Line({
+            points: [cx - len/2, ly2, cx + len/2, ly2],
+            stroke: motifColor, strokeWidth: 1.5, listening: false, opacity: 0.6
+          }));
+        }
+        break;
+
+      case 'art':
+        // Abstract: overlapping circles + triangle
+        labelLayer.add(new Konva.Circle({
+          x: cx - motifSize * 0.4, y: motifY, radius: motifSize * 0.5,
+          stroke: motifColor, strokeWidth: 1.5, fill: motifColor, opacity: 0.1, listening: false
+        }));
+        labelLayer.add(new Konva.Circle({
+          x: cx + motifSize * 0.4, y: motifY, radius: motifSize * 0.5,
+          stroke: motifColor, strokeWidth: 1.5, fill: motifColor, opacity: 0.1, listening: false
+        }));
+        labelLayer.add(new Konva.Line({
+          points: [cx, motifY - motifSize * 0.7, cx - motifSize * 0.6, motifY + motifSize * 0.5, cx + motifSize * 0.6, motifY + motifSize * 0.5, cx, motifY - motifSize * 0.7],
+          stroke: motifColor, strokeWidth: 1.5, closed: true, fill: motifColor, opacity: 0.08, listening: false
+        }));
+        break;
+    }
+  }
+
+  // Bottle preview (separate small canvas)
+  var bottleCanvas, bottleCtx;
+  function drawBottlePreview() {
+    bottleCanvas = document.getElementById('bottle-preview-canvas');
+    if (!bottleCanvas) return;
+    bottleCtx = bottleCanvas.getContext('2d');
+    var bw = bottleCanvas.width, bh = bottleCanvas.height;
+
+    bottleCtx.clearRect(0, 0, bw, bh);
+
+    // Background
+    bottleCtx.fillStyle = '#1a1612';
+    bottleCtx.fillRect(0, 0, bw, bh);
+
+    // Bottle shape
+    var bx = bw / 2;
+    var neckW = 18;
+    var shoulderY = 70;
+    var bodyTopY = 95;
+    var bodyW = 80;
+    var bodyBottomY = bh - 20;
+
+    // Bottle fill (wine color)
+    bottleCtx.save();
+    bottleCtx.beginPath();
+    bottleCtx.moveTo(bx - neckW/2, 10);
+    bottleCtx.lineTo(bx + neckW/2, 10);
+    bottleCtx.lineTo(bx + neckW/2, shoulderY);
+    bottleCtx.quadraticCurveTo(bx + neckW/2 + 8, shoulderY + 10, bx + bodyW/2, bodyTopY);
+    bottleCtx.lineTo(bx + bodyW/2, bodyBottomY);
+    bottleCtx.lineTo(bx - bodyW/2, bodyBottomY);
+    bottleCtx.lineTo(bx - bodyW/2, bodyTopY);
+    bottleCtx.quadraticCurveTo(bx - neckW/2 - 8, shoulderY + 10, bx - neckW/2, shoulderY);
+    bottleCtx.closePath();
+
+    // Wine fill gradient
+    var wineGrad = bottleCtx.createLinearGradient(bx - bodyW/2, 0, bx + bodyW/2, 0);
+    wineGrad.addColorStop(0, '#2a0a14');
+    wineGrad.addColorStop(0.2, '#5a1830');
+    wineGrad.addColorStop(0.5, '#6b1a2a');
+    wineGrad.addColorStop(0.8, '#5a1830');
+    wineGrad.addColorStop(1, '#2a0a14');
+    bottleCtx.fillStyle = wineGrad;
+    bottleCtx.fill();
+
+    // Glass highlight
+    bottleCtx.fillStyle = 'rgba(255,255,255,0.06)';
+    bottleCtx.fillRect(bx - bodyW/2 + 6, bodyTopY, 6, bodyBottomY - bodyTopY);
+
+    bottleCtx.restore();
+
+    // Capsule/foil
+    var paper = papers[state.paper];
+    var capsuleGrad = bottleCtx.createLinearGradient(bx - neckW/2, 0, bx + neckW/2, 0);
+    var capColor = applyFoilToColor(state.accentColor, state.foil);
+    capsuleGrad.addColorStop(0, state.accentColor);
+    capsuleGrad.addColorStop(0.5, capColor);
+    capsuleGrad.addColorStop(1, state.accentColor);
+    bottleCtx.fillStyle = capsuleGrad;
+    bottleCtx.fillRect(bx - neckW/2 - 1, 8, neckW + 2, 20);
+
+    // Label on bottle
+    var labelTopY = bodyTopY + 8;
+    var labelBottomY = bodyBottomY - 8;
+    var labelX = bx - bodyW/2 + 4;
+    var labelWidth = bodyW - 8;
+    var labelHeight = labelBottomY - labelTopY;
+
+    bottleCtx.save();
+    // Clip to label area
+    bottleCtx.beginPath();
+    if (state.shape === 'rect') {
+      bottleCtx.rect(labelX, labelTopY, labelWidth, labelHeight);
+    } else if (state.shape === 'arch') {
+      var archR = labelWidth / 2;
+      bottleCtx.moveTo(labelX, labelTopY + archR);
+      bottleCtx.arc(labelX + labelWidth/2, labelTopY + archR, archR, Math.PI, 0, false);
+      bottleCtx.lineTo(labelX + labelWidth, labelBottomY);
+      bottleCtx.lineTo(labelX, labelBottomY);
+      bottleCtx.closePath();
+    } else if (state.shape === 'oval') {
+      bottleCtx.ellipse(bx, labelTopY + labelHeight/2, labelWidth/2, labelHeight/2, 0, 0, Math.PI*2);
+    }
+    bottleCtx.clip();
+
+    // Paper background
+    bottleCtx.fillStyle = paper.bg;
+    bottleCtx.fillRect(labelX - 2, labelTopY - 2, labelWidth + 4, labelHeight + 4);
+
+    // Texture dots
+    if (state.paper === 'kraft' || state.paper === 'parchment' || state.paper === 'cream') {
+      bottleCtx.fillStyle = 'rgba(0,0,0,0.05)';
+      for (var i = 0; i < 40; i++) {
+        bottleCtx.fillRect(
+          labelX + Math.random() * labelWidth,
+          labelTopY + Math.random() * labelHeight,
+          1, 1
+        );
+      }
+    }
+
+    // Border
+    if (state.borderThickness > 0) {
+      var bi2 = Math.min(state.borderInset * 0.25, 5);
+      bottleCtx.strokeStyle = applyFoilToColor(state.accentColor, state.foil);
+      bottleCtx.lineWidth = 0.8;
+      bottleCtx.strokeRect(labelX + bi2, labelTopY + bi2, labelWidth - bi2*2, labelHeight - bi2*2);
+    }
+
+    // Text — simplified for small preview
+    var textColor = applyFoilToColor(state.textColor, state.foil);
+    var accentColor = applyFoilToColor(state.accentColor, state.foil);
+    bottleCtx.textAlign = 'center';
+
+    var cy = labelTopY + labelHeight * 0.12;
+    // Tagline
+    if (state.texts.tagline) {
+      bottleCtx.font = '5px ' + state.font;
+      bottleCtx.fillStyle = accentColor;
+      bottleCtx.fillText(state.texts.tagline.substring(0, 20).toUpperCase(), bx, cy);
+      cy += 7;
+    }
+    // Winery
+    bottleCtx.font = 'bold 8px ' + state.font;
+    bottleCtx.fillStyle = textColor;
+    bottleCtx.fillText(state.texts.winery.substring(0, 18), bx, cy);
+    cy += 9;
+    // Vintage
+    bottleCtx.font = '7px ' + state.font;
+    bottleCtx.fillStyle = accentColor;
+    bottleCtx.fillText(state.texts.vintage, bx, cy);
+    cy += 8;
+    // Varietal
+    bottleCtx.font = 'italic 7px ' + state.font;
+    bottleCtx.fillStyle = textColor;
+    bottleCtx.fillText(state.texts.varietal.substring(0, 22), bx, cy);
+    cy += 8;
+    // Region
+    bottleCtx.font = '6px ' + state.font;
+    bottleCtx.fillStyle = accentColor;
+    bottleCtx.fillText(state.texts.region.substring(0, 24), bx, cy);
+
+    // Bottom
+    bottleCtx.font = '5px ' + state.font;
+    bottleCtx.fillStyle = textColor;
+    bottleCtx.globalAlpha = 0.7;
+    var btLine = '';
+    if (state.texts.alcohol && state.texts.volume) btLine = state.texts.alcohol + ' · ' + state.texts.volume;
+    else if (state.texts.alcohol) btLine = state.texts.alcohol;
+    else if (state.texts.volume) btLine = state.texts.volume;
+    bottleCtx.fillText(btLine, bx, labelBottomY - 5);
+    bottleCtx.globalAlpha = 1;
+
+    bottleCtx.restore();
+
+    // Neck highlight
+    bottleCtx.strokeStyle = 'rgba(255,255,255,0.08)';
+    bottleCtx.lineWidth = 1;
+    bottleCtx.beginPath();
+    bottleCtx.moveTo(bx - neckW/2 + 2, 10);
+    bottleCtx.lineTo(bx - neckW/2 + 2, shoulderY);
+    bottleCtx.stroke();
+  }
+
+  // Update metrics
+  function updateMetrics() {
+    var preset = presets[state.stylePreset];
+    document.getElementById('style-badge').textContent = preset.approach;
+    document.getElementById('style-badge').className = 'style-badge style-' + preset.styleClass;
+    document.getElementById('m-approach').textContent = preset.approach;
+    document.getElementById('m-era').textContent = preset.era;
+    document.getElementById('m-shelf').textContent = preset.shelf;
+    document.getElementById('m-shape').textContent =
+      state.shape === 'rect' ? 'Rectangle' : state.shape === 'arch' ? 'Arch Top' : 'Oval';
+    document.getElementById('m-paper').textContent = papers[state.paper].label;
+    document.getElementById('m-font').textContent = state.font.replace(/['"]/g, '');
+    document.getElementById('m-motif').textContent =
+      state.motif === 'none' ? 'None' : state.motif.charAt(0).toUpperCase() + state.motif.slice(1);
+    var fieldCount = 0;
+    var tkeys = Object.keys(state.texts);
+    for (var i = 0; i < tkeys.length; i++) {
+      if (state.texts[tkeys[i]]) fieldCount++;
+    }
+    document.getElementById('m-fields').textContent = fieldCount;
+
+    // Balance score
+    var score = 50;
+    if (state.borderThickness > 0 && state.borderThickness <= 4) score += 10;
+    if (state.motif !== 'none') score += 8;
+    if (state.texts.tagline) score += 5;
+    if (state.letterSpacing >= 0 && state.letterSpacing <= 4) score += 7;
+    if (state.fsWinery >= 22 && state.fsWinery <= 36) score += 10;
+    if (fieldCount >= 5 && fieldCount <= 7) score += 10;
+    score = Math.min(100, score);
+    document.getElementById('balance-bar').style.width = score + '%';
+    document.getElementById('balance-score').textContent = score;
+    var note;
+    if (score >= 85) note = 'Excellent balance and composition';
+    else if (score >= 70) note = 'Well-balanced layout';
+    else if (score >= 55) note = 'Could benefit from more elements';
+    else note = 'Consider adding border or motif';
+    document.getElementById('balance-note').textContent = note;
+
+    // Readability
+    var readability;
+    var contrast = computeContrast(state.textColor, papers[state.paper].bg);
+    if (contrast >= 7) readability = 'Excellent';
+    else if (contrast >= 4.5) readability = 'Good';
+    else if (contrast >= 3) readability = 'Fair';
+    else readability = 'Poor';
+    document.getElementById('m-readability').textContent = readability;
+    document.getElementById('m-contrast').textContent = contrast.toFixed(1) + ':1';
+
+    // Info density
+    if (fieldCount <= 4) {
+      document.getElementById('m-density').textContent = 'Minimal';
+    } else if (fieldCount <= 6) {
+      document.getElementById('m-density').textContent = 'Moderate';
+    } else {
+      document.getElementById('m-density').textContent = 'Dense';
+    }
+
+    // Foil
+    if (state.foil === 0) {
+      document.getElementById('m-foil-cov').textContent = 'None';
+    } else if (state.foil <= 30) {
+      document.getElementById('m-foil-cov').textContent = 'Light (' + state.foil + '%)';
+    } else if (state.foil <= 60) {
+      document.getElementById('m-foil-cov').textContent = 'Medium (' + state.foil + '%)';
+    } else {
+      document.getElementById('m-foil-cov').textContent = 'Heavy (' + state.foil + '%)';
+    }
+
+    // Random tip
+    document.getElementById('tips').textContent = tipPool[Math.floor(Math.random() * tipPool.length)];
+  }
+
+  function computeContrast(fg, bg) {
+    var f = hexToRgb(fg);
+    var b = hexToRgb(bg);
+    if (!f || !b) return 4.5;
+    var fl = relativeLuminance(f);
+    var bl = relativeLuminance(b);
+    var lighter = Math.max(fl, bl);
+    var darker = Math.min(fl, bl);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+  function relativeLuminance(c) {
+    function adj(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055)/1.055, 2.4); }
+    return 0.2126 * adj(c.r) + 0.7152 * adj(c.g) + 0.0722 * adj(c.b);
+  }
+
+  // Rebuild everything
+  function rebuild() {
+    buildBackground();
+    buildLabel();
+    drawBottlePreview();
+    updateMetrics();
+  }
+
+  // Resize
+  function onResize() {
+    stageW = container.clientWidth || window.innerWidth;
+    stageH = container.clientHeight || window.innerHeight;
+    stage.width(stageW);
+    stage.height(stageH);
+    rebuild();
+  }
+  var resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(onResize, 150);
+  });
+
+  // Apply preset
+  function applyPreset(name) {
+    var p = presets[name];
+    if (!p) return;
+    state.stylePreset = name;
+    state.shape = p.shape;
+    state.font = p.font;
+    state.fsWinery = p.fsWinery;
+    state.fsVarietal = p.fsVarietal;
+    state.letterSpacing = p.letterSpacing;
+    state.paper = p.paper;
+    state.textColor = p.textColor;
+    state.accentColor = p.accentColor;
+    state.motif = p.motif;
+    state.borderThickness = p.borderThickness;
+    state.borderInset = p.borderInset;
+    state.foil = p.foil;
+    state.texts = JSON.parse(JSON.stringify(p.texts));
+
+    // Update UI
+    document.getElementById('txt-winery').value = state.texts.winery;
+    document.getElementById('txt-vintage').value = state.texts.vintage;
+    document.getElementById('txt-varietal').value = state.texts.varietal;
+    document.getElementById('txt-region').value = state.texts.region;
+    document.getElementById('txt-alcohol').value = state.texts.alcohol;
+    document.getElementById('txt-volume').value = state.texts.volume;
+    document.getElementById('txt-tagline').value = state.texts.tagline;
+    document.getElementById('sel-font').value = state.font;
+    document.getElementById('sel-paper').value = state.paper;
+    document.getElementById('fs-winery').value = state.fsWinery;
+    document.getElementById('fs-winery-val').textContent = state.fsWinery;
+    document.getElementById('fs-varietal').value = state.fsVarietal;
+    document.getElementById('fs-varietal-val').textContent = state.fsVarietal;
+    document.getElementById('ls-slider').value = state.letterSpacing;
+    document.getElementById('ls-val').textContent = state.letterSpacing;
+    document.getElementById('bt-slider').value = state.borderThickness;
+    document.getElementById('bt-val').textContent = state.borderThickness;
+    document.getElementById('bi-slider').value = state.borderInset;
+    document.getElementById('bi-val').textContent = state.borderInset;
+    document.getElementById('foil-slider').value = state.foil;
+    document.getElementById('foil-val').textContent = state.foil;
+
+    // Update color swatches
+    document.querySelectorAll('#text-colors .color-swatch').forEach(function(s) {
+      s.classList.toggle('active', s.dataset.color === state.textColor);
+    });
+    document.querySelectorAll('#accent-colors .color-swatch').forEach(function(s) {
+      s.classList.toggle('active', s.dataset.color === state.accentColor);
+    });
+
+    // Update shape buttons
+    document.querySelectorAll('#shape-buttons .btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.shape === state.shape);
+    });
+
+    // Update motif buttons
+    document.querySelectorAll('#motif-buttons .btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.motif === state.motif);
+    });
+
+    // Update preset buttons
+    document.querySelectorAll('.preset-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.preset === name);
+    });
+
+    rebuild();
+  }
+
+  // Wire up controls
+  function wireControls() {
+    // Preset buttons
+    document.querySelectorAll('.preset-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        applyPreset(btn.dataset.preset);
+      });
+    });
+
+    // Shape buttons
+    document.querySelectorAll('#shape-buttons .btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        state.shape = btn.dataset.shape;
+        document.querySelectorAll('#shape-buttons .btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        rebuild();
+      });
+    });
+
+    // Text inputs
+    ['winery','vintage','varietal','region','alcohol','volume','tagline'].forEach(function(key) {
+      var el = document.getElementById('txt-' + key);
+      el.addEventListener('input', function() {
+        state.texts[key] = el.value;
+        rebuild();
+      });
+    });
+
+    // Font select
+    document.getElementById('sel-font').addEventListener('change', function() {
+      state.font = this.value;
+      rebuild();
+    });
+
+    // Paper select
+    document.getElementById('sel-paper').addEventListener('change', function() {
+      state.paper = this.value;
+      rebuild();
+    });
+
+    // Font size sliders
+    document.getElementById('fs-winery').addEventListener('input', function() {
+      state.fsWinery = parseInt(this.value);
+      document.getElementById('fs-winery-val').textContent = state.fsWinery;
+      rebuild();
+    });
+    document.getElementById('fs-varietal').addEventListener('input', function() {
+      state.fsVarietal = parseInt(this.value);
+      document.getElementById('fs-varietal-val').textContent = state.fsVarietal;
+      rebuild();
+    });
+
+    // Letter spacing
+    document.getElementById('ls-slider').addEventListener('input', function() {
+      state.letterSpacing = parseInt(this.value);
+      document.getElementById('ls-val').textContent = state.letterSpacing;
+      rebuild();
+    });
+
+    // Color swatches
+    document.querySelectorAll('#text-colors .color-swatch').forEach(function(sw) {
+      sw.addEventListener('click', function() {
+        state.textColor = sw.dataset.color;
+        document.querySelectorAll('#text-colors .color-swatch').forEach(function(s) { s.classList.remove('active'); });
+        sw.classList.add('active');
+        rebuild();
+      });
+    });
+    document.querySelectorAll('#accent-colors .color-swatch').forEach(function(sw) {
+      sw.addEventListener('click', function() {
+        state.accentColor = sw.dataset.color;
+        document.querySelectorAll('#accent-colors .color-swatch').forEach(function(s) { s.classList.remove('active'); });
+        sw.classList.add('active');
+        rebuild();
+      });
+    });
+
+    // Motif buttons
+    document.querySelectorAll('#motif-buttons .btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        state.motif = btn.dataset.motif;
+        document.querySelectorAll('#motif-buttons .btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        rebuild();
+      });
+    });
+
+    // Border sliders
+    document.getElementById('bt-slider').addEventListener('input', function() {
+      state.borderThickness = parseInt(this.value);
+      document.getElementById('bt-val').textContent = state.borderThickness;
+      rebuild();
+    });
+    document.getElementById('bi-slider').addEventListener('input', function() {
+      state.borderInset = parseInt(this.value);
+      document.getElementById('bi-val').textContent = state.borderInset;
+      rebuild();
+    });
+    document.getElementById('foil-slider').addEventListener('input', function() {
+      state.foil = parseInt(this.value);
+      document.getElementById('foil-val').textContent = state.foil;
+      rebuild();
+    });
+
+    // Random button
+    document.getElementById('btn-shuffle').addEventListener('click', function() {
+      var presetNames = Object.keys(presets);
+      var randomPreset = presetNames[Math.floor(Math.random() * presetNames.length)];
+      applyPreset(randomPreset);
+      // Random motif
+      var motifs = ['none','crest','grapes','wreath','lines','art'];
+      state.motif = motifs[Math.floor(Math.random() * motifs.length)];
+      document.querySelectorAll('#motif-buttons .btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.motif === state.motif);
+      });
+      // Random shape
+      var shapes = ['rect','arch','oval'];
+      state.shape = shapes[Math.floor(Math.random() * shapes.length)];
+      document.querySelectorAll('#shape-buttons .btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.shape === state.shape);
+      });
+      rebuild();
+    });
+
+    // Export button
+    document.getElementById('btn-export').addEventListener('click', function() {
+      try {
+        var dataURL = stage.toDataURL({ pixelRatio: 2, mimeType: 'image/png' });
+        var link = document.createElement('a');
+        link.download = 'wine-label-' + Date.now() + '.png';
+        link.href = dataURL;
+        link.click();
+        showToast('Label exported as PNG!');
+      } catch(e) {
+        showToast('Export failed: ' + e.message);
+      }
+    });
+  }
+
+  function showToast(msg) {
+    var toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(function() { toast.classList.remove('show'); }, 2500);
+  }
+
+  // Init
+  function init() {
+    if (typeof Konva === 'undefined') {
+      console.error('Konva not loaded');
+      return;
+    }
+    initStage();
+    wireControls();
+    rebuild();
+    // Apply default preset
+    applyPreset('classical');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
