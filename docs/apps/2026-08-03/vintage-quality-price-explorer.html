@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Vintage Quality vs Price Explorer — Wine Economics Dashboard</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root { --bg:#0b0f14; --surface:#141a22; --border:#2a3441; --text:#c9d1d9; --muted:#8b949e; --accent:#c9a060; --accent2:#58a6ff; }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  a,button,input,select{touch-action:manipulation;}
+
+  /* Disclaimer */
+  .disclaimer{background:#1a1610;border-bottom:1px solid #3a3020;color:#c9a060;padding:.75rem 1rem;text-align:center;font-size:.85rem;position:sticky;top:0;z-index:100;}
+  .disclaimer strong{font-weight:600;}
+
+  /* Header */
+  header{text-align:center;padding:1.5rem 1rem .75rem;}
+  header h1{font-size:clamp(1.3rem,4vw,1.8rem);color:var(--accent);font-weight:700;letter-spacing:-.02em;}
+  header p{color:var(--muted);font-size:.88rem;margin-top:.25rem;}
+
+  /* Main */
+  main{max-width:1100px;margin:0 auto;padding:0 1rem 2rem;}
+
+  /* Filter bar */
+  #filter-bar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;padding:.75rem .9rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:.75rem;}
+  #region-filters{display:flex;flex-wrap:wrap;gap:.35rem;flex:1;min-width:200px;}
+  .region-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .55rem;border-radius:5px;cursor:pointer;font-size:.78rem;border:1.5px solid var(--border);background:#0d1117;transition:all .2s;user-select:none;}
+  .region-chip .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .region-chip.inactive{opacity:.35;}
+  .region-chip.inactive .dot{filter:grayscale(.7);}
+  #vintage-control{display:flex;align-items:center;gap:.5rem;flex-shrink:0;}
+  #vintage-label{font-size:1.1rem;font-weight:700;color:var(--accent);min-width:3.5rem;text-align:center;}
+  #vintage-quality{font-size:.72rem;color:var(--muted);min-width:5rem;}
+  #vintage-slider{width:110px;accent-color:var(--accent);cursor:pointer;}
+  #play-btn{background:#1a1f2a;border:1px solid var(--border);color:var(--text);padding:.3rem .6rem;border-radius:5px;cursor:pointer;font-size:.78rem;transition:all .15s;}
+  #play-btn:hover{border-color:var(--accent);color:var(--accent);}
+  #type-filter,#scale-toggle,#find-values-btn{background:#1a1f2a;border:1px solid var(--border);color:var(--text);padding:.3rem .55rem;border-radius:5px;cursor:pointer;font-size:.78rem;transition:all .15s;}
+  #type-filter:hover,#scale-toggle:hover,#find-values-btn:hover{border-color:var(--accent);color:var(--accent);}
+  #find-values-btn.active{background:var(--accent);color:#0b0f14;border-color:var(--accent);font-weight:600;}
+
+  /* Main area */
+  #main-area{display:grid;grid-template-columns:1fr 260px;gap:.75rem;margin-bottom:.75rem;}
+  @media(max-width:768px){#main-area{grid-template-columns:1fr;}}
+
+  /* Chart section */
+  #chart-section{background:linear-gradient(135deg,#141a22,#181520,#141a22);background-size:200%200%;animation:bgshift 12s ease infinite;border:1px solid var(--border);border-radius:10px;padding:.9rem;overflow:hidden;}
+  @keyframes bgshift{0%,100%{background-position:0% 50%;}50%{background-position:100% 50%;}}
+  #chart-header{margin-bottom:.5rem;}
+  #chart-header h2{font-size:.95rem;color:var(--text);}
+  #chart-subtitle{font-size:.78rem;color:var(--muted);margin-top:.15rem;}
+  #scatter-svg{width:100%;height:auto;display:block;}
+  .grid line{stroke:#1a2030;stroke-width:1;}
+  .axis line,.axis path{stroke:#2a3441;stroke-width:1;}
+  .axis text{fill:var(--muted);font-size:11px;}
+  .axis-label{fill:var(--muted);font-size:12px;font-weight:600;}
+  .dot{cursor:pointer;transition:r .15s,fill-opacity .15s;}
+  .dot:hover{r:7;fill-opacity:1;stroke:#fff;stroke-width:1.5;}
+  .dot.selected{stroke:var(--accent);stroke-width:2.5;filter:url(#glow);}
+  .dot.value-highlight{animation:vpulse 1.5s ease-in-out infinite;}
+  @keyframes vpulse{0%,100%{stroke:var(--accent);stroke-width:2;stroke-opacity:.7;}50%{stroke:#ffd700;stroke-width:3.5;stroke-opacity:1;}}
+  .regression-line{stroke:var(--accent);stroke-width:2;stroke-dasharray:6,4;fill:none;opacity:.7;}
+  .regression-band{fill:var(--accent);opacity:.06;}
+  .quad-bg{opacity:.04;}
+  .quad-label{font-size:10px;fill:var(--muted);font-weight:600;text-anchor:middle;pointer-events:none;opacity:.5;}
+
+  /* Quadrant legend */
+  #quadrant-legend{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-top:.5rem;}
+  #quadrant-legend span{font-size:.72rem;padding:.15rem .5rem;border-radius:4px;border:1px solid var(--border);}
+  .q1{color:#58a6ff;border-color:#58a6bb33;background:#58a6ff0d;}
+  .q2{color:#27ae60;border-color:#27ae6033;background:#27ae600d;}
+  .q3{color:#e74c3c;border-color:#e74c3c33;background:#e74c3c0d;}
+  .q4{color:#8b949e;}
+
+  /* Stats section */
+  #stats-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.9rem;}
+  #stats-section h2{font-size:.9rem;color:var(--accent);margin-bottom:.6rem;}
+  #stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem;}
+  .stat{background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:.5rem .6rem;text-align:center;}
+  .stat-label{display:block;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem;}
+  .stat-value{display:block;font-size:1.05rem;font-weight:700;color:var(--text);}
+
+  /* Selected wine panel */
+  #selected-wine-panel{background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:.7rem;}
+  #selected-wine-panel h3{font-size:.82rem;color:var(--accent);margin-bottom:.4rem;}
+  #selected-wine-panel .hint{color:var(--muted);font-size:.8rem;font-style:italic;}
+  .sw-row{display:flex;justify-content:space-between;padding:.2rem 0;font-size:.82rem;border-bottom:1px solid #1a1f2a;}
+  .sw-row:last-child{border-bottom:none;}
+  .sw-label{color:var(--muted);}
+  .sw-value{font-weight:600;}
+  .sw-value.good{color:#27ae60;}
+  .sw-value.fair{color:var(--text);}
+  .sw-value.overpriced{color:#e74c3c;}
+  .sw-value.excellent{color:#2ecc71;}
+
+  /* Bottom section */
+  #bottom-section{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+  @media(max-width:768px){#bottom-section{grid-template-columns:1fr;}}
+  #regional-comparison,#value-picks{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.9rem;}
+  #regional-comparison h2,#value-picks h2{font-size:.9rem;color:var(--accent);margin-bottom:.4rem;}
+  #value-picks .hint{color:var(--muted);font-size:.78rem;margin-bottom:.5rem;}
+  #bars-svg{width:100%;height:auto;display:block;}
+  .bar-bg{fill:#1a1f2a;}
+  .bar-fill{transition:width .5s ease;}
+  .bar-label{fill:var(--text);font-size:11px;}
+  .bar-value{fill:var(--muted);font-size:10px;}
+
+  /* Value table */
+  #value-table-container{max-height:280px;overflow-y:auto;}
+  #value-table{width:100%;border-collapse:collapse;font-size:.78rem;}
+  #value-table th{text-align:left;padding:.3rem .4rem;color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);}
+  #value-table td{padding:.3rem .4rem;border-bottom:1px solid #1a1f2a;}
+  #value-table tr:hover{background:#161c26;}
+  .vt-rank{font-weight:700;color:var(--accent);width:28px;}
+  .vt-wine{font-weight:600;}
+  .vt-region{color:var(--muted);font-size:.72rem;}
+  .vt-score{font-weight:700;}
+  .vt-price{color:var(--accent);}
+
+  /* Tooltip */
+  #tooltip{position:fixed;pointer-events:none;background:#0d1117;border:1px solid var(--accent);border-radius:6px;padding:.5rem .7rem;font-size:.8rem;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.5);max-width:240px;}
+  #tooltip .tt-name{font-weight:700;color:var(--accent);margin-bottom:.15rem;}
+  #tooltip .tt-detail{color:var(--muted);font-size:.75rem;line-height:1.4;}
+
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+  @media(max-width:768px){
+    #filter-bar{flex-direction:column;align-items:stretch;}
+    #region-filters{justify-content:center;}
+    #vintage-control{justify-content:center;flex-wrap:wrap;}
+    #vintage-slider{width:100%;max-width:200px;}
+    #stats-grid{grid-template-columns:1fr 1fr;}
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<header>
+  <h1>Vintage Quality vs Price Explorer</h1>
+  <p>Wine Economics Dashboard — Critic Score, Market Price, Value & Regional Analysis</p>
+</header>
+
+<main>
+  <div id="filter-bar">
+    <div id="region-filters"></div>
+    <div id="vintage-control">
+      <span id="vintage-label">2019</span>
+      <input type="range" id="vintage-slider" min="2015" max="2023" value="2019" step="1">
+      <span id="vintage-quality">Excellent</span>
+      <button id="play-btn">▶ Play</button>
+    </div>
+    <select id="type-filter">
+      <option value="all">All Types</option>
+      <option value="Red">Red</option>
+      <option value="White">White</option>
+      <option value="Sparkling">Sparkling</option>
+    </select>
+    <button id="scale-toggle">Log Scale</button>
+    <button id="find-values-btn">★ Find Values</button>
+  </div>
+
+  <div id="main-area">
+    <div id="chart-section">
+      <div id="chart-header">
+        <h2>Critic Score vs Market Price</h2>
+        <p id="chart-subtitle">Each point is a wine. Hover for details, click to pin. Gold line = regression (fair price).</p>
+      </div>
+      <svg id="scatter-svg" viewBox="0 0 800 500"></svg>
+      <div id="quadrant-legend">
+        <span class="q1">Premium Excellence</span>
+        <span class="q2">Value Excellence</span>
+        <span class="q3">Overpriced</span>
+        <span class="q4">Budget</span>
+      </div>
+    </div>
+
+    <div id="stats-section">
+      <h2>Market Analysis</h2>
+      <div id="stats-grid">
+        <div class="stat"><span class="stat-label">Wines</span><span class="stat-value" id="stat-count">—</span></div>
+        <div class="stat"><span class="stat-label">Mean Score</span><span class="stat-value" id="stat-mean-score">—</span></div>
+        <div class="stat"><span class="stat-label">Median Price</span><span class="stat-value" id="stat-median-price">—</span></div>
+        <div class="stat"><span class="stat-label">Correlation (r)</span><span class="stat-value" id="stat-correlation">—</span></div>
+        <div class="stat"><span class="stat-label">R²</span><span class="stat-value" id="stat-r2">—</span></div>
+        <div class="stat"><span class="stat-label">Elasticity</span><span class="stat-value" id="stat-elasticity">—</span></div>
+      </div>
+      <div id="selected-wine-panel">
+        <h3>Selected Wine</h3>
+        <p class="hint">Click a point on the chart</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom-section">
+    <div id="regional-comparison">
+      <h2>Regional Comparison</h2>
+      <svg id="bars-svg" viewBox="0 0 400 300"></svg>
+    </div>
+    <div id="value-picks">
+      <h2>Top Value Picks</h2>
+      <p class="hint">Best value index (predicted ÷ actual price, score ≥ 90)</p>
+      <div id="value-table-container"></div>
+    </div>
+  </div>
+</main>
+
+<div id="tooltip" style="display:none;"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // === SEEDED RANDOM (LCG + Box-Muller) ===
+  var _seed = 12345;
+  function srand(){ _seed = (_seed * 16807) % 2147483647; return _seed / 2147483647; }
+  function srandNormal(m, s){
+    var u = srand(), v = srand();
+    return m + s * Math.sqrt(-2 * Math.log(Math.max(u, 1e-10))) * Math.cos(2 * Math.PI * v);
+  }
+
+  // === DATA DEFINITIONS ===
+  var REGIONS = [
+    { name:'Bordeaux', color:'#c0392b', basePrice:120, scoreCenter:91, elasticity:0.14, type:'Red',
+      wineries:['Château Lafite Rothschild','Château Margaux','Château Latour','Château Haut-Brion',
+                'Château Mouton Rothschild','Château Léoville-Las Cases','Château Pichon-Longueville',
+                'Château Lynch-Bages','Château Cos d\'Estournel','Château Montrose',
+                'Château Rauzan-Ségla','Château Kirwan','Château d\'Issan','Château Calon Ségur'] },
+    { name:'Burgundy', color:'#9b59b6', basePrice:250, scoreCenter:93, elasticity:0.22, type:'Mixed',
+      wineries:['DRC Romanée-Conti','Georges Roumier','Comte de Vogüé','Domaine Leroy',
+                'Louis Jadot','Joseph Drouhin','Domaine Faiveley','Domaine Rousseau',
+                'Mugneret-Gibourg','Domaine Leflaive','Coche-Dury','Domaine Sauzet'] },
+    { name:'Napa Valley', color:'#e67e22', basePrice:80, scoreCenter:91, elasticity:0.18, type:'Red',
+      wineries:['Screaming Eagle','Harlan Estate','Opus One','Silver Oak',
+                'Robert Mondavi','Caymus','Dominus','Dalla Valle',
+                'Schrader Cellar 8','Bond Estates','Araujo Estate','Spottswoode'] },
+    { name:'Barossa Valley', color:'#d4a017', basePrice:45, scoreCenter:90, elasticity:0.12, type:'Red',
+      wineries:['Penfolds Grange','Henschke Hill of Grace','Torbreck The Laird',
+                'Chris Ringland','Kalleske','Rockford Basket Press','Charles Melton','Turkey Flat'] },
+    { name:'Tuscany', color:'#27ae60', basePrice:70, scoreCenter:91, elasticity:0.14, type:'Red',
+      wineries:['Tenuta San Guido Sassicaia','Antinori Tignanello','Antinori Solaia','Ornellaia',
+                'Masseto','Flaccianello','Cepparello','Luce Vineyards',
+                'Castelgiocondo','Fonterutoli'] },
+    { name:'Mosel', color:'#3498db', basePrice:55, scoreCenter:91, elasticity:0.13, type:'White',
+      wineries:['Egon Müller Scharzhof','J.J. Prüm','Fritz Haag','Selbach-Oster',
+                'Dr. Loosen','Schloss Johannisberg','Gunderloch','Donnhoff'] },
+    { name:'Champagne', color:'#f1c40f', basePrice:120, scoreCenter:92, elasticity:0.16, type:'Sparkling',
+      wineries:['Dom Pérignon','Krug','Salon','Louis Roederer Cristal',
+                'Bollinger','Pol Roger','Charles Heidsieck','Taittinger',
+                'Ruinart','Piper-Heidsieck'] },
+    { name:'McLaren Vale', color:'#e74c3c', basePrice:35, scoreCenter:89, elasticity:0.11, type:'Red',
+      wineries:['d\'Arenberg The Dead Arm','Wirra Wirra','Chapel Hill','Shadowfax',
+                'Coriole','Kay Brothers','Yangarra','Bekkers'] }
+  ];
+
+  var VINTAGES = {
+    2015:{quality:0.8,label:'Good'},
+    2016:{quality:1.5,label:'Excellent'},
+    2017:{quality:-0.5,label:'Challenging'},
+    2018:{quality:1.0,label:'Very Good'},
+    2019:{quality:1.5,label:'Excellent'},
+    2020:{quality:0.5,label:'Good'},
+    2021:{quality:-0.3,label:'Cool Year'},
+    2022:{quality:2.0,label:'Legendary'},
+    2023:{quality:0.8,label:'Very Good'}
+  };
+
+  // === STATE ===
+  var allWines = [];
+  var filteredWines = [];
+  var selectedWine = null;
+  var activeRegions = {};
+  var currentVintage = 2019;
+  var currentType = 'all';
+  var logScale = true;
+  var highlightValues = false;
+  var playing = false;
+  var playInterval = null;
+  var regression = null;
+
+  // === D3 CONSTANTS ===
+  var margin = {top:20, right:30, bottom:50, left:75};
+  var W = 800 - margin.left - margin.right;
+  var H = 500 - margin.top - margin.bottom;
+
+  // === D3 VARIABLES ===
+  var xScale, yScale, xAxis, yAxis;
+  var svg, gPlot, gGrid, gQuadrants, gRegression, gPoints, gXAxis, gYAxis;
+  var barsSvg, gBars;
+
+  // === DATA GENERATION ===
+  function generateData(){
+    allWines = [];
+    var id = 0;
+    REGIONS.forEach(function(region){
+      region.wineries.forEach(function(winery, wIdx){
+        var tier = 1 - (wIdx / region.wineries.length);
+        var wineryType = region.type;
+        if (region.type === 'Mixed') {
+          wineryType = wIdx < 6 ? 'Red' : 'White';
+        }
+        for (var year = 2015; year <= 2023; year++) {
+          var vintage = VINTAGES[year];
+          var baseScore = 85 + tier * 8 + vintage.quality * 1.2;
+          var score = Math.min(100, Math.max(80, baseScore + srandNormal(0, 1.2)));
+          var scoreFactor = Math.exp(region.elasticity * (score - 85));
+          var tierFactor = 0.25 + tier * 0.75;
+          var basePrice = region.basePrice * scoreFactor * tierFactor;
+          var price = Math.max(12, basePrice * srandNormal(1, 0.18));
+          allWines.push({
+            id: id++,
+            name: winery,
+            region: region.name,
+            regionColor: region.color,
+            vintage: year,
+            vintageLabel: vintage.label,
+            score: Math.round(score * 10) / 10,
+            price: Math.round(price),
+            type: wineryType
+          });
+        }
+      });
+    });
+  }
+
+  // === SCALES ===
+  function setupScales(){
+    xScale = d3.scaleLinear().domain([80, 100]).range([0, W]);
+    yScale = d3.scaleLog().domain([10, 8000]).range([H, 0]);
+    xAxis = d3.axisBottom(xScale).tickValues([80,85,90,95,100]).tickFormat(d3.format('d'));
+    yAxis = d3.axisLeft(yScale).tickValues([10,25,50,100,250,500,1000,2500,5000]).tickFormat(function(d){ return 'AU$' + (d >= 1000 ? (d/1000) + 'k' : d); });
+  }
+
+  function updateScales(){
+    if (!logScale) {
+      var maxPrice = d3.max(filteredWines, function(d){ return d.price; }) || 5000;
+      maxPrice = Math.ceil(maxPrice / 500) * 500;
+      yScale = d3.scaleLinear().domain([0, maxPrice]).range([H, 0]);
+      yAxis = d3.axisLeft(yScale).ticks(6).tickFormat(function(d){ return 'AU$' + (d >= 1000 ? (d/1000) + 'k' : d); });
+    } else {
+      yScale = d3.scaleLog().domain([10, 8000]).range([H, 0]);
+      yAxis = d3.axisLeft(yScale).tickValues([10,25,50,100,250,500,1000,2500,5000]).tickFormat(function(d){ return 'AU$' + (d >= 1000 ? (d/1000) + 'k' : d); });
+    }
+  }
+
+  // === SVG SETUP ===
+  function setupSVG(){
+    svg = d3.select('#scatter-svg');
+    svg.selectAll('*').remove();
+
+    // Defs
+    var defs = svg.append('defs');
+    var filter = defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
+    filter.append('feGaussianBlur').attr('stdDeviation','3').attr('result','blur');
+    var merge = filter.append('feMerge');
+    merge.append('feMergeNode').attr('in','blur');
+    merge.append('feMergeNode').attr('in','SourceGraphic');
+
+    // Plot group
+    gPlot = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    // Grid
+    gGrid = gPlot.append('g').attr('class','grid');
+    gGrid.append('g').attr('class','grid-x').attr('transform','translate(0,' + H + ')').call(
+      d3.axisBottom(xScale).tickValues([80,85,90,95,100]).tickSize(-H).tickFormat('')
+    );
+    gGrid.append('g').attr('class','grid-y').call(
+      d3.axisLeft(yScale).tickValues([10,50,100,500,1000,5000]).tickSize(-W).tickFormat('')
+    );
+
+    // Quadrants
+    gQuadrants = gPlot.append('g').attr('class','quadrants');
+
+    // Regression
+    gRegression = gPlot.append('g').attr('class','regression');
+
+    // Axes
+    gXAxis = gPlot.append('g').attr('class','axis axis-x').attr('transform','translate(0,' + H + ')');
+    gYAxis = gPlot.append('g').attr('class','axis axis-y');
+
+    // Axis labels
+    gPlot.append('text').attr('class','axis-label').attr('x', W/2).attr('y', H + 42).attr('text-anchor','middle').text('Critic Score');
+    gPlot.append('text').attr('class','axis-label').attr('transform','rotate(-90)').attr('x', -H/2).attr('y', -55).attr('text-anchor','middle').text('Price (AU$)');
+
+    // Points
+    gPoints = gPlot.append('g').attr('class','points');
+
+    // Bars SVG
+    barsSvg = d3.select('#bars-svg');
+    barsSvg.selectAll('*').remove();
+    gBars = barsSvg.append('g').attr('transform','translate(105,5)');
+  }
+
+  // === FILTER DATA ===
+  function filterData(){
+    filteredWines = allWines.filter(function(w){
+      if (!activeRegions[w.region]) return false;
+      if (w.vintage !== currentVintage) return false;
+      if (currentType !== 'all' && w.type !== currentType) return false;
+      return true;
+    });
+  }
+
+  // === REGRESSION ===
+  function computeRegression(wines){
+    if (wines.length < 3) return null;
+    var data = wines.map(function(w){ return {x: w.score, y: Math.log(w.price)}; });
+    var n = data.length;
+    var meanX = d3.mean(data, function(d){ return d.x; });
+    var meanY = d3.mean(data, function(d){ return d.y; });
+    var ssXX = d3.sum(data, function(d){ return Math.pow(d.x - meanX, 2); });
+    var ssYY = d3.sum(data, function(d){ return Math.pow(d.y - meanY, 2); });
+    var ssXY = d3.sum(data, function(d){ return (d.x - meanX) * (d.y - meanY); });
+    if (ssXX === 0) return null;
+    var b = ssXY / ssXX;
+    var a = meanY - b * meanX;
+    var r = ssXY / Math.sqrt(ssXX * ssYY);
+    var r2 = r * r;
+    // Standard error for confidence band
+    var residuals = data.map(function(d){ return d.y - (a + b * d.x); });
+    var se = Math.sqrt(d3.sum(residuals, function(e){ return e*e; }) / (n - 2));
+    return {
+      a: a, b: b, r: r, r2: r2, se: se, n: n,
+      predict: function(score){ return Math.exp(a + b * score); }
+    };
+  }
+
+  // === UPDATE ===
+  function update(){
+    filterData();
+    updateScales();
+    updateAxes();
+    updateGrid();
+    updateQuadrants();
+    regression = computeRegression(filteredWines);
+    updateRegression();
+    updatePoints();
+    updateStats();
+    updateRegionalBars();
+    updateValueTable();
+    updateVintageLabel();
+  }
+
+  function updateAxes(){
+    gXAxis.transition().duration(400).call(xAxis);
+    gYAxis.transition().duration(400).call(yAxis);
+  }
+
+  function updateGrid(){
+    gGrid.select('.grid-x').transition().duration(400).call(
+      d3.axisBottom(xScale).tickValues([80,85,90,95,100]).tickSize(-H).tickFormat('')
+    );
+    gGrid.select('.grid-y').transition().duration(400).call(
+      d3.axisLeft(yScale).tickValues(logScale ? [10,50,100,500,1000,5000] : yScale.ticks(6)).tickSize(-W).tickFormat('')
+    );
+  }
+
+  // === QUADRANTS ===
+  function updateQuadrants(){
+    if (filteredWines.length === 0) {
+      gQuadrants.selectAll('*').remove();
+      return;
+    }
+    var medianScore = d3.median(filteredWines, function(d){ return d.score; });
+    var medianPrice = d3.median(filteredWines, function(d){ return d.price; });
+    var sx = xScale(medianScore);
+    var sy = yScale(medianPrice);
+
+    gQuadrants.selectAll('*').remove();
+
+    // Q1: Premium Excellence (top-right: high score, high price)
+    gQuadrants.append('rect').attr('class','quad-bg').attr('x',sx).attr('y',0).attr('width',W-sx).attr('height',sy).attr('fill','#58a6ff');
+    // Q2: Value Excellence (bottom-right: high score, low price)
+    gQuadrants.append('rect').attr('class','quad-bg').attr('x',sx).attr('y',sy).attr('width',W-sx).attr('height',H-sy).attr('fill','#27ae60');
+    // Q3: Overpriced (top-left: low score, high price)
+    gQuadrants.append('rect').attr('class','quad-bg').attr('x',0).attr('y',0).attr('width',sx).attr('height',sy).attr('fill','#e74c3c');
+    // Q4: Budget (bottom-left: low score, low price)
+    gQuadrants.append('rect').attr('class','quad-bg').attr('x',0).attr('y',sy).attr('width',sx).attr('height',H-sy).attr('fill','#8b949e');
+
+    // Quadrant labels
+    gQuadrants.append('text').attr('class','quad-label').attr('x', sx + (W-sx)/2).attr('y', 15).text('Premium');
+    gQuadrants.append('text').attr('class','quad-label').attr('x', sx + (W-sx)/2).attr('y', H - 8).text('Value');
+    gQuadrants.append('text').attr('class','quad-label').attr('x', sx/2).attr('y', 15).text('Overpriced');
+    gQuadrants.append('text').attr('class','quad-label').attr('x', sx/2).attr('y', H - 8).text('Budget');
+
+    // Divider lines
+    gQuadrants.append('line').attr('x1',sx).attr('y1',0).attr('x2',sx).attr('y2',H).attr('stroke','#2a3441').attr('stroke-width',1).attr('stroke-dasharray','3,3').attr('opacity',.5);
+    gQuadrants.append('line').attr('x1',0).attr('y1',sy).attr('x2',W).attr('y2',sy).attr('stroke','#2a3441').attr('stroke-width',1).attr('stroke-dasharray','3,3').attr('opacity',.5);
+  }
+
+  // === REGRESSION LINE ===
+  function updateRegression(){
+    gRegression.selectAll('*').remove();
+    if (!regression) return;
+
+    var xMin = 80, xMax = 100;
+    var yMin = regression.predict(xMin);
+    var yMax = regression.predict(xMax);
+
+    // Clamp to visible range
+    var yDomain = yScale.domain();
+    yMin = Math.max(yDomain[0], yMin);
+    yMax = Math.min(yDomain[1], yMax);
+
+    // Confidence band (±1 SE in log space)
+    var bandPoints = [];
+    var steps = 20;
+    for (var i = 0; i <= steps; i++) {
+      var x = xMin + (xMax - xMin) * i / steps;
+      var logPred = regression.a + regression.b * x;
+      bandPoints.push({x: x, yUpper: Math.exp(logPred + regression.se), yLower: Math.max(yDomain[0], Math.exp(logPred - regression.se))});
+    }
+
+    // Band area
+    var bandPath = 'M' + bandPoints.map(function(p){ return xScale(p.x) + ',' + yScale(Math.min(p.yUpper, yDomain[1])); }).join('L');
+    bandPath += 'L' + bandPoints.reverse().map(function(p){ return xScale(p.x) + ',' + yScale(p.yLower); }).join('L') + 'Z';
+
+    gRegression.append('path').attr('class','regression-band').attr('d', bandPath);
+
+    // Regression line
+    var linePath = 'M' + xScale(xMin) + ',' + yScale(yMin) + 'L' + xScale(xMax) + ',' + yScale(yMax);
+    var regLine = gRegression.append('path').attr('class','regression-line').attr('d', linePath);
+    var totalLen = regLine.node().getTotalLength();
+    regLine.attr('stroke-dasharray', totalLen + ' ' + totalLen)
+           .attr('stroke-dashoffset', totalLen)
+           .transition().duration(600).ease(d3.easeCubicOut)
+           .attr('stroke-dashoffset', 0)
+           .on('end', function(){ d3.select(this).attr('stroke-dasharray','6,4'); });
+  }
+
+  // === POINTS ===
+  function updatePoints(){
+    var dots = gPoints.selectAll('.dot').data(filteredWines, function(d){ return d.id; });
+
+    dots.exit()
+      .transition().duration(300)
+      .attr('r', 0)
+      .remove();
+
+    var enterDots = dots.enter().append('circle')
+      .attr('class', 'dot')
+      .attr('r', 0)
+      .attr('cx', function(d){ return xScale(d.score); })
+      .attr('cy', function(d){ return yScale(d.price); })
+      .attr('fill', function(d){ return d.regionColor; })
+      .attr('fill-opacity', 0.6)
+      .attr('stroke', function(d){ return d.regionColor; })
+      .attr('stroke-width', 1)
+      .style('pointer-events','all');
+
+    enterDots
+      .on('mouseover', showTooltip)
+      .on('mousemove', moveTooltip)
+      .on('mouseout', hideTooltip)
+      .on('click', function(event, d){ selectWine(d); });
+
+    var merged = enterDots.merge(dots);
+
+    merged.transition().duration(500).ease(d3.easeCubicInOut)
+      .attr('r', function(d){
+        if (selectedWine && d.id === selectedWine.id) return 7;
+        if (highlightValues && isValuePick(d)) return 6;
+        return 4.5;
+      })
+      .attr('cx', function(d){ return xScale(d.score); })
+      .attr('cy', function(d){ return yScale(d.price); })
+      .attr('fill', function(d){ return d.regionColor; })
+      .attr('fill-opacity', function(d){
+        if (selectedWine && d.id === selectedWine.id) return 1;
+        if (highlightValues && isValuePick(d)) return 0.9;
+        return 0.55;
+      })
+      .attr('stroke', function(d){
+        if (selectedWine && d.id === selectedWine.id) return '#c9a060';
+        return d.regionColor;
+      })
+      .attr('stroke-width', function(d){
+        if (selectedWine && d.id === selectedWine.id) return 2.5;
+        return 1;
+      })
+      .attr('class', function(d){
+        var cls = 'dot';
+        if (selectedWine && d.id === selectedWine.id) cls += ' selected';
+        if (highlightValues && isValuePick(d)) cls += ' value-highlight';
+        return cls;
+      });
+  }
+
+  function isValuePick(d){
+    if (!regression) return false;
+    if (d.score < 90) return false;
+    var predicted = regression.predict(d.score);
+    var ratio = predicted / d.price;
+    return ratio > 1.3;
+  }
+
+  // === STATS ===
+  function updateStats(){
+    var n = filteredWines.length;
+    d3.select('#stat-count').text(n);
+    if (n === 0) {
+      ['stat-mean-score','stat-median-price','stat-correlation','stat-r2','stat-elasticity'].forEach(function(id){
+        d3.select('#' + id).text('—');
+      });
+      return;
+    }
+    var meanScore = d3.mean(filteredWines, function(d){ return d.score; });
+    var medianPrice = d3.median(filteredWines, function(d){ return d.price; });
+    d3.select('#stat-mean-score').text(meanScore.toFixed(1));
+    d3.select('#stat-median-price').text('AU$' + Math.round(medianPrice));
+    if (regression) {
+      d3.select('#stat-correlation').text(regression.r.toFixed(3));
+      d3.select('#stat-r2').text(regression.r2.toFixed(3));
+      d3.select('#stat-elasticity').text('×' + Math.exp(regression.b).toFixed(2) + '/pt');
+    } else {
+      d3.select('#stat-correlation').text('—');
+      d3.select('#stat-r2').text('—');
+      d3.select('#stat-elasticity').text('—');
+    }
+  }
+
+  // === SELECTED WINE PANEL ===
+  function selectWine(d){
+    if (selectedWine && selectedWine.id === d.id) {
+      selectedWine = null;
+    } else {
+      selectedWine = d;
+    }
+    updatePoints();
+    updateSelectedPanel();
+  }
+
+  function updateSelectedPanel(){
+    var panel = d3.select('#selected-wine-panel');
+    if (!selectedWine) {
+      panel.html('<h3>Selected Wine</h3><p class="hint">Click a point on the chart</p>');
+      return;
+    }
+    var d = selectedWine;
+    var reg = regression ? regression.predict(d.score) : null;
+    var valueIdx = reg ? reg / d.price : null;
+    var valueClass = 'fair';
+    var valueText = '—';
+    if (valueIdx) {
+      if (valueIdx > 1.3) { valueClass = 'excellent'; valueText = 'Excellent value (' + valueIdx.toFixed(2) + '×)'; }
+      else if (valueIdx > 1.1) { valueClass = 'good'; valueText = 'Good value (' + valueIdx.toFixed(2) + '×)'; }
+      else if (valueIdx > 0.9) { valueClass = 'fair'; valueText = 'Fair price (' + valueIdx.toFixed(2) + '×)'; }
+      else { valueClass = 'overpriced'; valueText = 'Premium (' + valueIdx.toFixed(2) + '×)'; }
+    }
+    var fairPrice = reg ? 'AU$' + Math.round(reg) : '—';
+    var html = '<h3>' + d.name + '</h3>';
+    html += '<div class="sw-row"><span class="sw-label">Region</span><span class="sw-value" style="color:' + d.regionColor + '">' + d.region + '</span></div>';
+    html += '<div class="sw-row"><span class="sw-label">Vintage</span><span class="sw-value">' + d.vintage + ' (' + d.vintageLabel + ')</span></div>';
+    html += '<div class="sw-row"><span class="sw-label">Type</span><span class="sw-value">' + d.type + '</span></div>';
+    html += '<div class="sw-row"><span class="sw-label">Critic Score</span><span class="sw-value">' + d.score + '</span></div>';
+    html += '<div class="sw-row"><span class="sw-label">Price</span><span class="sw-value">AU$' + d.price + '</span></div>';
+    html += '<div class="sw-row"><span class="sw-label">Fair Price</span><span class="sw-value">' + fairPrice + '</span></div>';
+    html += '<div class="sw-row"><span class="sw-label">Value Rating</span><span class="sw-value ' + valueClass + '">' + valueText + '</span></div>';
+    panel.html(html);
+  }
+
+  // === REGIONAL BARS ===
+  function updateRegionalBars(){
+    gBars.selectAll('*').remove();
+    var regionStats = REGIONS.filter(function(r){ return activeRegions[r.name]; }).map(function(r){
+      var wines = filteredWines.filter(function(w){ return w.region === r.name; });
+      return {
+        name: r.name,
+        color: r.color,
+        meanPrice: wines.length ? d3.mean(wines, function(d){ return d.price; }) : 0,
+        meanScore: wines.length ? d3.mean(wines, function(d){ return d.score; }) : 0,
+        count: wines.length
+      };
+    }).filter(function(d){ return d.count > 0; }).sort(function(a,b){ return b.meanPrice - a.meanPrice; });
+
+    if (regionStats.length === 0) return;
+
+    var barH = 22, gap = 6;
+    var totalH = regionStats.length * (barH + gap) - gap;
+    var maxPrice = d3.max(regionStats, function(d){ return d.meanPrice; });
+    var barW = 280;
+    var scale = d3.scaleLinear().domain([0, maxPrice]).range([0, barW]);
+
+    var groups = gBars.selectAll('.bar-group').data(regionStats).enter().append('g')
+      .attr('class','bar-group')
+      .attr('transform', function(d,i){ return 'translate(0,' + i * (barH + gap) + ')'; });
+
+    groups.append('text').attr('class','bar-label').attr('x', -8).attr('y', barH/2 + 4).attr('text-anchor','end').text(function(d){ return d.name; });
+    groups.append('rect').attr('class','bar-bg').attr('x', 0).attr('y', 0).attr('width', barW).attr('height', barH).attr('rx', 3);
+    groups.append('rect').attr('class','bar-fill').attr('x', 0).attr('y', 0).attr('width', 0).attr('height', barH).attr('rx', 3).attr('fill', function(d){ return d.color; }).attr('opacity', 0.7);
+    groups.append('text').attr('class','bar-value').attr('x', function(d){ return scale(d.meanPrice) + 6; }).attr('y', barH/2 + 4).text(function(d){ return 'AU$' + Math.round(d.meanPrice) + ' · ' + d.meanScore.toFixed(1); });
+
+    // Animate bars
+    gBars.selectAll('.bar-fill').transition().duration(600).ease(d3.easeCubicOut).attr('width', function(d){ return scale(d.meanPrice); });
+
+    // Update bars SVG height
+    barsSvg.attr('viewBox', '0 0 400 ' + (totalH + 15));
+  }
+
+  // === VALUE TABLE ===
+  function updateValueTable(){
+    var container = d3.select('#value-table-container');
+    if (!regression || filteredWines.length === 0) {
+      container.html('<p class="hint">No data available</p>');
+      return;
+    }
+
+    var valueWines = filteredWines.filter(function(d){ return d.score >= 90; }).map(function(d){
+      var predicted = regression.predict(d.score);
+      return { wine: d, valueIndex: predicted / d.price };
+    }).sort(function(a,b){ return b.valueIndex - a.valueIndex; }).slice(0, 15);
+
+    if (valueWines.length === 0) {
+      container.html('<p class="hint">No wines with score ≥ 90 in current selection</p>');
+      return;
+    }
+
+    var html = '<table id="value-table"><thead><tr><th>#</th><th>Wine</th><th>Region</th><th>Score</th><th>Price</th><th>Value</th></tr></thead><tbody>';
+    valueWines.forEach(function(item, i){
+      var d = item.wine;
+      html += '<tr>';
+      html += '<td class="vt-rank">' + (i+1) + '</td>';
+      html += '<td class="vt-wine">' + d.name + '</td>';
+      html += '<td class="vt-region">' + d.region + '</td>';
+      html += '<td class="vt-score">' + d.score + '</td>';
+      html += '<td class="vt-price">AU$' + d.price + '</td>';
+      html += '<td>' + item.valueIndex.toFixed(2) + '×</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    container.html(html);
+  }
+
+  // === TOOLTIP ===
+  function showTooltip(event, d){
+    var tooltip = d3.select('#tooltip');
+    tooltip.style('display','block');
+    tooltip.html('<div class="tt-name">' + d.name + '</div><div class="tt-detail">' +
+      d.region + ' · ' + d.vintage + ' (' + d.vintageLabel + ')<br>' +
+      'Score: ' + d.score + ' · Price: AU$' + d.price + '<br>' +
+      'Type: ' + d.type + '</div>');
+    moveTooltip(event);
+  }
+  function moveTooltip(event){
+    var tooltip = d3.select('#tooltip');
+    var x = event.clientX + 12;
+    var y = event.clientY + 12;
+    var tw = tooltip.node().offsetWidth;
+    var th = tooltip.node().offsetHeight;
+    if (x + tw > window.innerWidth) x = event.clientX - tw - 12;
+    if (y + th > window.innerHeight) y = event.clientY - th - 12;
+    tooltip.style('left', x + 'px').style('top', y + 'px');
+  }
+  function hideTooltip(){
+    d3.select('#tooltip').style('display','none');
+  }
+
+  // === VINTAGE LABEL ===
+  function updateVintageLabel(){
+    d3.select('#vintage-label').text(currentVintage);
+    d3.select('#vintage-quality').text(VINTAGES[currentVintage].label);
+  }
+
+  // === FILTER SETUP ===
+  function setupFilters(){
+    // Region chips
+    var container = d3.select('#region-filters');
+    REGIONS.forEach(function(region){
+      activeRegions[region.name] = true;
+      var chip = container.append('span').attr('class','region-chip').attr('data-region', region.name);
+      chip.append('span').attr('class','dot').style('background', region.color);
+      chip.append('span').text(region.name);
+      chip.on('click', function(){
+        activeRegions[region.name] = !activeRegions[region.name];
+        d3.select(this).classed('inactive', !activeRegions[region.name]);
+        update();
+      });
+    });
+
+    // Vintage slider
+    d3.select('#vintage-slider').on('input', function(){
+      currentVintage = parseInt(this.value);
+      update();
+    });
+
+    // Play button
+    d3.select('#play-btn').on('click', function(){
+      if (playing) {
+        playing = false;
+        clearInterval(playInterval);
+        d3.select(this).text('▶ Play');
+        return;
+      }
+      playing = true;
+      d3.select(this).text('⏸ Pause');
+      var year = currentVintage >= 2023 ? 2015 : currentVintage + 1;
+      playInterval = setInterval(function(){
+        currentVintage = year;
+        d3.select('#vintage-slider').property('value', year);
+        update();
+        year++;
+        if (year > 2023) year = 2015;
+      }, 1500);
+    });
+
+    // Type filter
+    d3.select('#type-filter').on('change', function(){
+      currentType = this.value;
+      update();
+    });
+
+    // Scale toggle
+    d3.select('#scale-toggle').on('click', function(){
+      logScale = !logScale;
+      d3.select(this).text(logScale ? 'Log Scale' : 'Linear Scale');
+      update();
+    });
+
+    // Find values
+    d3.select('#find-values-btn').on('click', function(){
+      highlightValues = !highlightValues;
+      d3.select(this).classed('active', highlightValues);
+      updatePoints();
+    });
+  }
+
+  // === INIT ===
+  function init(){
+    generateData();
+    setupScales();
+    setupSVG();
+    setupFilters();
+    update();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
