@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Wine Trivia Challenge</title>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{
+    background:#0d0a08; color:#e8dccd; font-family:Georgia,'Times New Roman',serif;
+    line-height:1.6; overflow:hidden; height:100vh;
+  }
+  .disclaimer{
+    background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060;
+    padding:0.75rem 1rem; text-align:center; font-size:0.85rem;
+    font-family:system-ui,sans-serif; position:sticky; top:0; z-index:100;
+  }
+  .disclaimer strong{ font-weight:600; }
+
+  /* DESKTOP: canvas fixed full-screen, panels float as overlay HUD */
+  #canvas-container{ position:fixed; inset:0; z-index:0; }
+  canvas{ display:block; width:100%; height:100%; }
+  #ui-layer{
+    position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10;
+  }
+
+  /* Start screen */
+  #start-screen{
+    pointer-events:auto;
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center; max-width:520px; width:90%;
+  }
+  #start-screen h1{
+    font-size:clamp(2rem,5vw,3rem); color:#c9a060; margin-bottom:0.3rem;
+    text-shadow:0 0 30px rgba(201,160,96,0.4); letter-spacing:0.03em;
+  }
+  #start-screen .subtitle{ color:#8b7355; font-size:1.1rem; margin-bottom:1.5rem; font-style:italic; }
+  .btn{
+    pointer-events:auto; cursor:pointer; border:none; font-family:Georgia,serif;
+    font-size:1.05rem; padding:0.7rem 1.8rem; border-radius:8px;
+    background:linear-gradient(135deg,#8b6914,#c9a060); color:#1a1209;
+    font-weight:bold; letter-spacing:0.02em; transition:all 0.2s;
+    box-shadow:0 4px 20px rgba(201,160,96,0.3);
+  }
+  .btn:hover{ transform:translateY(-2px); box-shadow:0 6px 28px rgba(201,160,96,0.5); }
+  .btn:active{ transform:translateY(0); }
+  .btn-secondary{
+    background:transparent; border:1px solid #5a4a30; color:#c9a060;
+    box-shadow:none; padding:0.6rem 1.4rem; font-size:0.9rem;
+  }
+  .btn-secondary:hover{ background:rgba(90,74,48,0.2); }
+
+  /* Quiz screen */
+  #quiz-screen{ pointer-events:none; }
+  #hud-top{
+    pointer-events:auto;
+    position:absolute; top:12px; left:12px; right:12px;
+    display:flex; justify-content:space-between; align-items:center;
+    flex-wrap:wrap; gap:0.5rem;
+  }
+  .hud-pill{
+    background:rgba(20,14,10,0.85); border:1px solid #3a3020; border-radius:20px;
+    padding:0.35rem 0.9rem; font-size:0.82rem; font-family:system-ui,sans-serif;
+    color:#c9a060; display:flex; align-items:center; gap:0.4rem;
+  }
+  .hud-pill .label{ color:#8b7355; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .hud-pill .value{ color:#e8dccd; font-weight:bold; }
+  #progress-bar{
+    position:absolute; top:50px; left:12px; right:12px; height:3px;
+    background:rgba(58,48,32,0.5); border-radius:2px; overflow:hidden; pointer-events:none;
+  }
+  #progress-fill{
+    height:100%; background:linear-gradient(90deg,#8b6914,#c9a060,#e8b080);
+    transition:width 0.4s ease; width:0%;
+  }
+
+  #question-area{
+    pointer-events:auto;
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:90%; max-width:640px; text-align:center;
+  }
+  .q-category{
+    display:inline-block; font-size:0.72rem; padding:0.2rem 0.7rem; border-radius:12px;
+    background:rgba(90,74,48,0.3); border:1px solid #5a4a30; color:#c9a060;
+    margin-bottom:0.8rem; font-family:system-ui,sans-serif; text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+  .q-text{
+    font-size:clamp(1.15rem,2.5vw,1.5rem); color:#e8dccd; margin-bottom:1.5rem;
+    line-height:1.5;
+  }
+  #answers{
+    display:grid; grid-template-columns:1fr 1fr; gap:0.7rem;
+  }
+  .answer-btn{
+    pointer-events:auto; cursor:pointer; border:1px solid #3a3020;
+    background:rgba(20,14,10,0.8); color:#e8dccd; font-family:Georgia,serif;
+    font-size:0.95rem; padding:0.8rem 1rem; border-radius:10px;
+    text-align:left; transition:all 0.2s; position:relative; overflow:hidden;
+    display:flex; align-items:center; gap:0.6rem;
+  }
+  .answer-btn .letter{
+    width:26px; height:26px; border-radius:50%; flex-shrink:0;
+    border:1px solid #5a4a30; display:flex; align-items:center; justify-content:center;
+    font-size:0.78rem; font-weight:bold; color:#c9a060; font-family:system-ui,sans-serif;
+  }
+  .answer-btn:hover{ border-color:#8b6914; background:rgba(40,30,20,0.9); }
+  .answer-btn.correct{
+    border-color:#4a8030; background:rgba(40,60,20,0.6);
+  }
+  .answer-btn.correct .letter{ border-color:#6aaa40; color:#8add50; }
+  .answer-btn.wrong{
+    border-color:#aa3020; background:rgba(60,20,15,0.6);
+  }
+  .answer-btn.wrong .letter{ border-color:#cc4030; color:#ee5040; }
+  .answer-btn.disabled{ pointer-events:none; opacity:0.6; }
+  .answer-btn.reveal-correct{
+    border-color:#4a8030; background:rgba(40,60,20,0.4);
+    animation:revealPulse 0.5s ease;
+  }
+  @keyframes revealPulse{
+    0%{ box-shadow:0 0 0 0 rgba(106,170,64,0.6); }
+    100%{ box-shadow:0 0 0 12px rgba(106,170,64,0); }
+  }
+
+  /* Streak indicator */
+  #streak-indicator{
+    position:absolute; top:48px; left:50%; transform:translateX(-50%);
+    font-size:0.75rem; font-family:system-ui,sans-serif; color:#c9a060;
+    pointer-events:none; opacity:0; transition:opacity 0.3s;
+    background:rgba(20,14,10,0.85); padding:0.2rem 0.7rem; border-radius:12px;
+    border:1px solid #3a3020;
+  }
+  #streak-indicator.show{ opacity:1; }
+
+  /* Timer ring */
+  #timer-ring{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    pointer-events:none;
+  }
+
+  /* Results screen */
+  #results-screen{
+    pointer-events:auto;
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center; width:90%; max-width:480px;
+  }
+  #results-screen h2{
+    font-size:clamp(1.6rem,4vw,2.2rem); color:#c9a060; margin-bottom:0.3rem;
+  }
+  .result-score{
+    font-size:clamp(2.5rem,6vw,3.5rem); color:#e8dccd; margin:0.5rem 0;
+    text-shadow:0 0 20px rgba(201,160,96,0.3);
+  }
+  .result-rank{
+    font-size:1.2rem; color:#c9a060; margin-bottom:0.5rem; font-style:italic;
+  }
+  .result-stats{
+    display:flex; justify-content:center; gap:1.5rem; margin:1rem 0 1.5rem;
+    flex-wrap:wrap;
+  }
+  .result-stat{ text-align:center; }
+  .result-stat .num{ font-size:1.4rem; color:#e8dccd; font-weight:bold; }
+  .result-stat .lbl{ font-size:0.72rem; color:#8b7355; text-transform:uppercase; letter-spacing:0.05em; }
+  .result-breakdown{
+    text-align:left; margin:1rem 0; font-family:system-ui,sans-serif; font-size:0.82rem;
+    max-height:200px; overflow-y:auto;
+  }
+  .breakdown-item{
+    display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0;
+    border-bottom:1px solid rgba(58,48,32,0.3);
+  }
+  .breakdown-item .icon{ width:20px; text-align:center; flex-shrink:0; }
+  .breakdown-item .q{ flex:1; color:#8b7355; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .breakdown-item .r{ font-size:0.72rem; flex-shrink:0; }
+  .result-actions{ display:flex; gap:0.7rem; justify-content:center; flex-wrap:wrap; }
+
+  /* MOBILE */
+  @media (max-width: 768px){
+    html, body{ overflow-y:auto; height:auto; }
+    #canvas-container{
+      position:relative !important; width:100% !important; height:50vh !important;
+      min-height:300px; max-height:450px; inset:auto !important; z-index:0;
+    }
+    #ui-layer{ position:relative !important; inset:auto !important; pointer-events:auto; }
+    #hud-top{
+      position:relative !important; top:auto !important; left:auto !important; right:auto !important;
+      padding:0.6rem 0.8rem;
+    }
+    #progress-bar{
+      position:relative !important; top:auto !important; left:auto !important; right:auto !important;
+      margin:0.4rem 0.8rem;
+    }
+    #streak-indicator{
+      position:relative !important; top:auto !important; left:auto !important;
+      transform:none; margin:0.3rem auto; display:inline-block;
+    }
+    #question-area{
+      position:relative !important; top:auto !important; left:auto !important;
+      transform:none; padding:1rem 0.8rem; margin-top:0.5rem;
+    }
+    #answers{ grid-template-columns:1fr; }
+    #start-screen, #results-screen{
+      position:relative !important; top:auto !important; left:auto !important;
+      transform:none; padding:1.5rem 0.8rem;
+    }
+    #timer-ring{ display:none; }
+  }
+</style>
+</head>
+<body>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <canvas id="bg-canvas"></canvas>
+</div>
+
+<div id="ui-layer">
+  <!-- Start Screen -->
+  <div id="start-screen">
+    <h1>🍷 Wine Trivia Challenge</h1>
+    <div class="subtitle">Test your knowledge of wine history, chemistry, geography & culture</div>
+    <button class="btn" id="start-btn">Begin Challenge</button>
+  </div>
+
+  <!-- Quiz Screen -->
+  <div id="quiz-screen" style="display:none;">
+    <div id="hud-top">
+      <div class="hud-pill"><span class="label">Score</span><span class="value" id="score-val">0</span></div>
+      <div class="hud-pill"><span class="label">Question</span><span class="value" id="q-num">1</span>/<span id="q-total">12</span></div>
+      <div class="hud-pill"><span class="label">Streak</span><span class="value" id="streak-val">0</span></div>
+    </div>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <div id="streak-indicator">🔥 <span id="streak-text">2x Streak!</span></div>
+    <div id="question-area">
+      <div class="q-category" id="q-category">Category</div>
+      <div class="q-text" id="q-text">Question text here</div>
+      <div id="answers"></div>
+    </div>
+  </div>
+
+  <!-- Results Screen -->
+  <div id="results-screen" style="display:none;">
+    <h2>Challenge Complete</h2>
+    <div class="result-score" id="final-score">0/12</div>
+    <div class="result-rank" id="final-rank">Rank</div>
+    <div class="result-stats">
+      <div class="result-stat"><div class="num" id="stat-correct">0</div><div class="lbl">Correct</div></div>
+      <div class="result-stat"><div class="num" id="stat-wrong">0</div><div class="lbl">Wrong</div></div>
+      <div class="result-stat"><div class="num" id="stat-best-streak">0</div><div class="lbl">Best Streak</div></div>
+    </div>
+    <div class="result-breakdown" id="result-breakdown"></div>
+    <div class="result-actions">
+      <button class="btn" id="play-again-btn">Play Again</button>
+      <button class="btn btn-secondary" id="share-btn">Copy Results</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ============================
+// QUESTION DATABASE
+// ============================
+const QUESTIONS = [
+  {
+    cat: "Geography",
+    q: "Which country produces the most wine by volume globally?",
+    a: ["France", "Italy", "Spain", "United States"],
+    correct: 1,
+    fact: "Italy has been the world's largest wine producer by volume for most years, though France occasionally overtakes it in difficult vintages."
+  },
+  {
+    cat: "Chemistry",
+    q: "What is the primary acid in grapes and wine?",
+    a: ["Citric acid", "Malic acid", "Tartaric acid", "Acetic acid"],
+    correct: 2,
+    fact: "Tartaric acid is the dominant acid in grapes and wine, rarely found in other fruits. Malic acid is secondary."
+  },
+  {
+    cat: "History",
+    q: "The oldest known archaeological evidence of winemaking dates to approximately 6000 BC. In which country?",
+    a: ["Egypt", "Greece", "Georgia", "Iran"],
+    correct: 2,
+    fact: "Residue analysis of pottery from Shulaveri-Shomu culture sites in Georgia revealed the earliest chemical evidence of grape wine production, around 6000 BC."
+  },
+  {
+    cat: "Geography",
+    q: "Which of these is NOT one of the classic Bordeaux left-bank communes?",
+    a: ["Pauillac", "Saint-Julien", "Pomerol", "Margaux"],
+    correct: 2,
+    fact: "Pomerol is on the Right Bank of the Dordogne river, known for Merlot-dominant blends like Pétrus. The others are on the Left Bank (Garonne), known for Cabernet Sauvignon."
+  },
+  {
+    cat: "Chemistry",
+    q: "Malolactic fermentation converts malic acid into what compound?",
+    a: ["Lactic acid", "Citric acid", "Succinic acid", "Acetic acid"],
+    correct: 0,
+    fact: "Oenococcus oeni bacteria convert harsh malic acid (apple-like) into softer lactic acid (milky), reducing acidity and adding buttery notes."
+  },
+  {
+    cat: "Culture",
+    q: "What does the term 'terroir' encompass in winemaking?",
+    a: ["Only the soil type", "Only the grape variety", "Soil, climate, topography & human practice", "Only the vintage year"],
+    correct: 2,
+    fact: "Terroir is the holistic concept that includes soil, climate, topography, and human cultivation practices that give a wine its unique sense of place."
+  },
+  {
+    cat: "Geography",
+    q: "The Mosel wine region is famous for steep slate slopes along which river?",
+    a: ["Rhône", "Rhine", "Loire", "Danube"],
+    correct: 1,
+    fact: "The Mosel River (a Rhine tributary) features some of the steepest vineyards in the world, with slopes up to 65° on blue Devonian slate."
+  },
+  {
+    cat: "Chemistry",
+    q: "What causes the 'tears' or 'legs' that form on the inside of a wine glass?",
+    a: ["Glycerol content", "The Marangoni effect from ethanol evaporation", "Sugar residue on the glass", "Tannin adhesion to glass"],
+    correct: 1,
+    fact: "The Gibbs-Marangoni effect: ethanol evaporates faster than water, creating surface-tension gradients that drive film climbing and tear formation. Higher alcohol = more pronounced tears."
+  },
+  {
+    cat: "History",
+    q: "Which event devastated European vineyards in the late 19th century?",
+    a: ["Powdery mildew", "Phylloxera (aphid root louse)", "Brettanomyces outbreak", "The Great French Wine Blight of 1880"],
+    correct: 1,
+    fact: "Phylloxera, an aphid native to North America, destroyed nearly all European vineyards from the 1860s-1890s. The solution was grafting European vines onto resistant American rootstocks."
+  },
+  {
+    cat: "Culture",
+    q: "In traditional méthode champenoise, what is 'remuage' (riddling)?",
+    a: ["Blending different vintages", "Slowly rotating bottles to collect yeast sediment in the neck", "Adding the dosage (sugar)", "Second fermentation in tank"],
+    correct: 1,
+    fact: "Remuage gradually rotates and tilts bottles over weeks so yeast lees slide into the bottle neck, ready for dégorgement (freezing and ejecting the sediment plug)."
+  },
+  {
+    cat: "Geography",
+    q: "Which New Zealand region is globally renowned for its pungent Sauvignon Blanc?",
+    a: ["Hawke's Bay", "Central Otago", "Marlborough", "Wairarapa"],
+    correct: 2,
+    fact: "Marlborough on South Island produces distinctive, intensely aromatic Sauvignon Blanc with passionfruit, gooseberry and herbaceous notes that revolutionized the variety's global reputation."
+  },
+  {
+    cat: "Chemistry",
+    q: "What does a wine's 'brix' reading measure?",
+    a: ["pH level", "Sugar content of the must", "Alcohol percentage", "Total acidity"],
+    correct: 1,
+    fact: "Degrees Brix measures sugar concentration in grape must. Roughly 1 Brix ≈ 0.55% potential alcohol. Grapes are typically harvested at 20-28 Brix depending on style."
+  },
+  {
+    cat: "History",
+    q: "The 1976 'Judgment of Paris' was a blind tasting where California wines beat French wines. Who organized it?",
+    a: ["Robert Mondavi", "Steven Spurrier", "Hugh Johnson", "Jancis Robinson"],
+    correct: 1,
+    fact: "Steven Spurrier, a British wine merchant in Paris, organized the blind tasting where Napa Valley wines triumphed over top Bordeaux and Burgundy. It was a watershed for New World wine recognition."
+  },
+  {
+    cat: "Culture",
+    q: "What grape variety is the primary component of red Burgundy?",
+    a: ["Cabernet Sauvignon", "Pinot Noir", "Syrah", "Gamay"],
+    correct: 1,
+    fact: "Pinot Noir is the sole red grape of Burgundy's Côte d'Or, expressing terroir variation like no other variety — from the earthy intensity of Gevrey-Chambertin to the silk of Chambolle-Musigny."
+  },
+  {
+    cat: "Geography",
+    q: "Barossa Valley in South Australia is most famous for which red variety?",
+    a: ["Shiraz (Syrah)", "Cabernet Sauvignon", "Merlot", "Grenache"],
+    correct: 0,
+    fact: "Barossa Valley Shiraz from old bush vines (some 150+ years old) produces powerful, richly textured wines with dark fruit, spice and chocolate notes. The region also has significant old-vine Grenache."
+  },
+  {
+    cat: "Chemistry",
+    q: "What is 'Brettanomyces' commonly associated with in wine?",
+    a: ["Fresh floral aromas", "Barnyard, medicinal, or leather off-notes", "Enhanced tannin structure", "Effervescence"],
+    correct: 1,
+    fact: "Brettanomyces bruxellensis yeast produces 4-ethylphenol and 4-ethylguaiacol, giving 'bretty' wines aromas of barnyard, band-aid, horse, and leather. At low levels some consider it complexity; at high levels it's a fault."
+  },
+  {
+    cat: "Culture",
+    q: "Which of these serving temperatures is most appropriate for a full-bodied red wine like Barossa Shiraz?",
+    a: ["4-7°C (refrigerator cold)", "8-12°C (light white)", "16-18°C (cellar cool)", "22-25°C (room warm)"],
+    correct: 2,
+    fact: "Full-bodied reds are best at 16-18°C — cool enough to structure the tannins and alcohol, warm enough to release aromatics. 'Room temperature' often means too warm."
+  },
+  {
+    cat: "History",
+    q: "Who is credited with scientifically demonstrating that fermentation is caused by living microorganisms (1857)?",
+    a: ["Antoine Lavoisier", "Louis Pasteur", "Joseph Gay-Lussac", "Carl von Frisch"],
+    correct: 1,
+    fact: "Louis Pasteur proved that yeast causes fermentation, not spontaneous generation. His 1857 paper 'Mémoire sur la fermentation alcoolique' revolutionized both microbiology and winemaking."
+  },
+  {
+    cat: "Geography",
+    q: "Which Italian region is home to the 'Super Tuscan' wine movement?",
+    a: ["Piedmont", "Tuscany", "Veneto", "Sicily"],
+    correct: 1,
+    fact: "Tuscan producers like Antinori (Tignanello, 1971) rebelled against DOC rules by using non-traditional varieties (Cabernet Sauvignon, Merlot) and French oak. They initially had to label as Vino da Tavola (table wine)."
+  },
+  {
+    cat: "Culture",
+    q: "What does 'cork taint' (TCA) smell like in a wine?",
+    a: ["Rotten eggs", "Wet cardboard or damp basement", "Burnt rubber", "Vinegar"],
+    correct: 1,
+    fact: "2,4,6-trichloroanisole (TCA) is a chemical compound produced by microbes interacting with chlorine. Even tiny amounts (a few parts per trillion) cause musty, wet-cardboard aromas that strip fruit character."
+  },
+  {
+    cat: "Chemistry",
+    q: "During red wine fermentation, what compound gives red wines their colour?",
+    a: ["Tannins", "Anthocyanins", "Carotenoids", "Chlorophyll"],
+    correct: 1,
+    fact: "Anthocyanins are water-soluble pigments located in grape skins. During maceration they are extracted into the wine. Their colour is pH-dependent — redder at low pH, bluer-purple at higher pH."
+  },
+  {
+    cat: "Geography",
+    q: "Which of these wine regions is located in the Southern Hemisphere?",
+    a: ["Douro Valley", "Mendoza", "Rioja", "Beaujolais"],
+    correct: 1,
+    fact: "Mendoza, Argentina, sits at the foot of the Andes at 600-1100m elevation. It produces exceptional Malbec from high-altitude vineyards where intense sunlight and cool nights create concentrated, balanced wines."
+  },
+  {
+    cat: "History",
+    q: "During Prohibition (1920-1933) in the United States, what exception allowed some winemaking to continue?",
+    a: ["Only sacramental/religious wine", "Only wines below 5% ABV", "Only home winemaking (up to 200 gallons)", "Both A and C"],
+    correct: 3,
+    fact: "The Volstead Act allowed sacramental wine for religious use and home production of up to 200 gallons of non-intoxicating cider/fruit juice. California's vineyard area actually grew during Prohibition to supply home winemakers."
+  },
+  {
+    cat: "Culture",
+    q: "Which wine glass shape is generally recommended for full-bodied red wines like Cabernet Sauvignon?",
+    a: ["Small narrow bowl", "Large wide bowl", "Flute shape", "Coupe shape"],
+    correct: 1,
+    fact: "A large, wide-bowled glass allows more surface area for aeration, letting complex aromatics develop and softening tannins through oxygen contact. The wider bowl also lets you appreciate the wine's bouquet."
+  }
+];
+
+// ============================
+// GAME STATE
+// ============================
+var state = {
+  currentQ: 0,
+  score: 0,
+  streak: 0,
+  bestStreak: 0,
+  answers: [],
+  shuffledQuestions: [],
+  answered: false,
+  startTime: 0
+};
+
+var TOTAL_QUESTIONS = 12;
+
+// ============================
+// CANVAS BACKGROUND
+// ============================
+var canvas = document.getElementById('bg-canvas');
+var ctx = canvas.getContext('2d');
+var W = 0, H = 0, DPR = window.devicePixelRatio || 1;
+
+function resizeCanvas(){
+  var rect = canvas.getBoundingClientRect();
+  W = rect.width;
+  H = rect.height;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  ctx.scale(DPR, DPR);
+}
+
+// Wine-colored particles floating up like bubbles in a glass
+var particles = [];
+var MAX_PARTICLES = 80;
+
+function Particle(){
+  this.reset();
+  this.y = Math.random() * H;
+}
+Particle.prototype.reset = function(){
+  this.x = Math.random() * W;
+  this.y = H + 10;
+  this.r = 2 + Math.random() * 5;
+  this.vy = 0.3 + Math.random() * 0.8;
+  this.vx = (Math.random() - 0.5) * 0.3;
+  this.opacity = 0.15 + Math.random() * 0.25;
+  this.hue = 340 + Math.random() * 30; // wine red range
+  this.wobble = Math.random() * Math.PI * 2;
+  this.wobbleSpeed = 0.02 + Math.random() * 0.02;
+  this.life = 1;
+};
+Particle.prototype.update = function(){
+  this.y -= this.vy;
+  this.wobble += this.wobbleSpeed;
+  this.x += this.vx + Math.sin(this.wobble) * 0.3;
+  if (this.y < -20) this.reset();
+  if (this.x < -20) this.x = W + 10;
+  if (this.x > W + 20) this.x = -10;
+};
+Particle.prototype.draw = function(){
+  ctx.beginPath();
+  ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+  ctx.fillStyle = 'hsla(' + this.hue + ', 50%, 40%, ' + this.opacity + ')';
+  ctx.fill();
+  // glow
+  ctx.beginPath();
+  ctx.arc(this.x, this.y, this.r * 2, 0, Math.PI * 2);
+  ctx.fillStyle = 'hsla(' + this.hue + ', 50%, 40%, ' + (this.opacity * 0.2) + ')';
+  ctx.fill();
+};
+
+// Burst particles (for correct answers)
+var burstParticles = [];
+
+function createBurst(x, y, color, count){
+  count = count || 30;
+  for (var i = 0; i < count; i++){
+    var angle = (Math.PI * 2 * i) / count;
+    var speed = 2 + Math.random() * 4;
+    burstParticles.push({
+      x: x, y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 1,
+      r: 2 + Math.random() * 3,
+      life: 1,
+      decay: 0.015 + Math.random() * 0.01,
+      color: color || 'rgba(138,221,80,0.8)'
+    });
+  }
+}
+
+function animate(){
+  // Clear with slight fade for trail effect
+  ctx.fillStyle = 'rgba(13, 10, 8, 0.15)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw particles
+  for (var i = 0; i < particles.length; i++){
+    particles[i].update();
+    particles[i].draw();
+  }
+
+  // Draw burst particles
+  for (var j = burstParticles.length - 1; j >= 0; j--){
+    var b = burstParticles[j];
+    b.x += b.vx;
+    b.y += b.vy;
+    b.vy += 0.15; // gravity
+    b.life -= b.decay;
+    if (b.life <= 0){
+      burstParticles.splice(j, 1);
+      continue;
+    }
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r * b.life, 0, Math.PI * 2);
+    ctx.fillStyle = b.color.replace(/[\d.]+\)$/, (b.life * 0.8) + ')');
+    ctx.fill();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+function initParticles(){
+  particles = [];
+  for (var i = 0; i < MAX_PARTICLES; i++){
+    particles.push(new Particle());
+  }
+}
+
+// ============================
+// GAME LOGIC
+// ============================
+function shuffle(arr){
+  var copy = arr.slice();
+  for (var i = copy.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var temp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = temp;
+  }
+  return copy;
+}
+
+function startGame(){
+  state.currentQ = 0;
+  state.score = 0;
+  state.streak = 0;
+  state.bestStreak = 0;
+  state.answers = [];
+  state.startTime = Date.now();
+  state.shuffledQuestions = shuffle(QUESTIONS).slice(0, TOTAL_QUESTIONS);
+
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('results-screen').style.display = 'none';
+  document.getElementById('quiz-screen').style.display = 'block';
+  document.getElementById('q-total').textContent = TOTAL_QUESTIONS;
+
+  showQuestion();
+}
+
+function showQuestion(){
+  state.answered = false;
+  var q = state.shuffledQuestions[state.currentQ];
+  document.getElementById('q-num').textContent = state.currentQ + 1;
+  document.getElementById('score-val').textContent = state.score;
+  document.getElementById('streak-val').textContent = state.streak;
+  document.getElementById('q-category').textContent = q.cat;
+  document.getElementById('q-text').textContent = q.q;
+  document.getElementById('progress-fill').style.width = ((state.currentQ / TOTAL_QUESTIONS) * 100) + '%';
+
+  // Hide streak indicator
+  document.getElementById('streak-indicator').classList.remove('show');
+
+  // Build answers
+  var answersEl = document.getElementById('answers');
+  answersEl.innerHTML = '';
+  var letters = ['A', 'B', 'C', 'D'];
+  for (var i = 0; i < q.a.length; i++){
+    var btn = document.createElement('div');
+    btn.className = 'answer-btn';
+    btn.setAttribute('data-idx', i);
+    btn.innerHTML = '<span class="letter">' + letters[i] + '</span><span class="text">' + q.a[i] + '</span>';
+    (function(idx){
+      btn.addEventListener('click', function(){
+        selectAnswer(idx, this);
+      });
+    })(i);
+    answersEl.appendChild(btn);
+  }
+}
+
+function selectAnswer(idx, btnEl){
+  if (state.answered) return;
+  state.answered = true;
+
+  var q = state.shuffledQuestions[state.currentQ];
+  var isCorrect = (idx === q.correct);
+  var buttons = document.querySelectorAll('.answer-btn');
+
+  // Disable all buttons
+  for (var i = 0; i < buttons.length; i++){
+    buttons[i].classList.add('disabled');
+  }
+
+  // Mark selected
+  if (isCorrect){
+    btnEl.classList.add('correct');
+    state.score++;
+    state.streak++;
+    if (state.streak > state.bestStreak) state.bestStreak = state.streak;
+
+    // Burst particles at button position
+    var rect = btnEl.getBoundingClientRect();
+    var containerRect = canvas.getBoundingClientRect();
+    var bx = rect.left + rect.width / 2 - containerRect.left;
+    var by = rect.top + rect.height / 2 - containerRect.top;
+    createBurst(bx, by, 'rgba(138,221,80,0.8)', 35);
+
+    // Streak indicator
+    if (state.streak >= 2){
+      var si = document.getElementById('streak-indicator');
+      document.getElementById('streak-text').textContent = state.streak + 'x Streak!';
+      si.classList.add('show');
+      setTimeout(function(){ si.classList.remove('show'); }, 2000);
+    }
+  } else {
+    btnEl.classList.add('wrong');
+    state.streak = 0;
+
+    // Reveal correct answer
+    buttons[q.correct].classList.add('reveal-correct');
+
+    // Burst red at wrong answer
+    rect = btnEl.getBoundingClientRect();
+    containerRect = canvas.getBoundingClientRect();
+    bx = rect.left + rect.width / 2 - containerRect.left;
+    by = rect.top + rect.height / 2 - containerRect.top;
+    createBurst(bx, by, 'rgba(238,80,64,0.8)', 20);
+  }
+
+  // Show fact after a delay
+  var factEl = document.createElement('div');
+  factEl.style.cssText = 'margin-top:1rem;padding:0.7rem 1rem;background:rgba(20,14,10,0.85);border:1px solid #3a3020;border-radius:8px;font-size:0.82rem;color:#8b7355;font-family:system-ui,sans-serif;text-align:left;line-height:1.5;animation:fadeIn 0.4s ease;opacity:0;';
+  factEl.innerHTML = '<strong style="color:#c9a060;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;">Did You Know</strong><br>' + q.fact;
+  document.getElementById('question-area').appendChild(factEl);
+
+  // Fade in
+  setTimeout(function(){
+    factEl.style.opacity = '1';
+  }, 50);
+
+  // Store answer
+  state.answers.push({
+    q: q.q,
+    cat: q.cat,
+    selected: idx,
+    correct: q.correct,
+    isCorrect: isCorrect
+  });
+
+  // Next button
+  setTimeout(function(){
+    var nextBtn = document.createElement('button');
+    nextBtn.className = 'btn';
+    nextBtn.style.cssText = 'margin-top:0.8rem;pointer-events:auto;';
+    if (state.currentQ + 1 >= TOTAL_QUESTIONS){
+      nextBtn.textContent = 'See Results →';
+      nextBtn.addEventListener('click', showResults);
+    } else {
+      nextBtn.textContent = 'Next Question →';
+      nextBtn.addEventListener('click', nextQuestion);
+    }
+    factEl.appendChild(document.createElement('br'));
+    factEl.appendChild(nextBtn);
+  }, 600);
+}
+
+function nextQuestion(){
+  state.currentQ++;
+  showQuestion();
+}
+
+function showResults(){
+  document.getElementById('quiz-screen').style.display = 'none';
+  document.getElementById('results-screen').style.display = 'block';
+  document.getElementById('final-score').textContent = state.score + '/' + TOTAL_QUESTIONS;
+
+  // Determine rank
+  var pct = state.score / TOTAL_QUESTIONS;
+  var rank = '';
+  if (pct >= 0.92) rank = '🍇 Master Sommelier';
+  else if (pct >= 0.75) rank = '🍷 Wine Expert';
+  else if (pct >= 0.58) rank = '🏅 Wine Enthusiast';
+  else if (pct >= 0.42) rank = '📚 Wine Student';
+  else if (pct >= 0.25) rank = '🌱 Wine Novice';
+  else rank = '🥂 Wine Beginner';
+  document.getElementById('final-rank').textContent = rank;
+
+  document.getElementById('stat-correct').textContent = state.score;
+  document.getElementById('stat-wrong').textContent = TOTAL_QUESTIONS - state.score;
+  document.getElementById('stat-best-streak').textContent = state.bestStreak;
+
+  // Breakdown
+  var breakdownEl = document.getElementById('result-breakdown');
+  breakdownEl.innerHTML = '';
+  for (var i = 0; i < state.answers.length; i++){
+    var a = state.answers[i];
+    var item = document.createElement('div');
+    item.className = 'breakdown-item';
+    var icon = a.isCorrect ? '✅' : '❌';
+    var color = a.isCorrect ? '#6aaa40' : '#cc4030';
+    item.innerHTML = '<span class="icon">' + icon + '</span><span class="q">' + (i+1) + '. ' + a.q + '</span><span class="r" style="color:' + color + '">' + (a.isCorrect ? 'Correct' : 'Wrong') + '</span>';
+    breakdownEl.appendChild(item);
+  }
+
+  // Celebrate with burst if good score
+  if (pct >= 0.75){
+    for (var b = 0; b < 5; b++){
+      setTimeout(function(){
+        createBurst(W/2 + (Math.random()-0.5)*200, H/2 + (Math.random()-0.5)*100, 'rgba(201,160,96,0.8)', 40);
+      }, b * 200);
+    }
+  }
+}
+
+// ============================
+// INIT
+// ============================
+function init(){
+  resizeCanvas();
+  initParticles();
+  animate();
+
+  // Add fade-in keyframe
+  var styleEl = document.createElement('style');
+  styleEl.textContent = '@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }';
+  document.head.appendChild(styleEl);
+
+  document.getElementById('start-btn').addEventListener('click', startGame);
+  document.getElementById('play-again-btn').addEventListener('click', startGame);
+  document.getElementById('share-btn').addEventListener('click', function(){
+    var text = '🍷 Wine Trivia Challenge\nScore: ' + state.score + '/' + TOTAL_QUESTIONS + '\nRank: ' + document.getElementById('final-rank').textContent + '\nBest Streak: ' + state.bestStreak;
+    if (navigator.clipboard){
+      navigator.clipboard.writeText(text).then(function(){
+        var btn = document.getElementById('share-btn');
+        var orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(function(){ btn.textContent = orig; }, 1500);
+      });
+    } else {
+      alert(text);
+    }
+  });
+
+  window.addEventListener('resize', function(){
+    resizeCanvas();
+  });
+}
+
+init();
+})();
+</script>
+</body>
+</html>
