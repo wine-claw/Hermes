@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Serving Temperature Explorer — Aroma Unlock Map</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  :root { --bg:#0d0a14; --surface:#1a1428; --border:#2e2540; --text:#d4c8e8; --muted:#8a7e9e; --accent:#c8a0e8; --accent2:#e89060; --warm:#e8b060; --cool:#60a0e8; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { font-size:16px; }
+  body { background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.6; overflow-x:hidden; }
+
+  .disclaimer { background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060; padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui,sans-serif; position:sticky; top:0; z-index:100; }
+  .disclaimer strong { font-weight:600; }
+
+  header { text-align:center; padding:1.5rem 1rem 1rem; }
+  header h1 { font-size:clamp(1.3rem,5vw,2rem); background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; display:inline-block; margin-bottom:0.3rem; }
+  header p { color:var(--muted); font-size:0.9rem; max-width:600px; margin:0 auto; }
+
+  #main { max-width:1400px; margin:0 auto; padding:0 1rem 2rem; }
+
+  #controls { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem 1.25rem; margin-bottom:1rem; }
+  .ctrl-row { display:flex; flex-wrap:wrap; gap:1rem; align-items:end; }
+  .ctrl-group { flex:1; min-width:140px; }
+  .ctrl-group label { display:block; font-size:0.8rem; color:var(--muted); margin-bottom:0.3rem; }
+  .ctrl-group select, .ctrl-group input[type=range] { width:100%; }
+  .ctrl-group select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.6rem; font-size:0.85rem; }
+
+  input[type=range] { -webkit-appearance:none; height:6px; background:linear-gradient(90deg,#3a4a8a,#a05050); border-radius:3px; outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; background:var(--accent); border-radius:50%; cursor:pointer; border:2px solid #fff3; }
+  input[type=range]::-moz-range-thumb { width:18px; height:18px; background:var(--accent); border-radius:50%; cursor:pointer; border:2px solid #fff3; }
+
+  .temp-value { font-size:0.95rem; font-weight:600; color:var(--accent); }
+  .preset-row { display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.75rem; }
+  .preset-btn { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.4rem 0.8rem; font-size:0.78rem; cursor:pointer; transition:all 0.15s; }
+  .preset-btn:hover { border-color:var(--accent); background:rgba(200,160,232,0.1); }
+  .preset-btn.active { border-color:var(--accent); background:rgba(200,160,232,0.15); color:var(--accent); }
+
+  #viz-section { display:grid; grid-template-columns:1fr 340px; gap:1rem; }
+  @media (max-width:900px) { #viz-section { grid-template-columns:1fr; } }
+
+  #canvas-container { background:var(--surface); border:1px solid var(--border); border-radius:10px; position:relative; min-height:420px; overflow:hidden; }
+  #plot-3d { width:100%; height:100%; min-height:420px; }
+  #plot-2d { width:100%; height:100%; min-height:420px; display:none; }
+
+  #metrics { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem 1.25rem; }
+  #metrics h3 { font-size:0.95rem; color:var(--accent); margin-bottom:0.5rem; }
+  .metric { display:flex; justify-content:space-between; align-items:baseline; padding:0.35rem 0; border-bottom:1px solid rgba(46,37,64,0.5); font-size:0.85rem; }
+  .metric:last-child { border-bottom:none; }
+  .metric .label { color:var(--muted); }
+  .metric .value { font-weight:600; }
+  .metric .value.hot { color:#e87060; }
+  .metric .value.optimal { color:#60e890; }
+  .metric .value.cold { color:#60a0e8; }
+  .metric .value.warm { color:var(--warm); }
+
+  #aroma-chart-section { margin-top:1rem; }
+  #aroma-radar { width:100%; min-height:300px; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+
+  #thermo-section { margin-top:1rem; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem 1.25rem; }
+  #thermo-section h3 { font-size:0.95rem; color:var(--accent); margin-bottom:0.75rem; }
+  #thermo-bar { position:relative; height:50px; border-radius:8px; overflow:hidden; background:linear-gradient(90deg, #2a4a8a 0%, #4a8aca 15%, #6adada 30%, #8ae8a0 45%, #e8e870 55%, #e8b060 70%, #e87050 85%, #d04030 100%); }
+  #thermo-marker { position:absolute; top:-4px; width:4px; height:58px; background:#fff; border-radius:2px; transition:left 0.3s ease; box-shadow:0 0 8px rgba(255,255,255,0.6); }
+  #thermo-optimal { position:absolute; top:0; height:50px; background:rgba(255,255,255,0.15); border-left:2px dashed rgba(255,255,255,0.4); border-right:2px dashed rgba(255,255,255,0.4); }
+  .thermo-labels { display:flex; justify-content:space-between; margin-top:0.35rem; font-size:0.72rem; color:var(--muted); }
+  #thermo-info { margin-top:0.75rem; font-size:0.85rem; color:var(--text); line-height:1.5; }
+
+  .view-toggle { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:0.5rem; }
+  .view-toggle button { background:var(--bg); color:var(--text); border:none; padding:0.4rem 0.8rem; font-size:0.78rem; cursor:pointer; transition:all 0.15s; }
+  .view-toggle button.active { background:var(--accent); color:var(--bg); font-weight:600; }
+
+  .temp-zone { display:inline-block; font-size:0.7rem; padding:0.15rem 0.5rem; border-radius:4px; font-weight:600; margin-left:0.5rem; }
+  .zone-too-cold { background:#2a4a8a; color:#a0c0ff; }
+  .zone-cool { background:#3a6aaa; color:#a0c0ff; }
+  .zone-optimal { background:#2a6a3a; color:#80e080; }
+  .zone-warm { background:#8a4a2a; color:#e8a060; }
+  .zone-too-warm { background:#8a2a1a; color:#e06040; }
+
+  .info-section { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem 1.25rem; margin-top:1rem; }
+  .info-section h3 { font-size:0.95rem; color:var(--accent); margin-bottom:0.5rem; }
+  .info-section p { font-size:0.85rem; color:var(--muted); margin-bottom:0.5rem; }
+  .info-section ul { list-style:none; padding-left:1rem; }
+  .info-section li { font-size:0.82rem; color:var(--muted); margin-bottom:0.25rem; }
+
+  a, button { touch-action:manipulation; }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<header>
+  <h1>Wine Serving Temperature Explorer</h1>
+  <p>Discover how serving temperature unlocks different aroma families — 3D aroma enjoyment surface across temperature × time-in-glass, radar profiles, and a live thermometer guide.</p>
+</header>
+<div id="main">
+  <div id="controls">
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Wine Style</label>
+        <select id="wine-select">
+          <option value="light_white">Light White (Pinot Grigio, Vinho Verde)</option>
+          <option value="full_white" selected>Full White (Chardonnay, Viognier)</option>
+          <option value="aromatic_white">Aromatic White (Riesling, Gewürztraminer)</option>
+          <option value="rose">Rosé</option>
+          <option value="light_red">Light Red (Pinot Noir, Gamay)</option>
+          <option value="full_red">Full Red (Cabernet, Syrah)</option>
+          <option value="sparkling">Sparkling (Champagne, Prosecco)</option>
+          <option value="fortified">Fortified (Port, Sherry)</option>
+          <option value="sweet">Sweet (Sauternes, Tokaji)</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Serving Temperature: <span class="temp-value" id="temp-val">14°C</span></label>
+        <input type="range" id="temp-slider" min="4" max="22" step="0.5" value="14">
+      </div>
+      <div class="ctrl-group">
+        <label>Time in Glass: <span class="temp-value" id="time-val">10 min</span></label>
+        <input type="range" id="time-slider" min="1" max="45" step="1" value="10">
+      </div>
+    </div>
+    <div class="preset-row" id="presets"></div>
+  </div>
+
+  <div class="view-toggle">
+    <button id="btn-3d" class="active" onclick="switchView('3d')">3D Surface</button>
+    <button id="btn-2d" onclick="switchView('2d')">2D Heatmap</button>
+  </div>
+
+  <div id="viz-section">
+    <div id="canvas-container">
+      <div id="plot-3d"></div>
+      <div id="plot-2d"></div>
+    </div>
+    <div id="metrics">
+      <h3>Live Temperature Analysis</h3>
+      <div class="metric"><span class="label">Current Temp</span><span class="value" id="m-temp">14.0°C</span></div>
+      <div class="metric"><span class="label">Optimal Range</span><span class="value" id="m-optimal">10–14°C</span></div>
+      <div class="metric"><span class="label">Temp Status</span><span class="value" id="m-status">Optimal</span></div>
+      <div class="metric"><span class="label">Aroma Score</span><span class="value" id="m-score">—</span></div>
+      <div class="metric"><span class="label">Top Aroma</span><span class="value" id="m-top">—</span></div>
+      <div class="metric"><span class="label">Aroma Release</span><span class="value" id="m-release">—</span></div>
+      <div class="metric"><span class="label">Alcohol Sensation</span><span class="value" id="m-alcohol">—</span></div>
+      <div class="metric"><span class="label">Tannin Balance</span><span class="value" id="m-tannin">—</span></div>
+      <div class="metric"><span class="label">Acidity Balance</span><span class="value" id="m-acidity">—</span></div>
+      <div class="metric"><span class="label">Recommendation</span><span class="value" id="m-rec" style="font-size:0.78rem;">—</span></div>
+    </div>
+  </div>
+
+  <div id="aroma-chart-section">
+    <div class="view-toggle">
+      <button id="btn-radar" class="active" onclick="switchAroma('radar')">Aroma Radar</button>
+      <button id="btn-bars" onclick="switchAroma('bars')">Aroma Bars</button>
+    </div>
+    <div id="aroma-radar"></div>
+  </div>
+
+  <div id="thermo-section">
+    <h3>Temperature Guide for Selected Wine</h3>
+    <div id="thermo-bar">
+      <div id="thermo-optimal"></div>
+      <div id="thermo-marker"></div>
+    </div>
+    <div class="thermo-labels">
+      <span>4°C</span><span>8°C</span><span>12°C</span><span>16°C</span><span>20°C</span>
+    </div>
+    <div id="thermo-info"></div>
+  </div>
+
+  <div class="info-section">
+    <h3>How Temperature Affects Wine Aroma</h3>
+    <p>Volatile aroma compounds have temperature-dependent vapor pressures. Below the optimal range, aromas stay trapped in the liquid — the wine seems closed and muted. Above the optimal range, volatile compounds flash off too quickly, while ethanol becomes dominant, creating a "hot" sensation that masks delicate aromatics. Each wine style has a sweet spot where the balance of fruit, floral, spice, and earth compounds reaches its best expression.</p>
+    <ul>
+      <li><strong>4–8°C:</strong> Sparkling & light aromatic whites — preserves CO₂, crispness, and delicate floral notes</li>
+      <li><strong>8–12°C:</strong> Medium whites, rosé — balances fruit aromatics with refreshing acidity</li>
+      <li><strong>10–14°C:</strong> Full whites (oaked Chardonnay) — unlocks oak, butter, and stone fruit complexity</li>
+      <li><strong>13–16°C:</strong> Light reds (Pinot Noir) — releases red fruit and earth without excessive alcohol burn</li>
+      <li><strong>16–20°C:</strong> Full reds (Cabernet, Syrah) — softens tannins and releases dark fruit, spice, and structure</li>
+      <li><strong>14–18°C:</strong> Fortified wines — balances spirit warmth with concentrated fruit and spice</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+// === Wine style definitions ===
+// Each style has: optimal range, aroma compound families with temp-release curves,
+// alcohol sensitivity, tannin factor, acidity factor
+
+var WINE_STYLES = {
+  light_white: {
+    name: "Light White",
+    optMin: 6, optMax: 10,
+    alcohol: 11.5,
+    tannin: 0,
+    acidity: 0.80,
+    aromas: {
+      citrus:    { peak: 8,  width: 4,  weight: 1.2 },
+      floral:    { peak: 7,  width: 3,  weight: 0.9 },
+      green:     { peak: 9,  width: 4,  weight: 1.0 },
+      mineral:  { peak: 6,  width: 3,  weight: 0.8 },
+      tropical: { peak: 12, width: 5,  weight: 0.4 },
+      oak:       { peak: 14, width: 5,  weight: 0.1 }
+    },
+    recs: {
+      too_cold: "Too cold — aromas are muted. Let it warm 3–4°C.",
+      cool: "Slightly cool. Nice crispness; will open further.",
+      optimal: "Perfect — crisp, aromatic, refreshing.",
+      warm: "Too warm — aromatics fading, acidity dulling.",
+      too_warm: "Much too warm — flabby and flat. Chill it."
+    }
+  },
+  full_white: {
+    name: "Full White",
+    optMin: 10, optMax: 14,
+    alcohol: 13.5,
+    tannin: 0.05,
+    acidity: 0.55,
+    aromas: {
+      citrus:    { peak: 11, width: 5,  weight: 0.7 },
+      floral:    { peak: 10, width: 4,  weight: 0.5 },
+      tropical: { peak: 13, width: 5,  weight: 1.0 },
+      oak:       { peak: 14, width: 5,  weight: 1.1 },
+      butter:    { peak: 13, width: 5,  weight: 0.9 },
+      stone:     { peak: 12, width: 5,  weight: 0.8 },
+      mineral:  { peak: 8,  width: 3,  weight: 0.3 }
+    },
+    recs: {
+      too_cold: "Too cold — oak and butter notes are hidden.",
+      cool: "Cool — refreshing but will gain complexity.",
+      optimal: "Perfect — rich, complex, well-integrated.",
+      warm: "Too warm — alcohol heat masking aromatics.",
+      too_warm: "Much too warm — hot and cloying. Chill 3–4°C."
+    }
+  },
+  aromatic_white: {
+    name: "Aromatic White",
+    optMin: 8, optMax: 12,
+    alcohol: 12.0,
+    tannin: 0,
+    acidity: 0.65,
+    aromas: {
+      floral:    { peak: 10, width: 3,  weight: 1.3 },
+      citrus:    { peak: 9,  width: 4,  weight: 0.9 },
+      tropical: { peak: 12, width: 5,  weight: 0.7 },
+      spice:     { peak: 13, width: 4,  weight: 0.8 },
+      lychee:    { peak: 10, width: 4,  weight: 1.0 },
+      rose:      { peak: 10, width: 3,  weight: 1.1 },
+      mineral:  { peak: 8,  width: 3,  weight: 0.5 }
+    },
+    recs: {
+      too_cold: "Too cold — exotic florals are dormant.",
+      cool: "Cool — crisp and tight, aromas emerging.",
+      optimal: "Perfect — floral explosion, exotic spice.",
+      warm: "Too warm — florals dissipating, alcohol rising.",
+      too_warm: "Much too warm — lost its perfume. Chill."
+    }
+  },
+  rose: {
+    name: "Rosé",
+    optMin: 8, optMax: 12,
+    alcohol: 12.5,
+    tannin: 0.1,
+    acidity: 0.65,
+    aromas: {
+      redfruit:  { peak: 10, width: 4,  weight: 1.1 },
+      citrus:    { peak: 9,  width: 4,  weight: 0.7 },
+      floral:    { peak: 10, width: 3,  weight: 0.9 },
+      strawberry:{ peak: 11, width: 3,  weight: 1.0 },
+      mineral:  { peak: 8,  width: 3,  weight: 0.5 },
+      herb:      { peak: 12, width: 4,  weight: 0.4 }
+    },
+    recs: {
+      too_cold: "Too cold — fruit is muted, only crispness shows.",
+      cool: "Cool — refreshing, fruit beginning to show.",
+      optimal: "Perfect — fruit-forward, crisp, balanced.",
+      warm: "Too warm — fruit fading, structure showing.",
+      too_warm: "Too warm — flat and heavy. Needs ice bucket."
+    }
+  },
+  light_red: {
+    name: "Light Red",
+    optMin: 13, optMax: 16,
+    alcohol: 12.5,
+    tannin: 0.35,
+    acidity: 0.60,
+    aromas: {
+      redfruit:  { peak: 15, width: 4,  weight: 1.2 },
+      earth:     { peak: 16, width: 5,  weight: 1.0 },
+      floral:    { peak: 14, width: 4,  weight: 0.8 },
+      spice:     { peak: 17, width: 4,  weight: 0.6 },
+      oak:       { peak: 18, width: 5,  weight: 0.3 },
+      herb:      { peak: 15, width: 4,  weight: 0.5 }
+    },
+    recs: {
+      too_cold: "Too cold — tannins bitter, fruit hidden.",
+      cool: "Cool — tight tannins, fruit emerging.",
+      optimal: "Perfect — silky, aromatic, elegant.",
+      warm: "Too warm — alcohol showing, structure loosening.",
+      too_warm: "Much too warm — flabby and hot. Cool it."
+    }
+  },
+  full_red: {
+    name: "Full Red",
+    optMin: 16, optMax: 20,
+    alcohol: 14.0,
+    tannin: 0.65,
+    acidity: 0.45,
+    aromas: {
+      darkfruit: { peak: 18, width: 5,  weight: 1.2 },
+      spice:     { peak: 19, width: 4,  weight: 1.0 },
+      oak:       { peak: 19, width: 5,  weight: 1.1 },
+      earth:     { peak: 18, width: 5,  weight: 0.8 },
+      leather:   { peak: 20, width: 4,  weight: 0.6 },
+      chocolate: { peak: 20, width: 4,  weight: 0.7 },
+      herb:      { peak: 16, width: 4,  weight: 0.4 }
+    },
+    recs: {
+      too_cold: "Too cold — tannins are harsh and astringent.",
+      cool: "Cool — tannins firm, fruit will open up.",
+      optimal: "Perfect — structured, complex, generous.",
+      warm: "Slightly warm — alcohol noticeable, still good.",
+      too_warm: "Too warm — hot and soupy. Needs 15 min in fridge."
+    }
+  },
+  sparkling: {
+    name: "Sparkling",
+    optMin: 5, optMax: 9,
+    alcohol: 12.0,
+    tannin: 0,
+    acidity: 0.85,
+    aromas: {
+      citrus:    { peak: 7,  width: 3,  weight: 1.0 },
+      floral:    { peak: 7,  width: 3,  weight: 0.7 },
+      bready:    { peak: 8,  width: 4,  weight: 0.9 },
+      apple:     { peak: 7,  width: 3,  weight: 0.8 },
+      mineral:  { peak: 6,  width: 3,  weight: 0.8 },
+      stone:     { peak: 9,  width: 3,  weight: 0.4 }
+    },
+    recs: {
+      too_cold: "Very cold — bubbles tight, aromas locked.",
+      cool: "Cool — crisp, good mousse, aromas emerging.",
+      optimal: "Perfect — lively bubbles, fine aromatics.",
+      warm: "Too warm — bubbles flat, aromas losing lift.",
+      too_warm: "Much too warm — flabby and flat. Ice bucket now."
+    }
+  },
+  fortified: {
+    name: "Fortified",
+    optMin: 14, optMax: 18,
+    alcohol: 19.0,
+    tannin: 0.35,
+    acidity: 0.40,
+    aromas: {
+      darkfruit: { peak: 16, width: 5,  weight: 1.1 },
+      driedfruit:{ peak: 17, width: 4,  weight: 1.0 },
+      spice:     { peak: 18, width: 4,  weight: 1.1 },
+      nutty:     { peak: 18, width: 4,  weight: 0.9 },
+      caramel:   { peak: 17, width: 4,  weight: 0.8 },
+      chocolate: { peak: 18, width: 4,  weight: 0.6 },
+      oak:       { peak: 18, width: 5,  weight: 0.7 }
+    },
+    recs: {
+      too_cold: "Too cold — spice and nut complexity hidden.",
+      cool: "Cool — fruit shows, warmth developing.",
+      optimal: "Perfect — complex, warming, balanced.",
+      warm: "Too warm — alcohol heat dominant.",
+      too_warm: "Much too warm — spirit-forward and harsh."
+    }
+  },
+  sweet: {
+    name: "Sweet",
+    optMin: 9, optMax: 13,
+    alcohol: 13.5,
+    tannin: 0.1,
+    acidity: 0.55,
+    aromas: {
+      honey:     { peak: 11, width: 4,  weight: 1.1 },
+      apricot:   { peak: 11, width: 4,  weight: 1.0 },
+      citrus:    { peak: 10, width: 3,  weight: 0.8 },
+      floral:    { peak: 11, width: 3,  weight: 0.9 },
+      spice:     { peak: 13, width: 4,  weight: 0.6 },
+      caramel:   { peak: 12, width: 4,  weight: 0.7 },
+      mineral:  { peak: 9,  width: 3,  weight: 0.4 }
+    },
+    recs: {
+      too_cold: "Too cold — sweetness dominant, aromatics muted.",
+      cool: "Cool — honeyed notes emerging, refreshing.",
+      optimal: "Perfect — luscious, complex, balanced.",
+      warm: "Too warm — cloying sweetness, alcohol showing.",
+      too_warm: "Too warm — flabby and heavy. Chill it."
+    }
+  }
+};
+
+// === Aroma compound temperature-release model ===
+// Each aroma family has a Gaussian release curve centered on its peak temp.
+// The release fraction = exp(-((T - peak)^2) / (2 * width^2))
+// Time-in-glass factor: aromas build over time, approaching asymptote.
+// timeFactor = 1 - exp(-t / tau), where tau depends on surface area & volatilization.
+
+function aromaRelease(temp, timeMin, aroma) {
+  // Temperature release: Gaussian centered on peak
+  var tempRelease = Math.exp(-Math.pow(temp - aroma.peak, 2) / (2 * aroma.width * aroma.width));
+  // Time factor: volatile aromas build up in the headspace over time
+  // tau is smaller (faster release) at higher temp, larger (slower) at lower temp
+  var tau = 25 / Math.max(0.3, tempRelease); // 25 min at optimal, longer when cold
+  var timeFactor = 1 - Math.exp(-timeMin / tau);
+  return tempRelease * timeFactor * aroma.weight;
+}
+
+// Alcohol burn factor: ethanol becomes perceptibly "hot" above ~14°C,
+// increasingly so as temp rises. Scales with wine's alcohol content.
+function alcoholHeat(temp, wine) {
+  var abv = wine.alcohol;
+  var threshold = 14 - (abv - 12) * 0.8; // higher ABV → lower threshold
+  if (temp <= threshold) return 0;
+  return Math.min(1, Math.pow((temp - threshold) / 6, 1.5));
+}
+
+// Tannin perception: cold → astringent & bitter, warm → soft & integrated
+function tanninBalance(temp, wine) {
+  if (wine.tannin === 0) return 1; // no tannins = always balanced
+  var opt = (wine.optMin + wine.optMax) / 2;
+  var delta = temp - opt;
+  // Balance is a bell curve around optimal temp
+  return Math.exp(-Math.pow(delta / 5, 2));
+}
+
+// Acidity balance: cold = crisp (good for whites), warm = flabby (bad)
+function acidityBalance(temp, wine) {
+  if (wine.acidity < 0.5) return 1; // low-acid wines less affected
+  var opt = (wine.optMin + wine.optMax) / 2;
+  return Math.exp(-Math.pow((temp - opt) / 6, 2));
+}
+
+// Overall aroma enjoyment score (0–100)
+function computeScore(temp, timeMin, wine) {
+  var totalRelease = 0;
+  var maxPossible = 0;
+  for (var key in wine.aromas) {
+    var a = wine.aromas[key];
+    totalRelease += aromaRelease(temp, timeMin, a);
+    maxPossible += a.weight;
+  }
+  var aromaFrac = totalRelease / maxPossible; // 0–1
+  // Penalize for alcohol heat
+  var heatPenalty = alcoholHeat(temp, wine) * 0.35;
+  // Tannin penalty for reds
+  var tanninPenalty = (1 - tanninBalance(temp, wine)) * wine.tannin * 0.2;
+  // Acidity penalty
+  var acidPenalty = (1 - acidityBalance(temp, wine)) * wine.acidity * 0.15;
+  var score = (aromaFrac - heatPenalty - tanninPenalty - acidPenalty) * 100;
+  return Math.max(0, Math.min(100, score));
+}
+
+// === State ===
+var currentWine = 'full_white';
+var currentTemp = 14;
+var currentTime = 10;
+var currentView = '3d';
+var currentAromaView = 'radar';
+var renderTimer = null;
+
+// === Color scales ===
+var warmScale = [
+  [0, '#1a0a05'], [0.2, '#4a2010'], [0.4, '#8a3010'],
+  [0.6, '#c8602a'], [0.8, '#e8a030'], [1, '#f8e880']
+];
+
+var aromaColors = {
+  citrus: '#e8d040', floral: '#e080c0', tropical: '#f0a030', oak: '#a0603a',
+  butter: '#f0e080', stone: '#e8b070', mineral: '#a0c0e0', redfruit: '#e85060',
+  darkfruit: '#a02030', earth: '#8a6040', spice: '#e87040', herb: '#80b060',
+  leather: '#7a4020', chocolate: '#5a3020', strawberry: '#f06080', lychee: '#f0c0a0',
+  rose: '#f0a0b0', bready: '#d0a060', apple: '#c0e880', caramel: '#c08040',
+  honey: '#e8c040', apricot: '#f0b060', driedfruit: '#a0603a', nutty: '#b0805a'
+};
+
+// === Surface generation ===
+function generateSurface(wineKey) {
+  var wine = WINE_STYLES[wineKey];
+  var temps = [];
+  var times = [];
+  for (var t = 4; t <= 22; t += 0.5) temps.push(t);
+  for (var ti = 1; ti <= 45; ti += 1) times.push(ti);
+  var z = [];
+  for (var i = 0; i < times.length; i++) {
+    var row = [];
+    for (var j = 0; j < temps.length; j++) {
+      row.push(computeScore(temps[j], times[i], wine));
+    }
+    z.push(row);
+  }
+  return { temps: temps, times: times, z: z };
+}
+
+// === Rendering ===
+function renderSurface() {
+  var data = generateSurface(currentWine);
+  var wine = WINE_STYLES[currentWine];
+
+  if (currentView === '3d') {
+    var trace3d = {
+      type: 'surface',
+      x: data.temps,
+      y: data.times,
+      z: data.z,
+      colorscale: warmScale,
+      contours: {
+        z: { show: true, usecolormap: true, start: 0, end: 100, size: 10, project: { z: true } }
+      },
+      hovertemplate: 'Temp: %{x}°C<br>Time: %{y} min<br>Score: %{z:.1f}<extra></extra>',
+      colorbar: { title: { text: 'Aroma Score', font: { color: '#a09080', size: 12 } }, tickfont: { color: '#a09080' } }
+    };
+    var layout3d = {
+      scene: {
+        xaxis: { title: { text: 'Temperature (°C)', font: { color: '#c0b090', size: 12 } }, tickfont: { color: '#8a7e6e' }, gridcolor: '#3a3050', zerolinecolor: '#3a3050', backgroundcolor: 'rgba(26,20,40,0.5)' },
+        yaxis: { title: { text: 'Time in Glass (min)', font: { color: '#c0b090', size: 12 } }, tickfont: { color: '#8a7e6e' }, gridcolor: '#3a3050', zerolinecolor: '#3a3050', backgroundcolor: 'rgba(26,20,40,0.5)' },
+        zaxis: { title: { text: 'Aroma Enjoyment Score', font: { color: '#c0b090', size: 12 } }, tickfont: { color: '#8a7e6e' }, gridcolor: '#3a3050', zerolinecolor: '#3a3050', range: [0, 100], backgroundcolor: 'rgba(26,20,40,0.5)' },
+        camera: { eye: { x: 1.8, y: -1.5, z: 0.9 } },
+        bgcolor: 'rgba(0,0,0,0)'
+      },
+      paper_bgcolor: 'rgba(13,10,20,0.9)',
+      plot_bgcolor: 'rgba(13,10,20,0.9)',
+      font: { color: '#a09080', size: 11 },
+      margin: { l: 0, r: 0, t: 10, b: 0 }
+    };
+    Plotly.react('plot-3d', [trace3d], layout3d, { responsive: true, displayModeBar: false });
+    document.getElementById('plot-3d').style.display = 'block';
+    document.getElementById('plot-2d').style.display = 'none';
+  } else {
+    var trace2d = {
+      type: 'heatmap',
+      x: data.temps,
+      y: data.times,
+      z: data.z,
+      colorscale: warmScale,
+      colorbar: { title: { text: 'Score', font: { color: '#a09080' } }, tickfont: { color: '#a09080' } },
+      hovertemplate: 'Temp: %{x}°C<br>Time: %{y} min<br>Score: %{z:.1f}<extra></extra>'
+    };
+    var layout2d = {
+      xaxis: { title: { text: 'Temperature (°C)', font: { color: '#c0b090' } }, tickfont: { color: '#8a7e6e' }, gridcolor: '#2e2540', zerolinecolor: '#2e2540' },
+      yaxis: { title: { text: 'Time in Glass (min)', font: { color: '#c0b090' } }, tickfont: { color: '#8a7e6e' }, gridcolor: '#2e2540', zerolinecolor: '#2e2540' },
+      paper_bgcolor: 'rgba(13,10,20,0.9)',
+      plot_bgcolor: 'rgba(26,20,40,0.5)',
+      font: { color: '#a09080', size: 11 },
+      margin: { l: 50, r: 20, t: 10, b: 40 }
+    };
+    Plotly.react('plot-2d', [trace2d], layout2d, { responsive: true, displayModeBar: false });
+    document.getElementById('plot-3d').style.display = 'none';
+    document.getElementById('plot-2d').style.display = 'block';
+  }
+}
+
+function renderAromaChart() {
+  var wine = WINE_STYLES[currentWine];
+  var keys = Object.keys(wine.aromas);
+  var values = keys.map(function(k) { return aromaRelease(currentTemp, currentTime, wine.aromas[k]); });
+  var maxVal = Math.max.apply(null, values);
+  var topAroma = keys[values.indexOf(maxVal)];
+
+  if (currentAromaView === 'radar') {
+    var radarData = [{
+      type: 'scatterpolar',
+      r: values.concat([values[0]]),
+      theta: keys.concat([keys[0]]),
+      fill: 'toself',
+      fillcolor: 'rgba(200,160,232,0.15)',
+      line: { color: '#c8a0e8', width: 2 },
+      marker: { color: '#c8a0e8', size: 5 },
+      name: 'Aroma Release',
+      hovertemplate: '%{theta}: %{r:.2f}<extra></extra>'
+    }];
+    var radarLayout = {
+      polar: {
+        radialaxis: { visible: true, range: [0, Math.max(1.2, maxVal * 1.1)], tickfont: { color: '#6a5e80', size: 9 }, gridcolor: '#2e2540', linecolor: '#2e2540' },
+        angularaxis: { tickfont: { color: '#a09080', size: 9 }, gridcolor: '#2e2540', linecolor: '#2e2540' },
+        bgcolor: 'rgba(0,0,0,0)'
+      },
+      paper_bgcolor: 'rgba(26,20,40,0.5)',
+      font: { color: '#a09080', size: 11 },
+      margin: { l: 40, r: 40, t: 10, b: 40 }
+    };
+    Plotly.react('aroma-radar', radarData, radarLayout, { responsive: true, displayModeBar: false });
+  } else {
+    var barColors = keys.map(function(k) { return aromaColors[k] || '#c8a0e8'; });
+    var barData = [{
+      type: 'bar',
+      x: keys,
+      y: values,
+      marker: { color: barColors },
+      hovertemplate: '%{x}: %{y:.2f}<extra></extra>'
+    }];
+    var barLayout = {
+      xaxis: { tickfont: { color: '#a09080', size: 10 }, tickangle: -30, gridcolor: '#2e2540' },
+      yaxis: { title: { text: 'Release Score', font: { color: '#a09080' } }, tickfont: { color: '#6a5e80' }, gridcolor: '#2e2540' },
+      paper_bgcolor: 'rgba(26,20,40,0.5)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: '#a09080', size: 11 },
+      margin: { l: 40, r: 20, t: 10, b: 60 }
+    };
+    Plotly.react('aroma-radar', barData, barLayout, { responsive: true, displayModeBar: false });
+  }
+  return { topAroma: topAroma, values: values, keys: keys };
+}
+
+function updateMetrics() {
+  var wine = WINE_STYLES[currentWine];
+  var score = computeScore(currentTemp, currentTime, wine);
+  var heat = alcoholHeat(currentTemp, wine);
+  var tannin = tanninBalance(currentTemp, wine);
+  var acid = acidityBalance(currentTemp, wine);
+  var aromaInfo = renderAromaChart();
+
+  // Temperature status
+  var status, statusClass, zoneLabel, zoneClass;
+  if (currentTemp < wine.optMin - 2) { status = "Too Cold"; statusClass = "cold"; zoneLabel = "Too Cold"; zoneClass = "zone-too-cold"; }
+  else if (currentTemp < wine.optMin) { status = "Cool"; statusClass = "cold"; zoneLabel = "Cool"; zoneClass = "zone-cool"; }
+  else if (currentTemp <= wine.optMax) { status = "Optimal"; statusClass = "optimal"; zoneLabel = "Optimal"; zoneClass = "zone-optimal"; }
+  else if (currentTemp <= wine.optMax + 2) { status = "Warm"; statusClass = "warm"; zoneLabel = "Warm"; zoneClass = "zone-warm"; }
+  else { status = "Too Warm"; statusClass = "hot"; zoneLabel = "Too Warm"; zoneClass = "zone-too-warm"; }
+
+  document.getElementById('m-temp').textContent = currentTemp.toFixed(1) + '°C';
+  document.getElementById('m-optimal').textContent = wine.optMin + '–' + wine.optMax + '°C';
+  var statusEl = document.getElementById('m-status');
+  statusEl.textContent = status;
+  statusEl.className = 'value ' + statusClass;
+
+  var scoreEl = document.getElementById('m-score');
+  scoreEl.textContent = score.toFixed(1) + ' / 100';
+  scoreEl.className = 'value ' + (score > 70 ? 'optimal' : score > 45 ? 'warm' : 'cold');
+
+  document.getElementById('m-top').textContent = aromaInfo.topAroma.charAt(0).toUpperCase() + aromaInfo.topAroma.slice(1);
+  var totalRelease = aromaInfo.values.reduce(function(a,b) { return a + b; }, 0);
+  document.getElementById('m-release').textContent = totalRelease.toFixed(2);
+
+  var heatEl = document.getElementById('m-alcohol');
+  var heatPct = (heat * 100).toFixed(0) + '%';
+  heatEl.textContent = heatPct;
+  heatEl.className = 'value ' + (heat > 0.5 ? 'hot' : heat > 0.2 ? 'warm' : 'optimal');
+
+  var tanninEl = document.getElementById('m-tannin');
+  tanninEl.textContent = (tannin * 100).toFixed(0) + '%';
+  tanninEl.className = 'value ' + (tannin > 0.7 ? 'optimal' : 'warm');
+
+  var acidEl = document.getElementById('m-acidity');
+  acidEl.textContent = (acid * 100).toFixed(0) + '%';
+  acidEl.className = 'value ' + (acid > 0.7 ? 'optimal' : 'warm');
+
+  var recKey = currentTemp < wine.optMin - 2 ? 'too_cold' :
+               currentTemp < wine.optMin ? 'cool' :
+               currentTemp <= wine.optMax ? 'optimal' :
+               currentTemp <= wine.optMax + 2 ? 'warm' : 'too_warm';
+  document.getElementById('m-rec').textContent = wine.recs[recKey];
+
+  // Update thermometer
+  updateThermometer(wine);
+}
+
+function updateThermometer(wine) {
+  var range = 22 - 4; // 4–22°C
+  var markerPct = ((currentTemp - 4) / range) * 100;
+  document.getElementById('thermo-marker').style.left = markerPct + '%';
+
+  var optStartPct = ((wine.optMin - 4) / range) * 100;
+  var optEndPct = ((wine.optMax - 4) / range) * 100;
+  var optEl = document.getElementById('thermo-optimal');
+  optEl.style.left = optStartPct + '%';
+  optEl.style.width = (optEndPct - optStartPct) + '%';
+
+  var status, zoneClass;
+  if (currentTemp < wine.optMin - 2) { status = "Too Cold"; zoneClass = "zone-too-cold"; }
+  else if (currentTemp < wine.optMin) { status = "Cool"; zoneClass = "zone-cool"; }
+  else if (currentTemp <= wine.optMax) { status = "Optimal"; zoneClass = "zone-optimal"; }
+  else if (currentTemp <= wine.optMax + 2) { status = "Warm"; zoneClass = "zone-warm"; }
+  else { status = "Too Warm"; zoneClass = "zone-too-warm"; }
+
+  var wineName = wine.name;
+  var infoEl = document.getElementById('thermo-info');
+  infoEl.innerHTML = '<strong>' + wineName + '</strong> — Optimal range: ' + wine.optMin + '–' + wine.optMax + '°C. ' +
+    'Current: ' + currentTemp.toFixed(1) + '°C <span class="temp-zone ' + zoneClass + '">' + status + '</span><br>' +
+    'Time in glass: ' + currentTime + ' min. ' + wine.recs[
+      currentTemp < wine.optMin - 2 ? 'too_cold' :
+      currentTemp < wine.optMin ? 'cool' :
+      currentTemp <= wine.optMax ? 'optimal' :
+      currentTemp <= wine.optMax + 2 ? 'warm' : 'too_warm'
+    ];
+}
+
+function onParamChange() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(function() {
+    renderSurface();
+    updateMetrics();
+  }, 150);
+}
+
+function switchView(view) {
+  currentView = view;
+  document.getElementById('btn-3d').classList.toggle('active', view === '3d');
+  document.getElementById('btn-2d').classList.toggle('active', view === '2d');
+  renderSurface();
+}
+
+function switchAroma(view) {
+  currentAromaView = view;
+  document.getElementById('btn-radar').classList.toggle('active', view === 'radar');
+  document.getElementById('btn-bars').classList.toggle('active', view === 'bars');
+  updateMetrics();
+}
+
+// === Presets ===
+var PRESETS = [
+  { name: "Cellar Cool", wine: "sparkling", temp: 7, time: 5 },
+  { name: "Garden Party", wine: "rose", temp: 10, time: 8 },
+  { name: "Oaked Chard", wine: "full_white", temp: 12, time: 15 },
+  { name: "Pinot Perfection", wine: "light_red", temp: 15, time: 20 },
+  { name: "Big Red Night", wine: "full_red", temp: 18, time: 25 },
+  { name: "Aged Port", wine: "fortified", temp: 16, time: 15 },
+  { name: "Sauternes Splurge", wine: "sweet", temp: 11, time: 10 },
+  { name: "Riesling Revelation", wine: "aromatic_white", temp: 10, time: 12 }
+];
+
+function renderPresets() {
+  var container = document.getElementById('presets');
+  container.innerHTML = '';
+  PRESETS.forEach(function(p) {
+    var btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.textContent = p.name;
+    btn.onclick = function() {
+      currentWine = p.wine;
+      currentTemp = p.temp;
+      currentTime = p.time;
+      document.getElementById('wine-select').value = p.wine;
+      document.getElementById('temp-slider').value = p.temp;
+      document.getElementById('time-slider').value = p.time;
+      document.getElementById('temp-val').textContent = p.temp + '°C';
+      document.getElementById('time-val').textContent = p.time + ' min';
+      document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      onParamChange();
+    };
+    container.appendChild(btn);
+  });
+}
+
+// === Event listeners ===
+document.getElementById('wine-select').addEventListener('change', function() {
+  currentWine = this.value;
+  onParamChange();
+});
+
+document.getElementById('temp-slider').addEventListener('input', function() {
+  currentTemp = parseFloat(this.value);
+  document.getElementById('temp-val').textContent = currentTemp.toFixed(1) + '°C';
+  onParamChange();
+});
+
+document.getElementById('time-slider').addEventListener('input', function() {
+  currentTime = parseInt(this.value);
+  document.getElementById('time-val').textContent = currentTime + ' min';
+  onParamChange();
+});
+
+// Resize handler
+var resizeTimer2 = null;
+window.addEventListener('resize', function() {
+  clearTimeout(resizeTimer2);
+  resizeTimer2 = setTimeout(function() {
+    var target = currentView === '3d' ? 'plot-3d' : 'plot-2d';
+    Plotly.Plots.resize(target);
+    Plotly.Plots.resize('aroma-radar');
+  }, 200);
+});
+
+// === Init ===
+renderPresets();
+renderSurface();
+updateMetrics();
+
+})();
+</script>
+</body>
+</html>
