@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Acid Chemistry & pH Buffer Explorer — 3D Molecular Visualisation</title>
+<script src="https://cdn.babylonjs.com/v7.0.0/babylon.js"></script>
+<style>
+  :root {
+    --bg: #0d0c1a;
+    --panel: #161428;
+    --border: #2a2540;
+    --text: #e8e4f0;
+    --muted: #8a839e;
+    --accent: #c084fc;
+    --gold: #c9a060;
+    --red: #f87171;
+    --green: #34d399;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; overflow: hidden; height: 100vh; }
+
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  #renderCanvas { width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+  .panel {
+    pointer-events: auto;
+    background: rgba(22, 20, 40, 0.88);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+  }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px;
+    width: 300px; max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+
+  #metrics {
+    position: absolute; top: 12px; right: 12px;
+    width: 250px;
+  }
+
+  .panel h3 {
+    font-size: 14px; font-weight: 700; margin-bottom: 12px;
+    color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em;
+  }
+
+  .ctrl-group { margin-bottom: 14px; }
+  .ctrl-label {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 4px; display: flex; justify-content: space-between;
+  }
+  .ctrl-value { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  input[type=range] {
+    -webkit-appearance: none; width: 100%; height: 4px;
+    background: var(--border); border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 2px solid var(--bg);
+  }
+
+  .preset-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+  .preset-btn {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 8px 6px; cursor: pointer; font-size: 12px;
+    transition: all 0.15s; text-align: center;
+  }
+  .preset-btn:hover { border-color: var(--accent); background: rgba(192,132,252,0.1); }
+  .preset-btn.active { border-color: var(--accent); background: rgba(192,132,252,0.15); color: var(--accent); }
+
+  .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(42,37,64,0.5); }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-label { font-size: 12px; color: var(--muted); }
+  .metric-val { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .ph-bar {
+    height: 8px; border-radius: 4px; margin: 4px 0 8px;
+    background: linear-gradient(90deg, #f87171 0%, #fb923c 15%, #fbbf24 30%, #34d399 45%, #60a5fa 70%, #a78bfa 100%);
+    position: relative;
+  }
+  .ph-marker {
+    position: absolute; top: -4px; width: 3px; height: 16px;
+    background: #fff; border-radius: 2px; transition: left 0.3s;
+    box-shadow: 0 0 6px rgba(255,255,255,0.5);
+  }
+
+  .acid-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .acid-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .acid-name { font-size: 12px; flex: 1; }
+  .acid-conc { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+
+  .species-bar { height: 4px; border-radius: 2px; margin: 2px 0; transition: width 0.3s; }
+
+  .section-divider { height: 1px; background: var(--border); margin: 12px 0; }
+
+  #info-bar {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    pointer-events: auto; background: rgba(22,20,40,0.88); backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 10px; padding: 8px 16px;
+    font-size: 12px; color: var(--muted); white-space: nowrap;
+  }
+
+  .legend-item { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    #renderCanvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0;
+      border-radius: 0; border-left: none; border-right: none;
+    }
+    #info-bar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+</style>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <canvas id="renderCanvas"></canvas>
+</div>
+
+<div id="ui-layer">
+  <div class="panel" id="controls">
+    <h3>Wine Acid & Buffer System</h3>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Tartaric Acid (g/L)</span><span class="ctrl-value" id="val-tartaric">4.0</span></div>
+      <input type="range" id="sl-tartaric" min="0" max="10" step="0.1" value="4.0">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Malic Acid (g/L)</span><span class="ctrl-value" id="val-malic">2.0</span></div>
+      <input type="range" id="sl-malic" min="0" max="8" step="0.1" value="2.0">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Lactic Acid (g/L)</span><span class="ctrl-value" id="val-lactic">0.5</span></div>
+      <input type="range" id="sl-lactic" min="0" max="6" step="0.1" value="0.5">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Citric Acid (g/L)</span><span class="ctrl-value" id="val-citric">0.3</span></div>
+      <input type="range" id="sl-citric" min="0" max="3" step="0.1" value="0.3">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Succinic Acid (g/L)</span><span class="ctrl-value" id="val-succinic">1.0</span></div>
+      <input type="range" id="sl-succinic" min="0" max="4" step="0.1" value="1.0">
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Acetic Acid (g/L)</span><span class="ctrl-value" id="val-acetic">0.3</span></div>
+      <input type="range" id="sl-acetic" min="0" max="2" step="0.05" value="0.3">
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Target pH</span><span class="ctrl-value" id="val-ph">3.40</span></div>
+      <input type="range" id="sl-ph" min="2.8" max="4.2" step="0.01" value="3.40">
+      <div class="ph-bar"><div class="ph-marker" id="ph-marker" style="left: 30%"></div></div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label"><span>Wine Presets</span></div>
+      <div class="preset-btns">
+        <button class="preset-btn active" data-preset="young-red">Young Red</button>
+        <button class="preset-btn" data-preset="white-crisp">Crisp White</button>
+        <button class="preset-btn" data-preset="mlf-complete">Post-MLF</button>
+        <button class="preset-btn" data-preset="sparkling">Sparkling</button>
+        <button class="preset-btn" data-preset="fortified">Fortified</button>
+        <button class="preset-btn" data-preset="spoiled">VA Spoiled</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="metrics">
+    <h3>Live Chemistry</h3>
+
+    <div class="metric-row">
+      <span class="metric-label">Wine pH</span>
+      <span class="metric-val" id="m-ph" style="color: var(--accent)">3.40</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">Titratable Acidity</span>
+      <span class="metric-val" id="m-ta" style="color: var(--green)">6.2 g/L</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">Buffer Capacity</span>
+      <span class="metric-val" id="m-buffer" style="color: var(--blue)">36 mM/pH</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">Total Acidity</span>
+      <span class="metric-val" id="m-total" style="color: var(--text)">8.1 g/L</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">VA Risk</span>
+      <span class="metric-val" id="m-va" style="color: var(--green)">Low</span>
+    </div>
+
+    <div class="metric-row">
+      <span class="metric-label">pH Stability</span>
+      <span class="metric-val" id="m-stability" style="color: var(--green)">Good</span>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div style="font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">Acid Concentrations</div>
+    <div id="acid-list"></div>
+
+    <div class="section-divider"></div>
+
+    <div style="font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">Species Distribution</div>
+    <div id="species-list"></div>
+  </div>
+
+  <div id="info-bar">
+    <span class="legend-item"><span class="legend-dot" style="background:#c084fc"></span>Protonated (HA)</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span>Dissociated (A⁻)</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#f87171"></span>H⁺ / Free Protons</span>
+    <span style="color: var(--muted)">· Drag to rotate · Scroll to zoom</span>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ===== ACID DATA =====
+  // pKa values and molecular weights from standard wine chemistry references
+  var ACIDS = {
+    tartaric: { name: 'Tartaric', mw: 150.09, pKa1: 2.98, pKa2: 4.34, color: '#c084fc', diprotic: true, defaultConc: 4.0 },
+    malic:    { name: 'Malic',    mw: 134.09, pKa1: 3.40, pKa2: 5.20, color: '#34d399', diprotic: true, defaultConc: 2.0 },
+    lactic:   { name: 'Lactic',   mw: 90.08,  pKa1: 3.86, pKa2: null, color: '#fbbf24', diprotic: false, defaultConc: 0.5 },
+    citric:   { name: 'Citric',   mw: 192.12, pKa1: 3.06, pKa2: 4.74, pKa3: 5.40, color: '#fb923c', triprotic: true, defaultConc: 0.3 },
+    succinic: { name: 'Succinic', mw: 118.09, pKa1: 4.18, pKa2: 5.64, color: '#60a5fa', diprotic: true, defaultConc: 1.0 },
+    acetic:   { name: 'Acetic',   mw: 60.05,  pKa1: 4.76, pKa2: null, color: '#f87171', diprotic: false, defaultConc: 0.3 }
+  };
+
+  var PRESETS = {
+    'young-red':    { tartaric: 4.0, malic: 2.5, lactic: 0.3, citric: 0.2, succinic: 1.0, acetic: 0.3, ph: 3.40 },
+    'white-crisp':  { tartaric: 3.5, malic: 3.0, lactic: 0.2, citric: 0.5, succinic: 0.5, acetic: 0.2, ph: 3.15 },
+    'mlf-complete': { tartaric: 4.0, malic: 0.2, lactic: 3.5, citric: 0.2, succinic: 1.2, acetic: 0.5, ph: 3.55 },
+    'sparkling':    { tartaric: 5.0, malic: 2.0, lactic: 1.5, citric: 0.4, succinic: 0.8, acetic: 0.2, ph: 3.00 },
+    'fortified':    { tartaric: 2.5, malic: 0.5, lactic: 1.0, citric: 0.3, succinic: 1.5, acetic: 0.4, ph: 3.70 },
+    'spoiled':      { tartaric: 3.0, malic: 0.5, lactic: 1.0, citric: 0.2, succinic: 1.0, acetic: 1.5, ph: 3.80 }
+  };
+
+  // ===== STATE =====
+  var state = {
+    tartaric: 4.0, malic: 2.0, lactic: 0.5, citric: 0.3, succinic: 1.0, acetic: 0.3,
+    targetpH: 3.40
+  };
+
+  // ===== CHEMISTRY CALCULATIONS =====
+  // Henderson-Hasselbalch: pH = pKa + log([A-]/[HA])
+  // For each acid at a given pH, compute fraction dissociated
+
+  function fractionDissociated(pKa, pH) {
+    // fraction A- = 1 / (1 + 10^(pKa - pH))
+    return 1.0 / (1.0 + Math.pow(10, pKa - pH));
+  }
+
+  function fractionDissociated2(pKa1, pKa2, pH) {
+    // For diprotic: fractions of H2A, HA-, A2-
+    var Ka1 = Math.pow(10, -pKa1);
+    var Ka2 = Math.pow(10, -pKa2);
+    var H = Math.pow(10, -pH);
+    var D = H * H + H * Ka1 + Ka1 * Ka2;
+    var fHA = H * Ka1 / D;     // fraction HA-
+    var fA2 = Ka1 * Ka2 / D;   // fraction A2-
+    return { fHA: fHA, fA2: fA2, fH2A: H * H / D };
+  }
+
+  function fractionDissociated3(pKa1, pKa2, pKa3, pH) {
+    var Ka1 = Math.pow(10, -pKa1);
+    var Ka2 = Math.pow(10, -pKa2);
+    var Ka3 = Math.pow(10, -pKa3);
+    var H = Math.pow(10, -pH);
+    var D = H*H*H + H*H*Ka1 + H*Ka1*Ka2 + Ka1*Ka2*Ka3;
+    var fH2A = H * H * Ka1 / D;
+    var fHA2 = H * Ka1 * Ka2 / D;
+    var fA3 = Ka1 * Ka2 * Ka3 / D;
+    return { fH2A: fH2A, fHA2: fHA2, fA3: fA3, fH3A: H*H*H / D };
+  }
+
+  // Total proton contribution (for pH estimation)
+  function calculatePH(s) {
+    // In real wine, pH depends on both acid content and cation balance (K+, Ca2+, Na+).
+    // We don't model cations, so the user-set target pH IS the wine pH.
+    // We compute a "theoretical pure-water pH" as an educational indicator of how
+    // much the acid alone would push pH, showing the cation buffering effect.
+    // Binary search for pH where [H+] ≈ total anion charge (pure acid solution)
+    var lo = 1.5, hi = 6.0;
+    for (var iter = 0; iter < 80; iter++) {
+      var mid = (lo + hi) / 2;
+      var netH = computeNetH(s, mid);
+      if (netH > 0) { lo = mid; } else { hi = mid; }
+    }
+    // The pure-water pH will be lower than the real wine pH (no cations to buffer)
+    // We display the user-set target pH as the wine pH, and use this internally
+    // only for reference. Return target pH for display.
+    return s.targetpH;
+  }
+
+  function computeNetH(s, pH) {
+    // For pure acid solution: [H+] should equal total anion charge
+    var H = Math.pow(10, -pH);
+    var totalAnionCharge = 0;
+
+    if (s.tartaric > 0) {
+      var C = s.tartaric / ACIDS.tartaric.mw * 1000;
+      var fr = fractionDissociated2(ACIDS.tartaric.pKa1, ACIDS.tartaric.pKa2, pH);
+      totalAnionCharge += C * (fr.fHA + 2 * fr.fA2);
+    }
+    if (s.malic > 0) {
+      var C = s.malic / ACIDS.malic.mw * 1000;
+      var fr = fractionDissociated2(ACIDS.malic.pKa1, ACIDS.malic.pKa2, pH);
+      totalAnionCharge += C * (fr.fHA + 2 * fr.fA2);
+    }
+    if (s.lactic > 0) {
+      var C = s.lactic / ACIDS.lactic.mw * 1000;
+      totalAnionCharge += C * fractionDissociated(ACIDS.lactic.pKa1, pH);
+    }
+    if (s.citric > 0) {
+      var C = s.citric / ACIDS.citric.mw * 1000;
+      var fr = fractionDissociated3(ACIDS.citric.pKa1, ACIDS.citric.pKa2, ACIDS.citric.pKa3, pH);
+      totalAnionCharge += C * (fr.fH2A + 2 * fr.fHA2 + 3 * fr.fA3);
+    }
+    if (s.succinic > 0) {
+      var C = s.succinic / ACIDS.succinic.mw * 1000;
+      var fr = fractionDissociated2(ACIDS.succinic.pKa1, ACIDS.succinic.pKa2, pH);
+      totalAnionCharge += C * (fr.fHA + 2 * fr.fA2);
+    }
+    if (s.acetic > 0) {
+      var C = s.acetic / ACIDS.acetic.mw * 1000;
+      totalAnionCharge += C * fractionDissociated(ACIDS.acetic.pKa1, pH);
+    }
+    return H * 1000 - totalAnionCharge;
+  }
+
+  function calculateTA(s, pH) {
+    // Titratable acidity to pH 8.2 endpoint
+    var ta = 0;
+    if (s.tartaric > 0) {
+      var C = s.tartaric / ACIDS.tartaric.mw * 1000;
+      var fr = fractionDissociated2(ACIDS.tartaric.pKa1, ACIDS.tartaric.pKa2, 8.2);
+      var frNow = fractionDissociated2(ACIDS.tartaric.pKa1, ACIDS.tartaric.pKa2, pH);
+      ta += C * ((fr.fHA + 2*fr.fA2) - (frNow.fHA + 2*frNow.fA2));
+    }
+    if (s.malic > 0) {
+      var C = s.malic / ACIDS.malic.mw * 1000;
+      var fr = fractionDissociated2(ACIDS.malic.pKa1, ACIDS.malic.pKa2, 8.2);
+      var frNow = fractionDissociated2(ACIDS.malic.pKa1, ACIDS.malic.pKa2, pH);
+      ta += C * ((fr.fHA + 2*fr.fA2) - (frNow.fHA + 2*frNow.fA2));
+    }
+    if (s.lactic > 0) {
+      var C = s.lactic / ACIDS.lactic.mw * 1000;
+      ta += C * (fractionDissociated(ACIDS.lactic.pKa1, 8.2) - fractionDissociated(ACIDS.lactic.pKa1, pH));
+    }
+    if (s.citric > 0) {
+      var C = s.citric / ACIDS.citric.mw * 1000;
+      var fr = fractionDissociated3(ACIDS.citric.pKa1, ACIDS.citric.pKa2, ACIDS.citric.pKa3, 8.2);
+      var frNow = fractionDissociated3(ACIDS.citric.pKa1, ACIDS.citric.pKa2, ACIDS.citric.pKa3, pH);
+      ta += C * ((fr.fH2A + 2*fr.fHA2 + 3*fr.fA3) - (frNow.fH2A + 2*frNow.fHA2 + 3*frNow.fA3));
+    }
+    if (s.succinic > 0) {
+      var C = s.succinic / ACIDS.succinic.mw * 1000;
+      var fr = fractionDissociated2(ACIDS.succinic.pKa1, ACIDS.succinic.pKa2, 8.2);
+      var frNow = fractionDissociated2(ACIDS.succinic.pKa1, ACIDS.succinic.pKa2, pH);
+      ta += C * ((fr.fHA + 2*fr.fA2) - (frNow.fHA + 2*frNow.fA2));
+    }
+    if (s.acetic > 0) {
+      var C = s.acetic / ACIDS.acetic.mw * 1000;
+      ta += C * (fractionDissociated(ACIDS.acetic.pKa1, 8.2) - fractionDissociated(ACIDS.acetic.pKa1, pH));
+    }
+    // Convert mmol/L of H+ neutralised to g/L tartaric equivalent (1 mmol = 0.15009 g tartaric)
+    return ta * 0.15009;
+  }
+
+  function calculateBufferCapacity(s, pH) {
+    // Buffer capacity β = dCb/dpH = 2.303 * sum( C * Ka * [H+] / (Ka + [H+])^2 )
+    // For each acid species
+    var beta = 0;
+    var H = Math.pow(10, -pH);
+    var acidKeys = ['tartaric', 'malic', 'lactic', 'citric', 'succinic', 'acetic'];
+
+    for (var i = 0; i < acidKeys.length; i++) {
+      var key = acidKeys[i];
+      var acid = ACIDS[key];
+      var C = s[key] / acid.mw * 1000; // mmol/L
+      if (C <= 0) continue;
+
+      if (acid.triprotic) {
+        var Ka1 = Math.pow(10, -acid.pKa1);
+        var Ka2 = Math.pow(10, -acid.pKa2);
+        var Ka3 = Math.pow(10, -acid.pKa3);
+        beta += C * Ka1 * H / Math.pow(Ka1 + H, 2);
+        beta += C * Ka2 * H / Math.pow(Ka2 + H, 2);
+        beta += C * Ka3 * H / Math.pow(Ka3 + H, 2);
+      } else if (acid.diprotic) {
+        var Ka1 = Math.pow(10, -acid.pKa1);
+        var Ka2 = Math.pow(10, -acid.pKa2);
+        beta += C * Ka1 * H / Math.pow(Ka1 + H, 2);
+        beta += C * Ka2 * H / Math.pow(Ka2 + H, 2);
+      } else {
+        var Ka1 = Math.pow(10, -acid.pKa1);
+        beta += C * Ka1 * H / Math.pow(Ka1 + H, 2);
+      }
+    }
+    return 2.303 * beta; // mmol/L per pH unit
+  }
+
+  function getSpeciesData(s, pH) {
+    var species = [];
+    var acidKeys = ['tartaric', 'malic', 'lactic', 'citric', 'succinic', 'acetic'];
+    for (var i = 0; i < acidKeys.length; i++) {
+      var key = acidKeys[i];
+      var acid = ACIDS[key];
+      var C = s[key] / acid.mw * 1000;
+      if (C <= 0) continue;
+
+      if (acid.triprotic) {
+        var fr = fractionDissociated3(acid.pKa1, acid.pKa2, acid.pKa3, pH);
+        species.push({ name: acid.name + ' H₃A', conc: C * fr.fH3A, color: acid.color, acid: key, form: 'H3A' });
+        species.push({ name: acid.name + ' H₂A⁻', conc: C * fr.fH2A, color: acid.color, acid: key, form: 'H2A' });
+        species.push({ name: acid.name + ' HA²⁻', conc: C * fr.fHA2, color: acid.color, acid: key, form: 'HA2' });
+        species.push({ name: acid.name + ' A³⁻', conc: C * fr.fA3, color: acid.color, acid: key, form: 'A3' });
+      } else if (acid.diprotic) {
+        var fr = fractionDissociated2(acid.pKa1, acid.pKa2, pH);
+        species.push({ name: acid.name + ' H₂A', conc: C * fr.fH2A, color: acid.color, acid: key, form: 'H2A' });
+        species.push({ name: acid.name + ' HA⁻', conc: C * fr.fHA, color: acid.color, acid: key, form: 'HA' });
+        species.push({ name: acid.name + ' A²⁻', conc: C * fr.fA2, color: acid.color, acid: key, form: 'A2' });
+      } else {
+        var fDiss = fractionDissociated(acid.pKa1, pH);
+        species.push({ name: acid.name + ' HA', conc: C * (1 - fDiss), color: acid.color, acid: key, form: 'HA' });
+        species.push({ name: acid.name + ' A⁻', conc: C * fDiss, color: acid.color, acid: key, form: 'A' });
+      }
+    }
+    return species;
+  }
+
+  // ===== BABYLON.JS 3D SCENE =====
+  var canvas, engine, scene, camera;
+  var moleculeGroups = [];
+  var particleSystem = [];
+  var templateSphere, templateMat;
+  var sceneInitialized = false;
+  var animationTime = 0;
+
+  function initScene() {
+    canvas = document.getElementById('renderCanvas');
+    engine = new BABYLON.Engine(canvas, true, { antialias: true, preserveDrawingBuffer: true });
+    scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0.05, 0.048, 0.10, 1);
+
+    // Camera
+    camera = new BABYLON.ArcRotateCamera('cam',
+      -Math.PI / 2, Math.PI / 2.3, 28,
+      new BABYLON.Vector3(0, 0, 0), scene);
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 12;
+    camera.upperRadiusLimit = 60;
+    camera.lowerBetaLimit = Math.PI / 5;
+    camera.upperBetaLimit = Math.PI / 1.8;
+    camera.wheelPrecision = 3;
+    camera.panningSensibility = 0;
+
+    // Lighting
+    var hemi = new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    hemi.intensity = 0.55;
+    hemi.groundColor = new BABYLON.Color3(0.12, 0.08, 0.18);
+    hemi.diffuse = new BABYLON.Color3(0.85, 0.8, 1.0);
+
+    var dir = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-0.4, -1, -0.3), scene);
+    dir.intensity = 0.7;
+    dir.diffuse = new BABYLON.Color3(1, 0.95, 0.9);
+
+    // Template sphere for molecules
+    templateSphere = BABYLON.MeshBuilder.CreateSphere('tmpl', { diameter: 1, segments: 8 }, scene);
+    templateSphere.isVisible = false;
+    templateMat = new BABYLON.StandardMaterial('tmplMat', scene);
+    templateMat.disableLighting = true;
+    templateMat.emissiveColor = new BABYLON.Color3(1, 1, 1);
+    templateSphere.material = templateMat;
+
+    // Central pH indicator sphere
+    var centerSphere = BABYLON.MeshBuilder.CreateSphere('center', { diameter: 2.5, segments: 24 }, scene);
+    var centerMat = new BABYLON.StandardMaterial('centerMat', scene);
+    centerMat.disableLighting = true;
+    centerMat.emissiveColor = new BABYLON.Color3(0.75, 0.52, 0.99);
+    centerMat.alpha = 0.3;
+    centerMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+    centerSphere.material = centerMat;
+
+    // Glow layer
+    var gl = new BABYLON.GlowLayer('glow', scene);
+    gl.intensity = 0.4;
+
+    // Ground grid (subtle)
+    var ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 60, height: 60, subdivisions: 30 }, scene);
+    var groundMat = new BABYLON.StandardMaterial('groundMat', scene);
+    groundMat.diffuseColor = new BABYLON.Color3(0.08, 0.06, 0.12);
+    groundMat.emissiveColor = new BABYLON.Color3(0.03, 0.02, 0.06);
+    groundMat.alpha = 0.4;
+    groundMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+    ground.material = groundMat;
+    ground.position.y = -8;
+
+    // Wireframe grid
+    var gridMat = new BABYLON.StandardMaterial('gridMat', scene);
+    gridMat.wireframe = true;
+    gridMat.emissiveColor = new BABYLON.Color3(0.15, 0.10, 0.25);
+    gridMat.disableLighting = true;
+    gridMat.alpha = 0.15;
+    var gridMesh = BABYLON.MeshBuilder.CreateGround('gridMesh', { width: 40, height: 40, subdivisions: 20 }, scene);
+    gridMesh.material = gridMat;
+    gridMesh.position.y = -7.9;
+
+    sceneInitialized = true;
+
+    // Render loop
+    engine.runRenderLoop(function() {
+      if (scene) {
+        animationTime += engine.getDeltaTime() / 1000;
+        updateParticles();
+        scene.render();
+      }
+    });
+
+    window.addEventListener('resize', function() {
+      engine.resize();
+    });
+  }
+
+  // ===== MOLECULE REPRESENTATION =====
+  // Each acid is represented as a cluster of spheres orbiting the center
+  // Protonated (HA) = purple-ish spheres, Dissociated (A-) = blue-ish spheres
+  // Free H+ = small red spheres
+
+  function hexToColor3(hex) {
+    var r = parseInt(hex.slice(1, 3), 16) / 255;
+    var g = parseInt(hex.slice(3, 5), 16) / 255;
+    var b = parseInt(hex.slice(5, 7), 16) / 255;
+    return new BABYLON.Color3(r, g, b);
+  }
+
+  function clearMolecules() {
+    for (var i = 0; i < particleSystem.length; i++) {
+      if (particleSystem[i].mesh) {
+        particleSystem[i].mesh.dispose();
+      }
+    }
+    particleSystem = [];
+  }
+
+  function buildMolecules(s, pH) {
+    if (!sceneInitialized) return;
+    clearMolecules();
+
+    var species = getSpeciesData(s, pH);
+    var maxConc = 0;
+    for (var i = 0; i < species.length; i++) {
+      if (species[i].conc > maxConc) maxConc = species[i].conc;
+    }
+    if (maxConc <= 0) return;
+
+    // Scale: 1 mmol/L = up to 8 molecules
+    var maxMolecules = 180;
+    var scaleFactor = maxMolecules / maxConc;
+
+    for (var sp = 0; sp < species.length; sp++) {
+      var spData = species[sp];
+      if (spData.conc <= 0.01) continue;
+
+      var count = Math.max(1, Math.round(spData.conc * scaleFactor));
+      if (count > 40) count = 40;
+
+      // Each acid type gets its own orbital shell
+      var acidIdx = ['tartaric', 'malic', 'lactic', 'citric', 'succinic', 'acetic'].indexOf(spData.acid);
+      var shellRadius = 5 + acidIdx * 3.2;
+
+      // Protonated forms (HA, H2A) = inner, dissociated (A-, A2-) = outer
+      var isDissociated = spData.form === 'A' || spData.form === 'A2' || spData.form === 'A3' || spData.form === 'HA2';
+      var isProtonated = spData.form === 'HA' || spData.form === 'H2A' || spData.form === 'H3A';
+
+      var orbitOffset = isDissociated ? 0.8 : 0;
+      var actualRadius = shellRadius + orbitOffset;
+
+      var baseColor = hexToColor3(spData.color);
+      var color;
+      if (isDissociated) {
+        // Blend toward blue for dissociated
+        color = new BABYLON.Color3(
+          baseColor.r * 0.4 + 0.376,
+          baseColor.g * 0.4 + 0.624,
+          baseColor.b * 0.4 + 0.988
+        );
+      } else {
+        // Blend toward purple for protonated
+        color = new BABYLON.Color3(
+          baseColor.r * 0.5 + 0.753,
+          baseColor.g * 0.5 + 0.522,
+          baseColor.b * 0.5 + 0.988
+        );
+      }
+
+      var sphereSize = isDissociated ? 0.45 : 0.55;
+      if (spData.form === 'H3A' || spData.form === 'H2A') sphereSize = 0.65;
+
+      for (var j = 0; j < count; j++) {
+        var angle = (j / count) * Math.PI * 2 + sp * 0.5;
+        var yOffset = Math.sin(j * 2.3 + sp) * 2.5;
+        var x = Math.cos(angle) * actualRadius;
+        var z = Math.sin(angle) * actualRadius;
+        var y = yOffset + (acidIdx - 2.5) * 1.2;
+
+        var inst = templateSphere.createInstance('mol_' + particleSystem.length);
+        inst.position.set(x, y, z);
+        inst.scaling.setAll(sphereSize);
+
+        var mat = new BABYLON.StandardMaterial('mat_' + particleSystem.length, scene);
+        mat.disableLighting = true;
+        mat.emissiveColor = color;
+        mat.alpha = 0.9;
+        mat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+        inst.material = mat;
+
+        particleSystem.push({
+          mesh: inst,
+          baseAngle: angle,
+          baseRadius: actualRadius,
+          baseY: y,
+          shellIdx: acidIdx,
+          speed: 0.15 + acidIdx * 0.04 + (isDissociated ? 0.1 : 0),
+          phase: j * 0.4 + sp * 1.2,
+          color: color,
+          isDissociated: isDissociated,
+          acidKey: spData.acid,
+          form: spData.form
+        });
+      }
+    }
+
+    // Add free H+ particles (small red, fast-moving)
+    var Hconc = Math.pow(10, -pH) * 1000; // mmol/L
+    var hCount = Math.max(3, Math.min(25, Math.round(Hconc * 8)));
+    for (var h = 0; h < hCount; h++) {
+      var angle = (h / hCount) * Math.PI * 2 + Math.random() * 0.5;
+      var r = 3 + Math.random() * 18;
+      var y = (Math.random() - 0.5) * 12;
+      var x = Math.cos(angle) * r;
+      var z = Math.sin(angle) * r;
+
+      var inst = templateSphere.createInstance('hplus_' + h);
+      inst.position.set(x, y, z);
+      inst.scaling.setAll(0.25);
+
+      var mat = new BABYLON.StandardMaterial('hmat_' + h, scene);
+      mat.disableLighting = true;
+      mat.emissiveColor = new BABYLON.Color3(0.97, 0.44, 0.44);
+      mat.alpha = 0.85;
+      mat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+      inst.material = mat;
+
+      particleSystem.push({
+        mesh: inst,
+        baseAngle: angle,
+        baseRadius: r,
+        baseY: y,
+        shellIdx: -1,
+        speed: 0.5 + Math.random() * 0.3,
+        phase: Math.random() * Math.PI * 2,
+        color: new BABYLON.Color3(0.97, 0.44, 0.44),
+        isDissociated: false,
+        isHplus: true,
+        acidKey: 'hplus',
+        form: 'H+'
+      });
+    }
+  }
+
+  function updateParticles() {
+    for (var i = 0; i < particleSystem.length; i++) {
+      var p = particleSystem[i];
+      if (!p.mesh || p.mesh.isDisposed()) continue;
+
+      if (p.isHplus) {
+        // H+ particles: fast chaotic orbit
+        var a = p.baseAngle + animationTime * p.speed * 2;
+        var r = p.baseRadius + Math.sin(animationTime * 1.5 + p.phase) * 3;
+        p.mesh.position.x = Math.cos(a) * r;
+        p.mesh.position.z = Math.sin(a) * r;
+        p.mesh.position.y = p.baseY + Math.sin(animationTime * 2.2 + p.phase) * 2;
+        // Pulse opacity
+        if (p.mesh.material) {
+          p.mesh.material.alpha = 0.6 + Math.sin(animationTime * 4 + p.phase) * 0.25;
+        }
+      } else {
+        // Acid species: slow orbital motion
+        var a = p.baseAngle + animationTime * p.speed;
+        p.mesh.position.x = Math.cos(a) * p.baseRadius;
+        p.mesh.position.z = Math.sin(a) * p.baseRadius;
+        p.mesh.position.y = p.baseY + Math.sin(animationTime * 0.8 + p.phase) * 1.5;
+
+        // Dissociated species pulse slightly
+        if (p.isDissociated && p.mesh.material) {
+          p.mesh.material.alpha = 0.65 + Math.sin(animationTime * 2 + p.phase) * 0.1;
+        }
+      }
+    }
+  }
+
+  // ===== UI UPDATES =====
+  function updateMetrics() {
+    var pH = calculatePH(state);
+    var ta = calculateTA(state, pH);
+    var beta = calculateBufferCapacity(state, pH);
+    var totalAcid = state.tartaric + state.malic + state.lactic + state.citric + state.succinic + state.acetic;
+
+    // VA risk
+    var vaRisk = 'Low';
+    var vaColor = 'var(--green)';
+    if (state.acetic > 0.6) { vaRisk = 'Moderate'; vaColor = 'var(--orange)'; }
+    if (state.acetic > 1.0) { vaRisk = 'High'; vaColor = 'var(--red)'; }
+    if (state.acetic > 1.4) { vaRisk = 'Critical'; vaColor = 'var(--red)'; }
+
+    // pH stability based on buffer capacity
+    var stability = 'Excellent';
+    var stabColor = 'var(--green)';
+    if (beta < 25) { stability = 'Marginal'; stabColor = 'var(--orange)'; }
+    if (beta < 15) { stability = 'Poor'; stabColor = 'var(--red)'; }
+    if (beta > 50) { stability = 'High'; stabColor = 'var(--blue)'; }
+
+    document.getElementById('m-ph').textContent = pH.toFixed(2);
+    document.getElementById('m-ta').textContent = ta.toFixed(1) + ' g/L';
+    document.getElementById('m-buffer').textContent = beta.toFixed(1) + ' mM/pH';
+    document.getElementById('m-total').textContent = totalAcid.toFixed(1) + ' g/L';
+    document.getElementById('m-va').textContent = vaRisk;
+    document.getElementById('m-va').style.color = vaColor;
+    document.getElementById('m-stability').textContent = stability;
+    document.getElementById('m-stability').style.color = stabColor;
+
+    // pH marker position (2.8 to 4.2 range)
+    var phPct = ((pH - 2.8) / (4.2 - 2.8)) * 100;
+    document.getElementById('ph-marker').style.left = Math.max(0, Math.min(100, phPct)) + '%';
+
+    // Acid list
+    var acidList = document.getElementById('acid-list');
+    acidList.innerHTML = '';
+    var acidKeys = ['tartaric', 'malic', 'lactic', 'citric', 'succinic', 'acetic'];
+    for (var i = 0; i < acidKeys.length; i++) {
+      var key = acidKeys[i];
+      if (state[key] <= 0) continue;
+      var acid = ACIDS[key];
+      var row = document.createElement('div');
+      row.className = 'acid-row';
+      row.innerHTML = '<div class="acid-dot" style="background:' + acid.color + '"></div>' +
+                      '<div class="acid-name">' + acid.name + '</div>' +
+                      '<div class="acid-conc">' + state[key].toFixed(2) + ' g/L</div>';
+      acidList.appendChild(row);
+    }
+
+    // Species distribution
+    var species = getSpeciesData(state, pH);
+    var speciesList = document.getElementById('species-list');
+    speciesList.innerHTML = '';
+    var maxConc = 0;
+    for (var j = 0; j < species.length; j++) {
+      if (species[j].conc > maxConc) maxConc = species[j].conc;
+    }
+    // Sort by concentration descending, show top 8
+    species.sort(function(a, b) { return b.conc - a.conc; });
+    var shown = 0;
+    for (var k = 0; k < species.length && shown < 8; k++) {
+      if (species[k].conc <= 0.01) continue;
+      var pct = (species[k].conc / maxConc) * 100;
+      var spRow = document.createElement('div');
+      spRow.style.marginBottom = '4px';
+      spRow.innerHTML = '<div style="font-size:10px;color:var(--muted);display:flex;justify-content:space-between">' +
+                        '<span>' + species[k].name + '</span>' +
+                        '<span style="font-variant-numeric:tabular-nums">' + species[k].conc.toFixed(1) + ' mM</span></div>' +
+                        '<div class="species-bar" style="width:' + pct + '%;background:' + species[k].color + '"></div>';
+      speciesList.appendChild(spRow);
+      shown++;
+    }
+  }
+
+  function updateAll() {
+    updateMetrics();
+    var pH = calculatePH(state);
+    buildMolecules(state, pH);
+  }
+
+  // ===== EVENT LISTENERS =====
+  function setupControls() {
+    var sliders = [
+      { id: 'sl-tartaric', key: 'tartaric', valId: 'val-tartaric' },
+      { id: 'sl-malic', key: 'malic', valId: 'val-malic' },
+      { id: 'sl-lactic', key: 'lactic', valId: 'val-lactic' },
+      { id: 'sl-citric', key: 'citric', valId: 'val-citric' },
+      { id: 'sl-succinic', key: 'succinic', valId: 'val-succinic' },
+      { id: 'sl-acetic', key: 'acetic', valId: 'val-acetic' },
+      { id: 'sl-ph', key: 'targetpH', valId: 'val-ph', isPH: true }
+    ];
+
+    for (var i = 0; i < sliders.length; i++) {
+      (function(sl) {
+        var el = document.getElementById(sl.id);
+        el.addEventListener('input', function() {
+          var v = parseFloat(el.value);
+          state[sl.key] = v;
+          var displayVal = sl.isPH ? v.toFixed(2) : v.toFixed(1);
+          document.getElementById(sl.valId).textContent = displayVal;
+          // Deactivate preset buttons when manually adjusting
+          var btns = document.querySelectorAll('.preset-btn');
+          for (var j = 0; j < btns.length; j++) btns[j].classList.remove('active');
+          updateAll();
+        });
+      })(sliders[i]);
+    }
+
+    // Presets
+    var presetBtns = document.querySelectorAll('.preset-btn');
+    for (var j = 0; j < presetBtns.length; j++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          var preset = PRESETS[btn.dataset.preset];
+          if (!preset) return;
+          // Update state
+          state.tartaric = preset.tartaric;
+          state.malic = preset.malic;
+          state.lactic = preset.lactic;
+          state.citric = preset.citric;
+          state.succinic = preset.succinic;
+          state.acetic = preset.acetic;
+          state.targetpH = preset.ph;
+
+          // Update sliders
+          document.getElementById('sl-tartaric').value = preset.tartaric;
+          document.getElementById('val-tartaric').textContent = preset.tartaric.toFixed(1);
+          document.getElementById('sl-malic').value = preset.malic;
+          document.getElementById('val-malic').textContent = preset.malic.toFixed(1);
+          document.getElementById('sl-lactic').value = preset.lactic;
+          document.getElementById('val-lactic').textContent = preset.lactic.toFixed(1);
+          document.getElementById('sl-citric').value = preset.citric;
+          document.getElementById('val-citric').textContent = preset.citric.toFixed(1);
+          document.getElementById('sl-succinic').value = preset.succinic;
+          document.getElementById('val-succinic').textContent = preset.succinic.toFixed(1);
+          document.getElementById('sl-acetic').value = preset.acetic;
+          document.getElementById('val-acetic').textContent = preset.acetic.toFixed(2);
+          document.getElementById('sl-ph').value = preset.ph;
+          document.getElementById('val-ph').textContent = preset.ph.toFixed(2);
+
+          // Active state
+          var allBtns = document.querySelectorAll('.preset-btn');
+          for (var k = 0; k < allBtns.length; k++) allBtns[k].classList.remove('active');
+          btn.classList.add('active');
+
+          updateAll();
+        });
+      })(presetBtns[j]);
+    }
+  }
+
+  // ===== INIT =====
+  function init() {
+    initScene();
+    setupControls();
+    updateAll();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+
+</body>
+</html>
