@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Appellation Systems Explorer — Hierarchical Classification Visualised</title>
+<style>
+  :root {
+    --bg: #0d0a08; --surface: #1a1510; --surface2: #221a14; --border: #3a2e22;
+    --text: #e8dcc8; --muted: #9a8870; --accent: #c9a060; --accent2: #8b5a2b;
+    --gold: #d4a843; --wine: #722f37; --wine-light: #a04550;
+    --green: #6b8e4e; --blue: #4a7090; --purple: #7d5a8e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5; -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .disclaimer {
+    background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060;
+    padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem;
+    font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  #app {
+    max-width: 1200px; margin: 0 auto; padding: 1rem;
+  }
+
+  header {
+    text-align: center; padding: 1.5rem 1rem 1rem;
+  }
+  header h1 {
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    background: linear-gradient(90deg, var(--gold), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    display: inline-block;
+  }
+  header p { color: var(--muted); font-size: 0.9rem; margin-top: 0.4rem; }
+
+  /* Country selector tabs */
+  .country-tabs {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;
+    margin: 1rem 0 1.5rem;
+  }
+  .country-tab {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.5rem 1rem; color: var(--muted); cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; transition: all 0.2s;
+    display: flex; align-items: center; gap: 0.4rem;
+    user-select: none;
+  }
+  .country-tab .flag { font-size: 1.1rem; }
+  .country-tab:hover { border-color: var(--accent); color: var(--text); }
+  .country-tab.active {
+    background: linear-gradient(135deg, var(--surface2), var(--surface));
+    border-color: var(--gold); color: var(--gold);
+    box-shadow: 0 0 12px rgba(212,168,67,0.15);
+  }
+
+  /* Main layout */
+  .main-grid {
+    display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem;
+  }
+  @media (max-width: 860px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  /* SVG hierarchy container */
+  #hierarchy-container {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem; min-height: 500px;
+    position: relative; overflow: hidden;
+  }
+  #hierarchy-container svg { width: 100%; height: 100%; display: block; }
+
+  /* Detail panel */
+  #detail-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.25rem; min-height: 500px;
+    display: flex; flex-direction: column;
+  }
+  .detail-header {
+    border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 0.75rem;
+  }
+  .detail-header .level-badge {
+    display: inline-block; font-size: 0.7rem; padding: 0.2rem 0.6rem;
+    border-radius: 4px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; margin-bottom: 0.5rem;
+  }
+  .detail-header h2 { font-size: 1.2rem; color: var(--gold); margin-bottom: 0.25rem; }
+  .detail-header .subtitle { font-size: 0.8rem; color: var(--muted); }
+
+  .detail-stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 0.75rem 0;
+  }
+  .stat-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.6rem 0.8rem;
+  }
+  .stat-box .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-box .value { font-size: 1.1rem; color: var(--text); font-weight: 700; margin-top: 0.15rem; }
+
+  .detail-desc {
+    font-size: 0.85rem; color: var(--text); line-height: 1.6;
+    margin: 0.5rem 0;
+  }
+  .detail-rules {
+    font-size: 0.82rem; color: var(--muted); margin-top: 0.5rem;
+  }
+  .detail-rules li {
+    list-style: none; padding: 0.2rem 0; padding-left: 1rem; position: relative;
+  }
+  .detail-rules li::before {
+    content: '◆'; position: absolute; left: 0; color: var(--accent); font-size: 0.6rem; top: 0.35rem;
+  }
+
+  .detail-children {
+    margin-top: 0.75rem; flex: 1;
+  }
+  .detail-children h3 { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .child-chip {
+    display: inline-block; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.3rem 0.6rem; font-size: 0.8rem;
+    color: var(--text); cursor: pointer; margin: 0.15rem; transition: all 0.15s;
+  }
+  .child-chip:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* Comparison toggle */
+  .compare-toggle {
+    display: flex; align-items: center; gap: 0.5rem; justify-content: center;
+    margin: 0.5rem 0 1rem;
+  }
+  .compare-toggle label { font-size: 0.85rem; color: var(--muted); cursor: pointer; }
+  .compare-toggle input[type="checkbox"] {
+    width: 18px; height: 18px; accent-color: var(--gold); cursor: pointer;
+  }
+
+  .compare-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;
+  }
+  @media (max-width: 860px) {
+    .compare-grid { grid-template-columns: 1fr; }
+  }
+  .compare-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem;
+  }
+  .compare-card h3 {
+    font-size: 1rem; color: var(--gold); margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border); padding-bottom: 0.4rem;
+  }
+  .compare-card .flag { font-size: 1.3rem; margin-right: 0.3rem; }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed; background: var(--surface2); border: 1px solid var(--gold);
+    border-radius: 8px; padding: 0.5rem 0.8rem; font-size: 0.82rem;
+    color: var(--text); pointer-events: none; z-index: 200;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5); max-width: 280px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .tooltip.visible { opacity: 1; }
+
+  /* Loading hint */
+  .hint {
+    text-align: center; color: var(--muted); font-size: 0.8rem;
+    padding: 2rem; font-style: italic;
+  }
+
+  /* SVG node styles */
+  .node-rect { cursor: pointer; transition: opacity 0.2s; }
+  .node-rect:hover { opacity: 0.85; }
+  .node-text { pointer-events: none; user-select: none; }
+  .node-count { pointer-events: none; user-select: none; }
+
+  /* Level legend */
+  .level-legend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;
+    margin-bottom: 0.75rem;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--muted);
+  }
+  .legend-swatch {
+    width: 14px; height: 14px; border-radius: 3px;
+  }
+
+  /* History section */
+  .history-bar {
+    margin-top: 1.5rem; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem 1.25rem;
+  }
+  .history-bar h3 {
+    font-size: 0.9rem; color: var(--gold); margin-bottom: 0.5rem;
+  }
+  .timeline-track {
+    position: relative; height: 50px; margin: 0.5rem 0;
+  }
+  .timeline-line {
+    position: absolute; top: 25px; left: 0; right: 0; height: 2px;
+    background: var(--border); border-radius: 1px;
+  }
+  .timeline-marker {
+    position: absolute; top: 15px; width: 3px; height: 20px;
+    border-radius: 2px; cursor: pointer; transition: all 0.2s;
+  }
+  .timeline-marker:hover { transform: scaleY(1.3); }
+  .timeline-label {
+    position: absolute; top: 38px; font-size: 0.65rem; color: var(--muted);
+    transform: translateX(-50%); white-space: nowrap;
+  }
+  .timeline-event {
+    position: absolute; top: 0; font-size: 0.7rem; color: var(--accent);
+    transform: translateX(-50%); white-space: nowrap; font-weight: 600;
+  }
+
+  /* Preset buttons */
+  .preset-bar {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center;
+    margin: 0.5rem 0;
+  }
+  .preset-btn {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 0.35rem 0.7rem; font-size: 0.78rem; color: var(--muted);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    #app { padding: 0.5rem; }
+    .country-tabs { gap: 0.3rem; }
+    .country-tab { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+    .country-tab .flag { font-size: 1rem; }
+    #hierarchy-container { min-height: 380px; padding: 0.6rem; }
+    #detail-panel { min-height: auto; padding: 1rem; }
+    .detail-stats { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="app">
+  <header>
+    <h1>Wine Appellation Systems Explorer</h1>
+    <p>Discover how the world's great wine regions are classified — from France's AOC pyramid to Italy's DOCG hierarchy</p>
+  </header>
+
+  <div class="country-tabs" id="country-tabs"></div>
+
+  <div class="level-legend" id="level-legend"></div>
+
+  <div class="main-grid">
+    <div id="hierarchy-container">
+      <svg id="hierarchy-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div id="detail-panel">
+      <div class="detail-header" id="detail-header">
+        <div class="level-badge" id="level-badge">Overview</div>
+        <h2 id="detail-title">Select a country to explore</h2>
+        <div class="subtitle" id="detail-subtitle">Click on any node in the hierarchy to see details</div>
+      </div>
+      <div class="detail-stats" id="detail-stats"></div>
+      <div class="detail-desc" id="detail-desc"></div>
+      <ul class="detail-rules" id="detail-rules"></ul>
+      <div class="detail-children" id="detail-children"></div>
+    </div>
+  </div>
+
+  <div class="compare-toggle">
+    <input type="checkbox" id="compare-mode">
+    <label for="compare-mode">Compare two systems side by side</label>
+  </div>
+
+  <div id="compare-section" style="display:none;">
+    <div class="compare-grid" id="compare-grid"></div>
+  </div>
+
+  <div class="history-bar">
+    <h3>📜 History of Wine Appellation Law</h3>
+    <div class="timeline-track" id="timeline-track">
+      <div class="timeline-line"></div>
+    </div>
+  </div>
+
+  <div class="preset-bar" id="preset-bar">
+    <button class="preset-btn" data-preset="overview">World Overview</button>
+    <button class="preset-btn" data-preset="france">France Deep Dive</button>
+    <button class="preset-btn" data-preset="italy">Italy Deep Dive</button>
+    <button class="preset-btn" data-preset="compare">Compare FR vs IT</button>
+    <button class="preset-btn" data-preset="newworld">New World Systems</button>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// WINE APPELLATION SYSTEMS DATA
+// ═══════════════════════════════════════════════════════════════════
+
+const COUNTRIES = {
+  france: {
+    name: "France", flag: "🇫🇷",
+    system: "AOC/AOP System",
+    intro: "France pioneered legal wine classification with the AOC system, established in 1935. The European PDO/PGI framework now overlays the traditional French hierarchy.",
+    levels: [
+      { name: "AOP", color: "#c9a060", fullName: "Appellation d'Origine Protégée", level: 1,
+        desc: "The highest quality tier — replaces the traditional AOC. Products must reflect their terroir with strict link to origin.",
+        count: 358, rules: ["Defined geographical boundaries", "Permitted grape varieties", "Maximum yields (hl/ha)", "Viticultural practices regulated", "Tasting committee approval"],
+        children: [
+          { name: "AOP Grand Cru", fullName: "Grand Cru AOP", count: 32,
+            desc: "The finest individual vineyard sites, historically classified. Examples: Montrachet, Château Margaux (though Bordeaux uses a different system).",
+            rules: ["Single vineyard designation", "Strictest yield limits", "Often hand-harvested only"] },
+          { name: "AOP Premier Cru", fullName: "Premier Cru AOP", count: 637,
+            desc: "Excellent vineyard sites just below Grand Cru status, primarily in Burgundy.",
+            rules: ["Classified vineyard site", "Slightly higher yields than Grand Cru"] },
+          { name: "AOP Village", fullName: "Village/Communal AOP", count: 450,
+            desc: "Named after a specific village or commune. Examples: Gevrey-Chambertin, Pommard.",
+            rules: ["Named village territory", "Local grape varieties only"] },
+          { name: "AOP Régionale", fullName: "Regional AOP", count: 280,
+            desc: "Broader regional appellations like Bordeaux, Côtes du Rhône, Bourgogne.",
+            rules: ["Regional territory", "Broader grape variety list"] }
+        ]
+      },
+      { name: "IGP", color: "#8b5a2b", fullName: "Indication Géographique Protégée", level: 2,
+        desc: "Formerly Vin de Pays. Less strict than AOP — allows more grape varieties and higher yields. Good value wines.",
+        count: 75, rules: ["Broader geographical zone", "More grape varieties permitted", "Higher yields allowed", "Less restrictive vinification rules"],
+        children: [
+          { name: "IGP Département", fullName: "Departmental IGP", count: 45,
+            desc: "Named after a department, e.g. IGP Vin de Pays d'Oc.", rules: ["Department-level zone"] },
+          { name: "IGP Zone", fullName: "Zonal IGP", count: 30,
+            desc: "Named after a smaller zone, e.g. IGP Côtes de Gascogne.", rules: ["Sub-departmental zone"] }
+        ]
+      },
+      { name: "Vin de France", color: "#6b6b6b", fullName: "Vin de France (formerly Vin de Table)", level: 3,
+        desc: "The most flexible category. Grape variety and vintage may be declared. No geographical restriction beyond France.",
+        count: 500, rules: ["No geographical restriction", "Any grape variety", "No yield limit", "Vintage optional"],
+        children: []
+      }
+    ]
+  },
+
+  italy: {
+    name: "Italy", flag: "🇮🇹",
+    system: "DOC/DOCG System",
+    intro: "Italy's classification system was created in 1963, modelled on French AOC but with an additional top tier (DOCG) for the most prestigious wines. The EU PDO/PGI framework now overlays it.",
+    levels: [
+      { name: "DOCG", color: "#c9a060", fullName: "Denominazione di Origine Controllata e Garantita", level: 1,
+        desc: "The highest Italian classification — 'Controlled and Guaranteed Origin'. Only ~74 wines hold this status. Each bottle carries a numbered government seal.",
+        count: 74, rules: ["Stricter than DOC", "Government tasting approval", "Numbered state seal on bottle", "Lower maximum yields", "Minimum aging requirements"],
+        children: [
+          { name: "DOCG Piemonte", fullName: "Piedmont DOCG wines", count: 17,
+            desc: "Including Barolo, Barbaresco, Asti, Gavi, Brachetto d'Acqui.",
+            rules: ["Nebbiolo, Barbera, Dolcetto, Moscato"] },
+          { name: "DOCG Toscana", fullName: "Tuscan DOCG wines", count: 11,
+            desc: "Including Brunello di Montalcino, Chianti Classico, Vino Nobile di Montepulciano, Vernaccia di San Gimignano.",
+            rules: ["Sangiovese-dominant"] },
+          { name: "DOCG Veneto", fullName: "Veneto DOCG wines", count: 10,
+            desc: "Including Soave Superiore, Amarone della Valpolicella, Prosecco di Conegliano-Valdobbiadene.",
+            rules: ["Garganega, Corvina, Glera"] }
+        ]
+      },
+      { name: "DOC", color: "#8b5a2b", fullName: "Denominazione di Origine Controllata", level: 2,
+        desc: "Controlled origin — equivalent to French AOC. Defines grape varieties, yields, and winemaking practices for a specific area.",
+        count: 334, rules: ["Defined geographical area", "Specified grape varieties", "Maximum yields", "Winemaking regulations"],
+        children: [
+          { name: "DOC Classico", fullName: "Classico sub-zone", count: 60,
+            desc: "The original, historic heart of a DOC zone — e.g. Chianti Classico, Soave Classico.",
+            rules: ["Historic core territory"] },
+          { name: "DOC Superiore", fullName: "Superiore designation", count: 45,
+            desc: "Higher quality sub-category with lower yields and higher minimum alcohol.",
+            rules: ["Lower yields", "Higher minimum alcohol", "Extended aging"] }
+        ]
+      },
+      { name: "IGT", color: "#a04550", fullName: "Indicazione Geografica Tipica", level: 3,
+        desc: "Typical geographical indication — less restrictive than DOC. Many 'Super Tuscan' wines carry IGT status because they use non-traditional grape varieties.",
+        count: 118, rules: ["Broad regional designation", "International varieties allowed", "More flexible winemaking"],
+        children: [
+          { name: "IGT Toscana", fullName: "Tuscan IGT", count: 8,
+            desc: "Home of Super Tuscans like Tignanello and Sassicaia (which later earned its own DOC).",
+            rules: ["Bordeaux varieties permitted"] },
+          { name: "IGT Sicilia", fullName: "Sicilian IGT", count: 6,
+            desc: "Modern Sicilian wines using Nero d'Avola, Frappato, and international varieties.",
+            rules: ["Island-wide designation"] }
+        ]
+      },
+      { name: "VdT", color: "#6b6b6b", fullName: "Vino da Tavola", level: 4,
+        desc: "Table wine — the most basic category. No geographical indication beyond Italy. Cannot declare grape variety or vintage.",
+        count: 200, rules: ["No geographical indication", "No variety on label", "No vintage on label"],
+        children: []
+      }
+    ]
+  },
+
+  spain: {
+    name: "Spain", flag: "🇪🇸",
+    system: "DO/DOCa System",
+    intro: "Spain's appellation system, modelled on French AOC, was established in 1932. The top tier DOCa (or DOC in Catalan) is reserved for regions with consistently high quality over time.",
+    levels: [
+      { name: "DOCa/DOC", color: "#c9a060", fullName: "Denominación de Origen Calificada", level: 1,
+        desc: "The highest Spanish tier — only 2 regions qualify: Rioja (1991) and Priorat (2003). Requires minimum 10 years of proven DO quality.",
+        count: 2, rules: ["Minimum 10 years as DO", "Bottle-aged in region", "External quality control", "Single-estate bottling encouraged"],
+        children: [
+          { name: "Rioja DOCa", fullName: "Rioja DOCa", count: 1,
+            desc: "Spain's most famous wine region. Crianza, Reserva, and Gran Reserva aging classifications within the DOCa.",
+            rules: ["Tempranillo-dominant blends", "Oak aging: Crianza 1yr, Reserva 3yr, Gran Reserva 5yr"] },
+          { name: "Priorat DOC", fullName: "Priorat DOC-Q", count: 1,
+            desc: "Catalan region known for powerful Garnacha/Cariñena blends from old vines on llicorella (slate) soils.",
+            rules: ["Garnacha & Cariñena dominant", "Low-yield old vines", "Slate terroir"] }
+        ]
+      },
+      { name: "DO", color: "#8b5a2b", fullName: "Denominación de Origen", level: 2,
+        desc: "Controlled origin — equivalent to French AOC. The main quality category with ~70 registered DOs.",
+        count: 70, rules: ["Defined geographical area", "Permitted varieties", "Maximum yields", "Consejo Regulador oversight"],
+        children: [
+          { name: "DO Ribera del Duero", fullName: "Ribera del Duero DO", count: 1,
+            desc: "Premium Tempranillo reds from Castilla y León. Vega Sicilia and Pingus originate here.",
+            rules: ["Tinto Fino (Tempranillo) dominant"] },
+          { name: "DO Rías Baixas", fullName: "Rías Baixas DO", count: 1,
+            desc: "Crisp Albariño whites from Galicia's Atlantic coast.",
+            rules: ["Albariño ≥ 70% (single-variety = 100%)"] },
+          { name: "DO Jerez", fullName: "Jerez-Xérès-Sherry DO", count: 1,
+            desc: "Fortified sherry from the Sherry Triangle — Palomino, Pedro Ximénez, Moscatel.",
+            rules: ["Palomino, PX, Moscatel", "Solera aging system"] }
+        ]
+      },
+      { name: "VP", color: "#a04550", fullName: "Vino de Pago", level: 3,
+        desc: "Single-estate designation for wines with exceptional quality and distinct terroir. ~15 registered pagos, mostly in Castilla-La Mancha.",
+        count: 15, rules: ["Single estate", "Distinct microclimate", "Must sell wine from estate", "Higher quality than DO"],
+        children: []
+      },
+      { name: "VC/VT", color: "#6b8e4e", fullName: "Vino de Calidad / Vino de la Tierra", level: 4,
+        desc: "Intermediate categories — VC (Quality Wine) is a stepping stone to DO, VT (Land Wine) is less restrictive, similar to French IGP.",
+        count: 42, rules: ["Regional designation", "Lighter regulation", "Pathway to DO status"],
+        children: []
+      },
+      { name: "VdM", color: "#6b6b6b", fullName: "Vino de Mesa", level: 5,
+        desc: "Table wine — no geographical indication beyond Spain. The most basic category.",
+        count: 100, rules: ["No geographical indication", "No variety on label"],
+        children: []
+      }
+    ]
+  },
+
+  usa: {
+    name: "USA", flag: "🇺🇸",
+    system: "AVA System",
+    intro: "The American Viticultural Area (AVA) system, established in 1980, is unique — it defines geographical boundaries only, with no restrictions on grape varieties, yields, or winemaking practices. Quality is determined by the market, not the law.",
+    levels: [
+      { name: "AVA", color: "#c9a060", fullName: "American Viticultural Area", level: 1,
+        desc: " federally designated grape-growing region with distinguishing geographical features. 268+ registered AVAs. Unlike European systems, AVAs impose NO restrictions on grape varieties, yields, or vinification.",
+        count: 268, rules: ["Defined geographical boundary", "Distinguishing features (soil, climate, elevation)", "No grape variety restrictions", "No yield limits", "No winemaking rules", "85% grapes must come from AVA if named on label"],
+        children: [
+          { name: "Napa Valley AVA", fullName: "Napa Valley AVA", count: 16,
+            desc: "California's most prestigious AVA with 16 nested sub-AVAs including Oakville, Rutherford, Stags Leap District, and Howell Mountain.",
+            rules: ["16 nested sub-AVAs", "Cabernet Sauvignon dominant"] },
+          { name: "Willamette Valley AVA", fullName: "Willamette Valley AVA", count: 9,
+            desc: "Oregon's premier Pinot Noir region with 9 nested sub-AVAs including Dundee Hills, Eola-Amity Hills, and Chehalem Mountains.",
+            rules: ["9 nested sub-AVAs", "Pinot Noir dominant"] },
+          { name: "Sonoma County AVA", fullName: "Sonoma County AVA", count: 19,
+            desc: "19 nested sub-AVAs including Russian River Valley, Alexander Valley, Dry Creek Valley, and Sonoma Coast.",
+            rules: ["19 nested sub-AVAs", "Diverse varieties"] }
+        ]
+      },
+      { name: "State/County", color: "#8b5a2b", fullName: "State or County Designation", level: 2,
+        desc: "If a state or county is named on the label, 75% of grapes must come from that area. Less specific than AVA.",
+        count: 50, rules: ["75% grapes from named state/county", "No soil/climate distinction required"],
+        children: []
+      },
+      { name: "Generic", color: "#6b6b6b", fullName: "Generic/Other", level: 3,
+        desc: "No geographical indication beyond 'American' or 'California'. May use semi-generic names like 'Chablis' or 'Burgundy' (a quirk of US wine law).",
+        count: 300, rules: ["No geographical indication", "Semi-generic names historically allowed"],
+        children: []
+      }
+    ]
+  },
+
+  australia: {
+    name: "Australia", flag: "🇦🇺",
+    system: "GI System",
+    intro: "Australia's Geographical Indication (GI) system was established in 1993 under the Australian Wine and Brandy Corporation Act. Like AVAs, GIs define boundaries but don't restrict grape varieties or winemaking.",
+    levels: [
+      { name: "GI Zone", color: "#c9a060", fullName: "Super Zone / Zone", level: 1,
+        desc: "The broadest GI category. 'South Eastern Australia' is a super zone covering 5 states. Individual zones like 'Barossa' or 'Limestone Coast' are more specific.",
+        count: 8, rules: ["Broad geographical area", "May encompass multiple regions", "No variety restrictions"],
+        children: [
+          { name: "Super Zones", fullName: "Super Zones", count: 2,
+            desc: "South Eastern Australia and South Australia — the broadest possible GIs.",
+            rules: ["Multi-state area"] },
+          { name: "Zones", fullName: "Zones", count: 6,
+            desc: "Barossa, Fleurieu, Limestone Coast, Mount Lofty Ranges, Lower Murray, Riverina.",
+            rules: ["Multi-region area"] }
+        ]
+      },
+      { name: "GI Region", color: "#8b5a2b", fullName: "Region", level: 2,
+        desc: "The most commonly used GI — a single, named wine region. 65 registered regions including Barossa Valley, Margaret River, McLaren Vale, Yarra Valley, Hunter Valley.",
+        count: 65, rules: ["Defined geographical boundary", "Distinguishing features", "No variety restrictions", "85% grapes from region"],
+        children: [
+          { name: "Barossa Valley", fullName: "Barossa Valley GI Region", count: 1,
+            desc: "South Australia's iconic Shiraz region — 165+ year old vine stocks, warm climate, ironstone soils.",
+            rules: ["Shiraz dominant", "Warm continental climate"] },
+          { name: "Margaret River", fullName: "Margaret River GI Region", count: 1,
+            desc: "Western Australia's premium region — Cabernet Sauvignon and Chardonnay from maritime-influenced climate.",
+            rules: ["Cabernet & Chardonnay", "Maritime climate"] },
+          { name: "Eden Valley", fullName: "Eden Valley GI Region", count: 1,
+            desc: "Cool-climate Barossa sub-region — world-class Riesling and elegant Shiraz from higher elevation.",
+            rules: ["Riesling & Shiraz", "Cool elevated climate"] }
+        ]
+      },
+      { name: "GI Sub-region", color: "#a04550", fullName: "Sub-region", level: 3,
+        desc: "A distinct area within a region, defined by unique soil, climate, or topography. 17 registered sub-regions.",
+        count: 17, rules: ["Within a GI Region", "Distinct mesoclimate or soil", "No variety restrictions"],
+        children: [
+          { name: "High Eden", fullName: "High Eden Valley", count: 1,
+            desc: "Elevated southern portion of Eden Valley — cooler and later ripening.",
+            rules: ["High elevation"] },
+          { name: "Marananga", fullName: "Marananga", count: 1,
+            desc: "Western Barossa Valley floor — deep alluvial soils producing powerful Shiraz.",
+            rules: ["Alluvial soils"] }
+        ]
+      }
+    ]
+  },
+
+  germany: {
+    name: "Germany", flag: "🇩🇪",
+    system: "Prädikat System",
+    intro: "Germany's system is unique in classifying wines by grape ripeness (must weight) rather than vineyard site. The 1971 Wine Law established QbA and Prädikatswein categories, with VDP (Verband deutscher Prädikatsweingüter) adding an unofficial vineyard classification layer.",
+    levels: [
+      { name: "GG (VDP.Grosses Gewächs)", color: "#c9a060", fullName: "VDP.Grosses Gewächs (Grand Cru)", level: 1,
+        desc: "The unofficial top tier — VDP's Grand Cru designation for the finest single vineyards (Grosse Lage). Dry wines only. The VDP classification is a private association standard, not government law.",
+        count: 200, rules: ["VDP member only", "Grosse Lage (Grand Cru) vineyard", "Dry style (trocken)", "Hand-harvested", "Low yields (max 50 hl/ha)", "Minimum 12% alcohol"],
+        children: [
+          { name: "VDP.Erste Lage", fullName: "VDP.Erste Lage (Premier Cru)", count: 400,
+            desc: "VDP's Premier Cru tier — excellent but not top-tier vineyards. Available in dry (GG-style) and sweet styles.",
+            rules: ["VDP member only", "Erste Lage vineyard", "Max 60 hl/ha"] }
+        ]
+      },
+      { name: "Prädikatswein", color: "#8b5a2b", fullName: "Prädikatswein (QmP)", level: 2,
+        desc: "Quality wine with distinction — classified by must weight (ripeness) at harvest. Six ripeness levels from Kabinett to Trockenbeerenauslese.",
+        count: 5000, rules: ["Must come from one of 13 Anbaugebiete", "No chaptalisation (sugar addition)", "Ripeness level declared on label", "Minimum must weight per Prädikat"],
+        children: [
+          { name: "Kabinett", fullName: "Kabinett", count: 1200,
+            desc: "Lightest Prädikat — grapes harvested at normal ripeness. Often bone-dry or off-dry, low alcohol (~11-12%).",
+            rules: ["Minimum 67-73° Oechsle", "Light, delicate style"] },
+          { name: "Spätlese", fullName: "Spätlese (Late Harvest)", count: 900,
+            desc: "Late-harvest grapes with higher must weight. Richer body, can be dry or sweet.",
+            rules: ["Minimum 76-83° Oechsle", "Late harvest"] },
+          { name: "Auslese", fullName: "Auslese (Select Harvest)", count: 600,
+            desc: "Selected overripe bunches, sometimes botrytised. Intense, often sweet wines.",
+            rules: ["Minimum 83-93° Oechsle", "Selected bunches"] },
+          { name: "BA/TBA", fullName: "Beerenauslese / Trockenbeerenauslese", count: 80,
+            desc: "Individually selected botrytised berries (BA) or dried individual berries (TBA) — rare, intensely sweet dessert wines.",
+            rules: ["BA: min 110-128° Oechsle", "TBA: min 150-154° Oechsle", "Botrytis required"] }
+        ]
+      },
+      { name: "QbA", color: "#a04550", fullName: "Qualitätswein bestimmter Anbaugebiete", level: 3,
+        desc: "Quality wine from one of 13 designated wine regions. Chaptalisation (sugar addition) is permitted. The everyday German quality wine category.",
+        count: 8000, rules: ["From one of 13 Anbaugebiete", "Chaptalisation allowed", "Minimum must weight", "Official testing number (APNr)"],
+        children: []
+      },
+      { name: "Deutscher Wein/Landwein", color: "#6b6b6b", fullName: "Deutscher Wein / Landwein", level: 4,
+        desc: "Table wine / Land wine — basic categories with minimal restrictions. Only ~5% of German production falls here.",
+        count: 200, rules: ["Minimal restrictions", "Broad geographical area"],
+        children: []
+      }
+    ]
+  }
+};
+
+// History timeline data
+const HISTORY = [
+  { year: 1716, event: "Chianti boundary", desc: "Grand Duke Cosimo III defines Chianti wine zone — first legal wine boundary." },
+  { year: 1855, event: "Bordeaux Classification", desc: "Napoleon III's brokers rank 61 Médoc châteaux into 5 growths." },
+  { year: 1932, event: "Spain DO law", desc: "Spain establishes Denominación de Origen system." },
+  { year: 1935, event: "French AOC law", desc: "INAO created; AOC system enshrined in French law." },
+  { year: 1963, event: "Italian DOC law", desc: "Italy passes DOC/DOCG classification framework." },
+  { year: 1971, event: "German Wine Law", desc: "Germany's Prädikat system codified." },
+  { year: 1980, event: "First US AVA", desc: "Augusta, Missouri becomes the first American Viticultural Area." },
+  { year: 1992, event: "EU 2081/92", desc: "EU establishes PDO/PGI framework unifying member state systems." },
+  { year: 1993, event: "Australia GI Act", desc: "Australia's Geographical Indication system legislated." },
+  { year: 1994, event: "DOCG expansion", desc: "Italy expands DOCG category — Vermentino di Gallura, etc." },
+  { year: 2003, event: "Priorat DOCa", desc: "Priorat becomes Spain's 2nd DOCa after Rioja." },
+  { year: 2009, event: "EU reform", desc: "AOC→AOP, VDP→IGP — EU harmonises all member state labels." },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+
+let currentCountry = 'france';
+let selectedNode = null;
+let compareMode = false;
+let compareCountry = 'italy';
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Country tabs
+// ═══════════════════════════════════════════════════════════════════
+
+function renderCountryTabs() {
+  const container = document.getElementById('country-tabs');
+  container.innerHTML = '';
+  Object.keys(COUNTRIES).forEach(key => {
+    const c = COUNTRIES[key];
+    const tab = document.createElement('div');
+    tab.className = 'country-tab' + (key === currentCountry ? ' active' : '');
+    tab.innerHTML = `<span class="flag">${c.flag}</span> ${c.name}`;
+    tab.addEventListener('click', () => {
+      currentCountry = key;
+      if (compareMode) compareCountry = key === compareCountry ? 'france' : compareCountry;
+      renderAll();
+    });
+    container.appendChild(tab);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Level legend
+// ═══════════════════════════════════════════════════════════════════
+
+function renderLevelLegend() {
+  const container = document.getElementById('level-legend');
+  const country = COUNTRIES[currentCountry];
+  container.innerHTML = '';
+  country.levels.forEach(level => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<div class="legend-swatch" style="background:${level.color}"></div> ${level.name}`;
+    container.appendChild(item);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Hierarchy SVG
+// ═══════════════════════════════════════════════════════════════════
+
+function renderHierarchy() {
+  const country = COUNTRIES[currentCountry];
+  const svg = document.getElementById('hierarchy-svg');
+  const container = document.getElementById('hierarchy-container');
+  const w = container.clientWidth - 20;
+  const h = Math.max(480, container.clientHeight - 20);
+
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('width', w);
+  svg.setAttribute('height', h);
+  svg.innerHTML = '';
+
+  // Build pyramid from top (highest quality) to bottom
+  const levels = country.levels;
+  const totalLevels = levels.length;
+  const pyramidTop = 30;
+  const pyramidBottom = h - 60;
+  const levelHeight = (pyramidBottom - pyramidTop) / totalLevels;
+  const centerX = w / 2;
+  const maxWidth = w * 0.88;
+  const minWidth = w * 0.22;
+
+  // SVG namespace
+  const ns = 'http://www.w3.org/2000/svg';
+
+  // Background decorative gradient
+  const defs = document.createElementNS(ns, 'defs');
+  const grad = document.createElementNS(ns, 'linearGradient');
+  grad.setAttribute('id', 'bg-grad');
+  grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+  grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+  const stop1 = document.createElementNS(ns, 'stop');
+  stop1.setAttribute('offset', '0%'); stop1.setAttribute('stop-color', '#1a1510');
+  const stop2 = document.createElementNS(ns, 'stop');
+  stop2.setAttribute('offset', '100%'); stop2.setAttribute('stop-color', '#0d0a08');
+  grad.appendChild(stop1); grad.appendChild(stop2);
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  // Title
+  const titleText = document.createElementNS(ns, 'text');
+  titleText.setAttribute('x', centerX);
+  titleText.setAttribute('y', 18);
+  titleText.setAttribute('text-anchor', 'middle');
+  titleText.setAttribute('fill', '#c9a060');
+  titleText.setAttribute('font-size', '13');
+  titleText.setAttribute('font-weight', '700');
+  titleText.setAttribute('font-family', 'system-ui, sans-serif');
+  titleText.textContent = country.flag + ' ' + country.name + ' — ' + country.system;
+  svg.appendChild(titleText);
+
+  // Draw pyramid trapezoids
+  levels.forEach((level, i) => {
+    const yTop = pyramidTop + i * levelHeight + 8;
+    const yBot = pyramidTop + (i + 1) * levelHeight - 4;
+    const t = i / (totalLevels - 1);
+    const tNext = (i + 1) / (totalLevels - 1);
+    const wTop = minWidth + (maxWidth - minWidth) * (1 - t * 0.7);
+    const wBot = minWidth + (maxWidth - minWidth) * (1 - tNext * 0.7);
+    const halfTop = wTop / 2;
+    const halfBot = wBot / 2;
+
+    // Trapezoid points
+    const points = [
+      [centerX - halfTop, yTop],
+      [centerX + halfTop, yTop],
+      [centerX + halfBot, yBot],
+      [centerX - halfBot, yBot]
+    ];
+
+    // Draw trapezoid
+    const poly = document.createElementNS(ns, 'polygon');
+    poly.setAttribute('points', points.map(p => p.join(',')).join(' '));
+    poly.setAttribute('fill', level.color);
+    poly.setAttribute('fill-opacity', '0.15');
+    poly.setAttribute('stroke', level.color);
+    poly.setAttribute('stroke-width', '2');
+    poly.setAttribute('stroke-opacity', '0.8');
+    poly.classList.add('node-rect');
+    poly.dataset.levelIndex = i;
+    poly.style.cursor = 'pointer';
+    svg.appendChild(poly);
+
+    // Level name
+    const labelY = (yTop + yBot) / 2 - 4;
+    const label = document.createElementNS(ns, 'text');
+    label.setAttribute('x', centerX);
+    label.setAttribute('y', labelY);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('fill', level.color);
+    label.setAttribute('font-size', '14');
+    label.setAttribute('font-weight', '700');
+    label.setAttribute('font-family', 'system-ui, sans-serif');
+    label.classList.add('node-text');
+    label.textContent = level.name;
+    svg.appendChild(label);
+
+    // Full name (smaller)
+    const subLabel = document.createElementNS(ns, 'text');
+    subLabel.setAttribute('x', centerX);
+    subLabel.setAttribute('y', labelY + 16);
+    subLabel.setAttribute('text-anchor', 'middle');
+    subLabel.setAttribute('fill', '#9a8870');
+    subLabel.setAttribute('font-size', '9.5');
+    subLabel.setAttribute('font-family', 'system-ui, sans-serif');
+    subLabel.classList.add('node-text');
+    subLabel.textContent = level.fullName.length > 42 ? level.fullName.substring(0, 42) + '…' : level.fullName;
+    svg.appendChild(subLabel);
+
+    // Count badge
+    const countLabel = document.createElementNS(ns, 'text');
+    countLabel.setAttribute('x', centerX);
+    countLabel.setAttribute('y', yBot - 6);
+    countLabel.setAttribute('text-anchor', 'middle');
+    countLabel.setAttribute('fill', level.color);
+    countLabel.setAttribute('fill-opacity', '0.7');
+    countLabel.setAttribute('font-size', '10');
+    countLabel.setAttribute('font-weight', '600');
+    countLabel.setAttribute('font-family', 'system-ui, sans-serif');
+    countLabel.classList.add('node-count');
+    countLabel.textContent = level.count + (level.count === 1 ? ' designation' : ' designations');
+    svg.appendChild(countLabel);
+
+    // Click handler
+    poly.addEventListener('click', () => selectNode(level, null));
+    poly.addEventListener('mouseenter', (e) => showTooltip(e, level.name + ' — ' + level.fullName));
+    poly.addEventListener('mouseleave', hideTooltip);
+
+    // Draw children inside the trapezoid
+    if (level.children && level.children.length > 0) {
+      const childCount = level.children.length;
+      const childY = yBot - 20;
+      const childSpacing = wBot / (childCount + 1);
+
+      level.children.forEach((child, ci) => {
+        const cx = centerX - halfBot + childSpacing * (ci + 1);
+        const childR = Math.min(10, childSpacing / 3);
+
+        // Child node circle
+        const circle = document.createElementNS(ns, 'circle');
+        circle.setAttribute('cx', cx);
+        circle.setAttribute('cy', childY - 8);
+        circle.setAttribute('r', childR);
+        circle.setAttribute('fill', level.color);
+        circle.setAttribute('fill-opacity', '0.25');
+        circle.setAttribute('stroke', level.color);
+        circle.setAttribute('stroke-width', '1.5');
+        circle.setAttribute('stroke-opacity', '0.6');
+        circle.classList.add('node-rect');
+        circle.style.cursor = 'pointer';
+        svg.appendChild(circle);
+
+        // Child label
+        const childLabel = document.createElementNS(ns, 'text');
+        childLabel.setAttribute('x', cx);
+        childLabel.setAttribute('y', childY + 10);
+        childLabel.setAttribute('text-anchor', 'middle');
+        childLabel.setAttribute('fill', '#9a8870');
+        childLabel.setAttribute('font-size', '8');
+        childLabel.setAttribute('font-family', 'system-ui, sans-serif');
+        childLabel.classList.add('node-text');
+        const shortName = child.name.length > 14 ? child.name.substring(0, 14) + '…' : child.name;
+        childLabel.textContent = shortName;
+        svg.appendChild(childLabel);
+
+        // Click handler for children
+        circle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectNode(level, child);
+        });
+        circle.addEventListener('mouseenter', (e) => showTooltip(e, child.name));
+        circle.addEventListener('mouseleave', hideTooltip);
+      });
+    }
+  });
+
+  // Quality arrow on the left
+  const arrowY = (pyramidTop + pyramidBottom) / 2;
+  const arrow = document.createElementNS(ns, 'g');
+
+  const arrowLine = document.createElementNS(ns, 'line');
+  arrowLine.setAttribute('x1', 15);
+  arrowLine.setAttribute('y1', pyramidBottom - 20);
+  arrowLine.setAttribute('x2', 15);
+  arrowLine.setAttribute('y2', pyramidTop + 20);
+  arrowLine.setAttribute('stroke', '#c9a060');
+  arrowLine.setAttribute('stroke-width', '2');
+  arrowLine.setAttribute('stroke-opacity', '0.4');
+  arrow.appendChild(arrowLine);
+
+  const arrowHead = document.createElementNS(ns, 'polygon');
+  arrowHead.setAttribute('points', '10,' + (pyramidTop + 26) + ' 15,' + (pyramidTop + 16) + ' 20,' + (pyramidTop + 26));
+  arrowHead.setAttribute('fill', '#c9a060');
+  arrowHead.setAttribute('fill-opacity', '0.5');
+  arrow.appendChild(arrowHead);
+
+  const arrowLabel = document.createElementNS(ns, 'text');
+  arrowLabel.setAttribute('x', 15);
+  arrowLabel.setAttribute('y', arrowY);
+  arrowLabel.setAttribute('text-anchor', 'middle');
+  arrowLabel.setAttribute('fill', '#c9a060');
+  arrowLabel.setAttribute('fill-opacity', '0.5');
+  arrowLabel.setAttribute('font-size', '9');
+  arrowLabel.setAttribute('font-weight', '600');
+  arrowLabel.setAttribute('font-family', 'system-ui, sans-serif');
+  arrowLabel.setAttribute('transform', `rotate(-90 15 ${arrowY})`);
+  arrowLabel.textContent = 'Quality ↑';
+  arrow.appendChild(arrowLabel);
+
+  svg.appendChild(arrow);
+
+  // GSAP animation: fade in trapezoids
+  const polys = svg.querySelectorAll('polygon.node-rect, circle.node-rect');
+  if (typeof gsap !== 'undefined') {
+    gsap.fromTo(polys, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power2.out' });
+    const texts = svg.querySelectorAll('.node-text, .node-count');
+    gsap.fromTo(texts, { opacity: 0 }, { opacity: 1, duration: 0.4, delay: 0.3, stagger: 0.04, ease: 'power2.out' });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Detail panel
+// ═══════════════════════════════════════════════════════════════════
+
+function selectNode(level, child) {
+  const country = COUNTRIES[currentCountry];
+  const badge = document.getElementById('level-badge');
+  const title = document.getElementById('detail-title');
+  const subtitle = document.getElementById('detail-subtitle');
+  const statsDiv = document.getElementById('detail-stats');
+  const descDiv = document.getElementById('detail-desc');
+  const rulesList = document.getElementById('detail-rules');
+  const childrenDiv = document.getElementById('detail-children');
+
+  if (!level) {
+    // Overview
+    badge.textContent = 'Overview';
+    badge.style.background = 'var(--surface2)';
+    badge.style.color = 'var(--accent)';
+    title.textContent = country.flag + ' ' + country.name + ' — ' + country.system;
+    subtitle.textContent = 'Click any level in the pyramid to explore';
+    statsDiv.innerHTML = '';
+    descDiv.innerHTML = '<p>' + country.intro + '</p>';
+    rulesList.innerHTML = '';
+    childrenDiv.innerHTML = '';
+    return;
+  }
+
+  if (child) {
+    badge.textContent = level.name + ' · Sub-category';
+    badge.style.background = level.color + '33';
+    badge.style.color = level.color;
+    title.textContent = child.name;
+    subtitle.textContent = child.fullName || '';
+
+    statsDiv.innerHTML = `
+      <div class="stat-box"><div class="label">Designations</div><div class="value">${child.count}</div></div>
+      <div class="stat-box"><div class="label">Parent Level</div><div class="value">${level.name}</div></div>
+    `;
+
+    descDiv.innerHTML = '<p>' + child.desc + '</p>';
+
+    rulesList.innerHTML = '';
+    (child.rules || []).forEach(r => {
+      const li = document.createElement('li');
+      li.textContent = r;
+      rulesList.appendChild(li);
+    });
+
+    childrenDiv.innerHTML = '';
+  } else {
+    badge.textContent = 'Level ' + level.level + ' · ' + level.name;
+    badge.style.background = level.color + '33';
+    badge.style.color = level.color;
+    title.textContent = level.fullName;
+    subtitle.textContent = level.name + ' — ' + country.name + ' classification system';
+
+    statsDiv.innerHTML = `
+      <div class="stat-box"><div class="label">Designations</div><div class="value">${level.count}</div></div>
+      <div class="stat-box"><div class="label">Hierarchy Level</div><div class="value">${level.level}</div></div>
+    `;
+
+    descDiv.innerHTML = '<p>' + level.desc + '</p>';
+
+    rulesList.innerHTML = '';
+    (level.rules || []).forEach(r => {
+      const li = document.createElement('li');
+      li.textContent = r;
+      rulesList.appendChild(li);
+    });
+
+    // Render children chips
+    childrenDiv.innerHTML = '';
+    if (level.children && level.children.length > 0) {
+      const h3 = document.createElement('h3');
+      h3.textContent = 'Sub-categories (' + level.children.length + ')';
+      childrenDiv.appendChild(h3);
+
+      level.children.forEach(ch => {
+        const chip = document.createElement('span');
+        chip.className = 'child-chip';
+        chip.textContent = ch.name;
+        chip.addEventListener('click', () => selectNode(level, ch));
+        childrenDiv.appendChild(chip);
+      });
+    }
+  }
+
+  // GSAP animation
+  if (typeof gsap !== 'undefined') {
+    const panel = document.getElementById('detail-panel');
+    gsap.fromTo(panel.children, { opacity: 0.4, y: 6 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.04, ease: 'power2.out' });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: Comparison section
+// ═══════════════════════════════════════════════════════════════════
+
+function renderComparison() {
+  const section = document.getElementById('compare-section');
+  const grid = document.getElementById('compare-grid');
+
+  if (!compareMode) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  grid.innerHTML = '';
+
+  const c1 = COUNTRIES[currentCountry];
+  const c2 = COUNTRIES[compareCountry] || COUNTRIES['italy'];
+
+  [c1, c2].forEach((country, idx) => {
+    const card = document.createElement('div');
+    card.className = 'compare-card';
+    card.innerHTML = `<h3><span class="flag">${country.flag}</span> ${country.name} — ${country.system}</h3>`;
+
+    const intro = document.createElement('p');
+    intro.style.cssText = 'font-size:0.82rem;color:var(--muted);margin-bottom:0.6rem;line-height:1.5';
+    intro.textContent = country.intro;
+    card.appendChild(intro);
+
+    // Mini hierarchy table
+    country.levels.forEach(level => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid rgba(58,46,34,0.3)';
+      const swatch = document.createElement('div');
+      swatch.style.cssText = `width:12px;height:12px;border-radius:3px;background:${level.color};flex-shrink:0`;
+      const name = document.createElement('span');
+      name.style.cssText = 'font-size:0.82rem;color:var(--text);font-weight:600;min-width:60px';
+      name.textContent = level.name;
+      const fullName = document.createElement('span');
+      fullName.style.cssText = 'font-size:0.76rem;color:var(--muted);flex:1';
+      fullName.textContent = level.fullName.length > 35 ? level.fullName.substring(0, 35) + '…' : level.fullName;
+      const count = document.createElement('span');
+      count.style.cssText = 'font-size:0.78rem;color:var(--accent);font-weight:600;min-width:50px;text-align:right';
+      count.textContent = level.count;
+      row.appendChild(swatch);
+      row.appendChild(name);
+      row.appendChild(fullName);
+      row.appendChild(count);
+      card.appendChild(row);
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER: History timeline
+// ═══════════════════════════════════════════════════════════════════
+
+function renderTimeline() {
+  const track = document.getElementById('timeline-track');
+  // Clear existing markers except the line
+  const line = track.querySelector('.timeline-line');
+  track.innerHTML = '';
+  track.appendChild(line);
+
+  const minYear = 1700;
+  const maxYear = 2025;
+  const trackWidth = track.clientWidth || 800;
+  const margin = 30;
+  const usableWidth = trackWidth - margin * 2;
+
+  HISTORY.forEach(event => {
+    const x = margin + ((event.year - minYear) / (maxYear - minYear)) * usableWidth;
+
+    const marker = document.createElement('div');
+    marker.className = 'timeline-marker';
+    marker.style.left = x + 'px';
+    marker.style.background = 'var(--gold)';
+    marker.addEventListener('mouseenter', (e) => showTooltip(e, event.year + ': ' + event.event));
+    marker.addEventListener('mouseleave', hideTooltip);
+
+    const eventLabel = document.createElement('div');
+    eventLabel.className = 'timeline-event';
+    eventLabel.style.left = x + 'px';
+    eventLabel.textContent = event.event.length > 18 ? event.event.substring(0, 18) + '…' : event.event;
+
+    const yearLabel = document.createElement('div');
+    yearLabel.className = 'timeline-label';
+    yearLabel.style.left = x + 'px';
+    yearLabel.textContent = event.year;
+
+    track.appendChild(marker);
+    track.appendChild(eventLabel);
+    track.appendChild(yearLabel);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Tooltip
+// ═══════════════════════════════════════════════════════════════════
+
+function showTooltip(e, text) {
+  const tooltip = document.getElementById('tooltip');
+  tooltip.textContent = text;
+  tooltip.classList.add('visible');
+  tooltip.style.left = (e.clientX + 12) + 'px';
+  tooltip.style.top = (e.clientY + 12) + 'px';
+}
+
+function hideTooltip() {
+  const tooltip = document.getElementById('tooltip');
+  tooltip.classList.remove('visible');
+}
+
+// Track mouse for tooltip
+document.addEventListener('mousemove', (e) => {
+  const tooltip = document.getElementById('tooltip');
+  if (tooltip.classList.contains('visible')) {
+    tooltip.style.left = (e.clientX + 12) + 'px';
+    tooltip.style.top = (e.clientY + 12) + 'px';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Preset handlers
+// ═══════════════════════════════════════════════════════════════════
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = btn.dataset.preset;
+    switch (preset) {
+      case 'overview':
+        currentCountry = 'france';
+        compareMode = false;
+        document.getElementById('compare-mode').checked = false;
+        selectNode(null, null);
+        break;
+      case 'france':
+        currentCountry = 'france';
+        compareMode = false;
+        document.getElementById('compare-mode').checked = false;
+        break;
+      case 'italy':
+        currentCountry = 'italy';
+        compareMode = false;
+        document.getElementById('compare-mode').checked = false;
+        break;
+      case 'compare':
+        currentCountry = 'france';
+        compareCountry = 'italy';
+        compareMode = true;
+        document.getElementById('compare-mode').checked = true;
+        break;
+      case 'newworld':
+        currentCountry = 'usa';
+        compareMode = false;
+        document.getElementById('compare-mode').checked = false;
+        break;
+    }
+    renderAll();
+  });
+});
+
+// Compare toggle handler
+document.getElementById('compare-mode').addEventListener('change', (e) => {
+  compareMode = e.target.checked;
+  renderAll();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Main render
+// ═══════════════════════════════════════════════════════════════════
+
+function renderAll() {
+  renderCountryTabs();
+  renderLevelLegend();
+  renderHierarchy();
+  selectNode(null, null);
+  renderComparison();
+  renderTimeline();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════════
+
+window.addEventListener('load', () => {
+  renderAll();
+});
+
+window.addEventListener('resize', () => {
+  // Debounce resize
+  clearTimeout(window._resizeTimer);
+  window._resizeTimer = setTimeout(() => {
+    renderHierarchy();
+    renderTimeline();
+    if (compareMode) renderComparison();
+  }, 200);
+});
+</script>
+</body>
+</html>
