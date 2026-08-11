@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="googlebot" content="noindex, nofollow">
+<title>Wine Investment & Market Dynamics Explorer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e14; --surface: #141a22; --surface2: #1a2230; --border: #2a3441;
+    --text: #d4c4a0; --muted: #8a7a60; --accent: #c9a060; --accent2: #a371f7;
+    --green: #4ade80; --red: #f87171; --yellow: #fbbf24; --blue: #60a5fa;
+    --font: system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; overflow-y: auto; }
+
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container { position: fixed; inset: 0; z-index: 0; overflow-y: auto; padding: 14px; }
+  #bg-canvas { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.4; }
+  #chart-area { max-width: 780px; margin: 0 auto; }
+
+  .header-card {
+    background: linear-gradient(135deg, rgba(26,22,16,0.92), rgba(20,26,34,0.92));
+    border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 10px;
+  }
+  .header-card h1 { font-size: clamp(1.2rem, 4vw, 1.6rem); color: var(--accent); margin-bottom: 4px; }
+  .header-card p { font-size: 0.85rem; color: var(--muted); }
+
+  .controls-card {
+    background: rgba(20,26,34,0.92); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; margin-bottom: 10px;
+  }
+  .controls-card h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 10px; }
+
+  .slider-row { margin-bottom: 10px; }
+  .slider-row label { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px; color: var(--text); }
+  .slider-row label span { color: var(--accent); font-weight: 600; }
+  .slider-row input[type=range] { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: var(--surface2); border-radius: 3px; outline: none; }
+  .slider-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+  .slider-row input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; border: none; }
+
+  .btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .btn { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.78rem; cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.active { background: var(--accent); color: #1a1610; border-color: var(--accent); font-weight: 600; }
+
+  .metric-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .metric-tile { background: rgba(20,26,34,0.88); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .metric-tile .label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 3px; }
+  .metric-tile .value { font-size: 1.3rem; font-weight: 700; }
+  .metric-tile .sub { font-size: 0.72rem; color: var(--muted); }
+  .green-text { color: var(--green); } .red-text { color: var(--red); } .yellow-text { color: var(--yellow); } .blue-text { color: var(--blue); }
+
+  .chart-card { background: rgba(20,26,34,0.92); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .chart-card h3 { font-size: 0.85rem; color: var(--accent); margin-bottom: 6px; }
+  .chart-wrapper { position: relative; width: 100%; }
+  .chart-wrapper.line { height: 280px; }
+  .chart-wrapper.radar { height: 300px; }
+  .chart-wrapper.bar { height: 240px; }
+  .chart-wrapper.doughnut { height: 220px; }
+
+  .insight-box { background: rgba(20,26,34,0.88); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; font-size: 0.8rem; color: var(--muted); }
+  .insight-box strong { color: var(--accent); }
+  .insight-box .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px; }
+  .tag-buy { background: rgba(74,222,128,0.2); color: var(--green); }
+  .tag-hold { background: rgba(251,191,36,0.2); color: var(--yellow); }
+  .tag-sell { background: rgba(248,113,113,0.2); color: var(--red); }
+
+  .region-select { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .region-chip { padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.75rem; cursor: pointer; transition: all 0.15s; }
+  .region-chip:hover { border-color: var(--accent); }
+  .region-chip.active { background: var(--accent); color: #1a1610; border-color: var(--accent); font-weight: 600; }
+
+  .footer-note { text-align: center; color: var(--muted); font-size: 0.72rem; padding: 10px 0 20px; }
+
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container { position: relative !important; width: 100% !important; height: auto !important; inset: auto !important; z-index: 0; padding: 10px; }
+    #bg-canvas { position: fixed; inset: 0; z-index: -1; }
+    .chart-wrapper.line { height: 220px; }
+    .chart-wrapper.radar { height: 260px; }
+    .chart-wrapper.bar { height: 200px; }
+    .chart-wrapper.doughnut { height: 180px; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<canvas id="bg-canvas"></canvas>
+<div id="canvas-container">
+  <div id="chart-area">
+    <div class="header-card">
+      <h1>Wine Investment & Market Dynamics</h1>
+      <p>Explore wine as a financial asset — compare returns across asset classes, analyse vintage price evolution, and assess risk-return profiles for fine wine investment.</p>
+    </div>
+
+    <div class="controls-card">
+      <h2>Investment Parameters</h2>
+      <div class="slider-row">
+        <label>Holding Period <span id="years-val">10 years</span></label>
+        <input type="range" id="years" min="1" max="25" value="10" step="1">
+      </div>
+      <div class="slider-row">
+        <label>Initial Investment <span id="amount-val">AU$50,000</span></label>
+        <input type="range" id="amount" min="5000" max="500000" value="50000" step="5000">
+      </div>
+      <div class="slider-row">
+        <label>Wine Portfolio Allocation <span id="alloc-val">30%</span></label>
+        <input type="range" id="alloc" min="0" max="100" value="30" step="5">
+      </div>
+      <div class="slider-row">
+        <label>Storage & Insurance Cost <span id="cost-val">2.0% / yr</span></label>
+        <input type="range" id="cost" min="0" max="5" value="2" step="0.1">
+      </div>
+      <div class="btn-group">
+        <button class="btn active" data-portfolio="balanced">Balanced</button>
+        <button class="btn" data-portfolio="wineheavy">Wine Heavy</button>
+        <button class="btn" data-portfolio="stocks">Stocks Only</button>
+        <button class="btn" data-portfolio="conservative">Conservative</button>
+      </div>
+      <div class="region-select">
+        <span class="region-chip active" data-region="bordeaux">Bordeaux</span>
+        <span class="region-chip" data-region="burgundy">Burgundy</span>
+        <span class="region-chip" data-region="napa">Napa</span>
+        <span class="region-chip" data-region="tuscany">Tuscany</span>
+        <span class="region-chip" data-region="champagne">Champagne</span>
+        <span class="region-chip" data-region="rhone">Rhône</span>
+      </div>
+    </div>
+
+    <div class="metric-row">
+      <div class="metric-tile">
+        <div class="label">Portfolio Value</div>
+        <div class="value green-text" id="m-value">AU$0</div>
+        <div class="sub" id="m-value-sub">—</div>
+      </div>
+      <div class="metric-tile">
+        <div class="label">Annual Return</div>
+        <div class="value blue-text" id="m-return">0%</div>
+        <div class="sub" id="m-return-sub">—</div>
+      </div>
+      <div class="metric-tile">
+        <div class="label">Volatility (σ)</div>
+        <div class="value yellow-text" id="m-vol">0%</div>
+        <div class="sub">risk metric</div>
+      </div>
+      <div class="metric-tile">
+        <div class="label">Sharpe Ratio</div>
+        <div class="value" id="m-sharpe">0.0</div>
+        <div class="sub" id="m-sharpe-sub">—</div>
+      </div>
+      <div class="metric-tile">
+        <div class="label">Max Drawdown</div>
+        <div class="value red-text" id="m-dd">0%</div>
+        <div class="sub">worst decline</div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <h3>Portfolio Growth vs Asset Classes — Cumulative Return Over Time</h3>
+      <div class="chart-wrapper line"><canvas id="growthChart"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <h3>Risk-Return Scatter — Annual Return vs Volatility</h3>
+      <div class="chart-wrapper bar"><canvas id="scatterChart"></canvas></div>
+    </div>
+
+    <div class="insight-box" id="insight-box">
+      <strong>Portfolio Analysis:</strong> <span id="insight-text">—</span>
+    </div>
+
+    <div class="chart-card">
+      <h3>Vintage Price Index — Top Vintages by Region (2010–2023)</h3>
+      <div class="chart-wrapper bar"><canvas id="vintageChart"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <h3>Wine Market Risk Profile — 6-Factor Assessment</h3>
+      <div class="chart-wrapper radar"><canvas id="radarChart"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <h3>Global Wine Production Share by Country</h3>
+      <div class="chart-wrapper doughnut"><canvas id="productionChart"></canvas></div>
+    </div>
+
+    <div class="footer-note">
+      Data based on Liv-ex Fine Wine 100, OIV global production statistics, and historical asset class returns (2004–2024). For educational purposes only — not investment advice.
+    </div>
+  </div>
+</div>
+
+<script>
+// === DATA MODEL ===
+// Asset class annual returns and volatility (based on historical 2004-2024 data)
+const ASSET_CLASSES = {
+  fineWine:    { name: 'Fine Wine',    ret: 0.085, vol: 0.12,  color: '#c9a060', maxDD: 0.18 },
+  stocks:      { name: 'Global Stocks', ret: 0.082, vol: 0.16, color: '#60a5fa', maxDD: 0.34 },
+  bonds:       { name: 'Gov Bonds',    ret: 0.032, vol: 0.05, color: '#4ade80', maxDD: 0.08 },
+  gold:        { name: 'Gold',         ret: 0.065, vol: 0.15, color: '#fbbf24', maxDD: 0.28 },
+  realEstate:  { name: 'Real Estate',  ret: 0.070, vol: 0.14, color: '#a371f7', maxDD: 0.25 },
+  crypto:      { name: 'Crypto',       ret: 0.180, vol: 0.65, color: '#f87171', maxDD: 0.77 },
+};
+
+// Wine region data — vintage price indices relative to base year
+const REGION_DATA = {
+  bordeaux: {
+    name: 'Bordeaux',
+    baseReturn: 0.078, vol: 0.13, storageCost: 0.025,
+    vintages: {
+      2010: 1.35, 2011: 1.18, 2012: 1.22, 2013: 1.05, 2014: 1.12,
+      2015: 1.42, 2016: 1.55, 2017: 1.38, 2018: 1.48, 2019: 1.52,
+      2020: 1.68, 2021: 1.45, 2022: 1.58, 2023: 1.42
+    },
+    topWines: ['Lafite Rothschild', 'Latour', 'Margaux', 'Haut-Brion', 'Mouton'],
+    riskFactors: { liquidity: 35, storage: 25, authenticity: 40, market: 30, currency: 45, climate: 35 },
+  },
+  burgundy: {
+    name: 'Burgundy',
+    baseReturn: 0.105, vol: 0.15, storageCost: 0.028,
+    vintages: {
+      2010: 1.48, 2011: 1.25, 2012: 1.52, 2013: 1.18, 2014: 1.35,
+      2015: 1.72, 2016: 1.85, 2017: 1.62, 2018: 1.78, 2019: 1.92,
+      2020: 2.15, 2021: 1.75, 2022: 1.88, 2023: 1.65
+    },
+    topWines: ['Romanée-Conti', 'La Tâche', 'Richebourg', 'Musigny', 'Montrachet'],
+    riskFactors: { liquidity: 20, storage: 25, authenticity: 45, market: 35, currency: 45, climate: 40 },
+  },
+  napa: {
+    name: 'Napa Valley',
+    baseReturn: 0.072, vol: 0.11, storageCost: 0.022,
+    vintages: {
+      2010: 1.22, 2011: 1.15, 2012: 1.28, 2013: 1.42, 2014: 1.35,
+      2015: 1.38, 2016: 1.45, 2017: 1.28, 2018: 1.42, 2019: 1.48,
+      2020: 1.55, 2021: 1.52, 2022: 1.45, 2023: 1.38
+    },
+    topWines: ['Screaming Eagle', 'Harlan Estate', 'Opus One', 'Dominus', 'Heitz Martha\'s'],
+    riskFactors: { liquidity: 40, storage: 20, authenticity: 30, market: 35, currency: 50, climate: 25 },
+  },
+  tuscany: {
+    name: 'Tuscany',
+    baseReturn: 0.065, vol: 0.10, storageCost: 0.020,
+    vintages: {
+      2010: 1.28, 2011: 1.12, 2012: 1.25, 2013: 1.45, 2014: 1.10,
+      2015: 1.38, 2016: 1.52, 2017: 1.25, 2018: 1.35, 2019: 1.42,
+      2020: 1.48, 2021: 1.38, 2022: 1.42, 2023: 1.28
+    },
+    topWines: ['Sassicaia', 'Tignanello', 'Ornellaia', 'Masseto', 'Flaccianello'],
+    riskFactors: { liquidity: 45, storage: 20, authenticity: 35, market: 35, currency: 48, climate: 30 },
+  },
+  champagne: {
+    name: 'Champagne',
+    baseReturn: 0.058, vol: 0.08, storageCost: 0.024,
+    vintages: {
+      2010: 1.15, 2011: 1.08, 2012: 1.35, 2013: 1.22, 2014: 1.18,
+      2015: 1.32, 2016: 1.28, 2017: 1.15, 2018: 1.38, 2019: 1.25,
+      2020: 1.42, 2021: 1.28, 2022: 1.35, 2023: 1.22
+    },
+    topWines: ['Dom Pérignon', 'Cristal', 'Krug Clos d\'Ambonnay', 'Salon', 'Comtes de Champagne'],
+    riskFactors: { liquidity: 50, storage: 30, authenticity: 25, market: 30, currency: 45, climate: 20 },
+  },
+  rhone: {
+    name: 'Rhône',
+    baseReturn: 0.062, vol: 0.09, storageCost: 0.020,
+    vintages: {
+      2010: 1.18, 2011: 1.10, 2012: 1.22, 2013: 1.08, 2014: 1.15,
+      2015: 1.35, 2016: 1.42, 2017: 1.28, 2018: 1.32, 2019: 1.35,
+      2020: 1.38, 2021: 1.22, 2022: 1.32, 2023: 1.20
+    },
+    topWines: ['Château Rayas', 'Hermitage La Chapelle', 'Côte-Rôtie La Mouline', 'Beaucastel', 'Janasse'],
+    riskFactors: { liquidity: 55, storage: 20, authenticity: 30, market: 40, currency: 45, climate: 35 },
+  },
+};
+
+// Portfolio presets
+const PORTFOLIOS = {
+  balanced:      { fineWine: 0.30, stocks: 0.35, bonds: 0.15, gold: 0.10, realEstate: 0.10 },
+  wineheavy:     { fineWine: 0.60, stocks: 0.15, bonds: 0.05, gold: 0.10, realEstate: 0.10 },
+  stocks:        { fineWine: 0.00, stocks: 0.70, bonds: 0.10, gold: 0.05, realEstate: 0.15 },
+  conservative:  { fineWine: 0.15, stocks: 0.20, bonds: 0.45, gold: 0.10, realEstate: 0.10 },
+};
+
+// Global wine production by country (OIV 2023, million hL)
+const PRODUCTION_DATA = {
+  countries: ['Italy', 'France', 'Spain', 'USA', 'Argentina', 'Australia', 'Chile', 'South Africa', 'Germany', 'Portugal', 'Others'],
+  values: [38.3, 36.2, 28.3, 24.1, 11.0, 9.8, 8.3, 7.8, 7.2, 6.5, 28.5],
+  colors: ['#c9a060', '#a371f7', '#fbbf24', '#60a5fa', '#4ade80', '#f87171', '#f97316', '#06b6d4', '#8b5cf6', '#ec4899', '#6b7280'],
+};
+
+// === STATE ===
+let state = {
+  years: 10,
+  amount: 50000,
+  alloc: 30,
+  cost: 2.0,
+  portfolio: 'balanced',
+  region: 'bordeaux',
+};
+
+let charts = {};
+
+// === CHART.JS DEFAULTS ===
+Chart.defaults.color = '#8a7a60';
+Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
+Chart.defaults.font.size = 11;
+
+// === UTILITIES ===
+function fmtAUD(v) {
+  if (Math.abs(v) >= 1e6) return 'AU$' + (v / 1e6).toFixed(2) + 'M';
+  if (Math.abs(v) >= 1e3) return 'AU$' + (v / 1e3).toFixed(1) + 'K';
+  return 'AU$' + Math.round(v);
+}
+
+function fmtPct(v) { return (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%'; }
+
+// Seeded random for reproducible market simulation
+let seed = 42;
+function srand() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+function gauss() { let u = 0, v = 0; while (u === 0) u = srand(); while (v === 0) v = srand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+
+// Generate yearly price path with geometric Brownian motion
+function simulatePath(annualRet, annualVol, years, costPct) {
+  const netRet = annualRet - costPct / 100;
+  const dt = 1;
+  const path = [1.0];
+  for (let i = 1; i <= years; i++) {
+    const drift = (netRet - 0.5 * annualVol * annualVol) * dt;
+    const shock = annualVol * Math.sqrt(dt) * gauss();
+    path.push(path[i - 1] * Math.exp(drift + shock));
+  }
+  return path;
+}
+
+// Portfolio return and volatility (weighted)
+function portfolioStats(allocations, regionData, costPct) {
+  let ret = 0, vol = 0;
+  const wineData = regionData;
+  const wineNet = wineData.baseReturn - costPct / 100;
+  for (const [key, alloc] of Object.entries(allocations)) {
+    if (key === 'fineWine') {
+      ret += wineNet * alloc;
+      vol += Math.pow(wineData.vol * alloc, 2);
+    } else {
+      const ac = ASSET_CLASSES[key];
+      ret += ac.ret * alloc;
+      vol += Math.pow(ac.vol * alloc, 2);
+    }
+  }
+  // Add correlation factor (simplified)
+  vol = Math.sqrt(vol + 0.0005); // small cross-term
+  return { ret, vol };
+}
+
+// Max drawdown from a price path
+function maxDrawdown(path) {
+  let peak = path[0], maxDD = 0;
+  for (const p of path) {
+    if (p > peak) peak = p;
+    const dd = (peak - p) / peak;
+    if (dd > maxDD) maxDD = dd;
+  }
+  return maxDD;
+}
+
+// === CHART BUILDERS ===
+
+function buildGrowthChart() {
+  const ctx = document.getElementById('growthChart').getContext('2d');
+  charts.growth = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } },
+        tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + fmtAUD(c.raw); } } },
+      },
+      scales: {
+        x: { grid: { color: 'rgba(42,34,40,0.3)' }, ticks: { font: { size: 9 } } },
+        y: { grid: { color: 'rgba(42,34,40,0.3)' }, ticks: { callback: v => fmtAUD(v), font: { size: 9 } } },
+      },
+    },
+  });
+}
+
+function buildScatterChart() {
+  const ctx = document.getElementById('scatterChart').getContext('2d');
+  charts.scatter = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: [] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 10, padding: 8, font: { size: 10 } } },
+        tooltip: {
+          callbacks: {
+            label: function(c) {
+              return c.dataset.label + ': ' + (c.parsed.x * 100).toFixed(1) + '% vol, ' + (c.parsed.y * 100).toFixed(1) + '% ret';
+            }
+          }
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: 'Annual Volatility (%)', font: { size: 10 } }, grid: { color: 'rgba(42,34,40,0.3)' }, ticks: { callback: v => (v * 100).toFixed(0) + '%', font: { size: 9 } } },
+        y: { title: { display: true, text: 'Annual Return (%)', font: { size: 10 } }, grid: { color: 'rgba(42,34,40,0.3)' }, ticks: { callback: v => (v * 100).toFixed(0) + '%', font: { size: 9 } } },
+      },
+    },
+  });
+}
+
+function buildVintageChart() {
+  const ctx = document.getElementById('vintageChart').getContext('2d');
+  charts.vintage = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => 'Price Index: ' + c.parsed.y.toFixed(2) } },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+        y: { grid: { color: 'rgba(42,34,40,0.3)' }, title: { display: true, text: 'Price Index (1.0 = base)', font: { size: 10 } }, ticks: { font: { size: 9 } } },
+      },
+    },
+  });
+}
+
+function buildRadarChart() {
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  charts.radar = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Liquidity', 'Storage Risk', 'Authenticity', 'Market Volatility', 'Currency Risk', 'Climate Risk'],
+      datasets: [],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } } },
+      scales: {
+        r: {
+          beginAtZero: true, max: 100,
+          grid: { color: 'rgba(42,34,40,0.4)' },
+          angleLines: { color: 'rgba(42,34,40,0.5)' },
+          pointLabels: { font: { size: 10 }, color: '#8a7a60' },
+          ticks: { display: false, backdropColor: 'transparent' },
+        },
+      },
+    },
+  });
+}
+
+function buildProductionChart() {
+  const ctx = document.getElementById('productionChart').getContext('2d');
+  charts.production = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: PRODUCTION_DATA.countries,
+      datasets: [{
+        data: PRODUCTION_DATA.values.map(v => +v.toFixed(1)),
+        backgroundColor: PRODUCTION_DATA.colors,
+        borderColor: 'rgba(10,14,20,0.5)',
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '55%',
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 10, padding: 6, font: { size: 9 } } },
+        tooltip: { callbacks: { label: c => c.label + ': ' + c.parsed + ' M hL' } },
+      },
+    },
+  });
+}
+
+// === UPDATE FUNCTION ===
+function update() {
+  const yrs = state.years;
+  const amt = state.amount;
+  const costPct = state.cost;
+  const allocs = PORTFOLIOS[state.portfolio];
+  const region = REGION_DATA[state.region];
+
+  // Override fine wine allocation with slider
+  const wineAlloc = state.alloc / 100;
+  const remaining = 1 - wineAlloc;
+  const adjustedAllocs = {};
+  for (const [key, val] of Object.entries(allocs)) {
+    if (key === 'fineWine') {
+      adjustedAllocs[key] = wineAlloc;
+    } else {
+      const origTotal = Object.entries(allocs).filter(([k]) => k !== 'fineWine').reduce((s, [, v]) => s + v, 0);
+      adjustedAllocs[key] = (val / origTotal) * remaining;
+    }
+  }
+
+  // Generate growth paths
+  seed = 42 + state.years * 100 + state.amount / 1000;
+  const labels = Array.from({ length: yrs + 1 }, (_, i) => 'Yr ' + i);
+
+  const datasets = [];
+  const colors = {
+    fineWine: '#c9a060', stocks: '#60a5fa', bonds: '#4ade80', gold: '#fbbf24', realEstate: '#a371f7', crypto: '#f87171',
+  };
+
+  // Portfolio path
+  const portfolioPath = [1.0];
+  const assetPaths = {};
+  for (const [key, alloc] of Object.entries(adjustedAllocs)) {
+    if (alloc < 0.001) continue;
+    const ac = key === 'fineWine' ? { ret: region.baseReturn, vol: region.vol } : ASSET_CLASSES[key];
+    const costAdj = key === 'fineWine' ? costPct : 0;
+    seed = 42 + state.years * 100 + state.amount / 1000 + key.charCodeAt(0) * 7;
+    assetPaths[key] = simulatePath(ac.ret, ac.vol, yrs, costAdj);
+  }
+  // Combine
+  for (let i = 0; i <= yrs; i++) {
+    let val = 0;
+    for (const [key, alloc] of Object.entries(adjustedAllocs)) {
+      if (alloc < 0.001) continue;
+      val += assetPaths[key][i] * alloc;
+    }
+    portfolioPath.push(val) ;
+  }
+  portfolioPath.shift();
+  // Fix: portfolioPath should be weighted average of asset paths
+  const correctPath = [];
+  for (let i = 0; i <= yrs; i++) {
+    let val = 0;
+    for (const [key, alloc] of Object.entries(adjustedAllocs)) {
+      if (alloc < 0.001 || !assetPaths[key]) continue;
+      val += assetPaths[key][i] * alloc;
+    }
+    correctPath.push(val);
+  }
+
+  // Individual asset paths for comparison
+  datasets.push({
+    label: 'Your Portfolio',
+    data: correctPath.map(v => +((v * amt)).toFixed(0)),
+    borderColor: '#e8b080',
+    backgroundColor: 'rgba(232,176,128,0.08)',
+    borderWidth: 3,
+    fill: true,
+    tension: 0.3,
+    pointRadius: 0,
+  });
+
+  // Individual asset class lines
+  for (const [key, ac] of Object.entries(ASSET_CLASSES)) {
+    seed = 99 + key.charCodeAt(0) * 13;
+    const path = simulatePath(ac.ret, ac.vol, yrs, 0);
+    datasets.push({
+      label: ac.name + ' (100%)',
+      data: path.map(v => +((v * amt)).toFixed(0)),
+      borderColor: colors[key] + '99',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      fill: false,
+      tension: 0.3,
+      pointRadius: 0,
+      borderDash: [4, 3],
+    });
+  }
+
+  charts.growth.data.labels = labels;
+  charts.growth.data.datasets = datasets;
+  charts.growth.update('none');
+
+  // Metrics
+  const pfStats = portfolioStats(adjustedAllocs, region, costPct);
+  const finalVal = correctPath[correctPath.length - 1] * amt;
+  const totalRet = (finalVal - amt) / amt;
+  const annualRet = Math.pow(finalVal / amt, 1 / yrs) - 1;
+  const pfVol = pfStats.vol;
+  const sharpe = (annualRet - 0.03) / Math.max(pfVol, 0.001);
+  const dd = maxDrawdown(correctPath);
+
+  document.getElementById('m-value').textContent = fmtAUD(finalVal);
+  document.getElementById('m-value-sub').textContent = fmtPct(totalRet) + ' total';
+  document.getElementById('m-return').textContent = '+' + (annualRet * 100).toFixed(1) + '%';
+  document.getElementById('m-return-sub').textContent = 'vs 3% bonds';
+  document.getElementById('m-vol').textContent = (pfVol * 100).toFixed(1) + '%';
+  const sharpeEl = document.getElementById('m-sharpe');
+  sharpeEl.textContent = sharpe.toFixed(2);
+  sharpeEl.className = 'value ' + (sharpe > 0.8 ? 'green-text' : sharpe > 0.4 ? 'yellow-text' : 'red-text');
+  document.getElementById('m-sharpe-sub').textContent = sharpe > 0.8 ? 'excellent' : sharpe > 0.4 ? 'moderate' : 'poor';
+  document.getElementById('m-dd').textContent = '-' + (dd * 100).toFixed(1) + '%';
+
+  // Scatter chart - risk/return for all asset classes + portfolio
+  const scatterData = [];
+  for (const [key, ac] of Object.entries(ASSET_CLASSES)) {
+    scatterData.push({
+      label: ac.name,
+      data: [{ x: +ac.vol.toFixed(3), y: +ac.ret.toFixed(3) }],
+      backgroundColor: colors[key] + 'cc',
+      borderColor: colors[key],
+      pointRadius: 7,
+    });
+  }
+  // Portfolio point
+  scatterData.push({
+    label: 'Your Portfolio',
+    data: [{ x: +pfVol.toFixed(3), y: +annualRet.toFixed(3) }],
+    backgroundColor: '#e8b080',
+    borderColor: '#fff',
+    pointRadius: 10,
+    pointStyle: 'star',
+  });
+  charts.scatter.data.datasets = scatterData;
+  charts.scatter.update('none');
+
+  // Vintage chart
+  const vintages = region.vintages;
+  const vLabels = Object.keys(vintages).sort();
+  const vData = vLabels.map(y => +vintages[y].toFixed(2));
+  const colors_arr = vData.map(v => {
+    if (v >= 1.5) return '#4ade80';
+    if (v >= 1.3) return '#c9a060';
+    if (v >= 1.1) return '#fbbf24';
+    return '#f87171';
+  });
+  charts.vintage.data.labels = vLabels;
+  charts.vintage.data.datasets = [{
+    label: region.name + ' Vintage Price Index',
+    data: vData,
+    backgroundColor: colors_arr,
+    borderRadius: 3,
+  }];
+  charts.vintage.update('none');
+
+  // Radar chart — risk factors for selected region vs average
+  const avgFactors = { liquidity: 40, storage: 25, authenticity: 35, market: 35, currency: 47, climate: 30 };
+  charts.radar.data.datasets = [
+    {
+      label: region.name + ' Risk',
+      data: Object.values(region.riskFactors),
+      backgroundColor: 'rgba(201,160,96,0.35)',
+      borderColor: '#c9a060',
+      borderWidth: 2,
+      pointBackgroundColor: '#c9a060',
+      pointRadius: 3,
+    },
+    {
+      label: 'Average Wine Region',
+      data: Object.values(avgFactors),
+      backgroundColor: 'rgba(96,165,250,0.15)',
+      borderColor: '#60a5fa',
+      borderWidth: 1.5,
+      borderDash: [4, 3],
+      pointBackgroundColor: '#60a5fa',
+      pointRadius: 2,
+    },
+  ];
+  charts.radar.update('none');
+
+  // Insight text
+  let recommendation, tagClass;
+  if (sharpe > 0.8 && annualRet > 0.06) {
+    recommendation = 'BUY'; tagClass = 'tag-buy';
+  } else if (sharpe > 0.4 && annualRet > 0.04) {
+    recommendation = 'HOLD'; tagClass = 'tag-hold';
+  } else {
+    recommendation = 'CAUTION'; tagClass = 'tag-sell';
+  }
+
+  const wineReturn = region.baseReturn - costPct / 100;
+  const stockReturn = ASSET_CLASSES.stocks.ret;
+  let insight = `With ${state.alloc}% in ${region.name} fine wine over ${yrs} years, your portfolio projects `;
+  insight += fmtAUD(finalVal) + ' from an initial ' + fmtAUD(amt) + '. ';
+  insight += 'Wine contributes ' + (wineReturn * 100).toFixed(1) + '% net annual return (after ' + costPct.toFixed(1) + '% storage cost) vs stocks at ';
+  insight += (stockReturn * 100).toFixed(1) + '%. ';
+  insight += `The Sharpe ratio of ${sharpe.toFixed(2)} indicates ${sharpe > 0.8 ? 'strong risk-adjusted returns' : sharpe > 0.4 ? 'moderate risk-adjusted returns' : 'poor risk-adjusted returns'}. `;
+  insight += `Max drawdown of ${(dd * 100).toFixed(1)}% means you could see the portfolio temporarily fall by that amount. `;
+  insight += `Top ${region.name} investment wines: ${region.topWines.slice(0, 3).join(', ')}. `;
+  insight += `<span class="tag ${tagClass}">${recommendation}</span>`;
+  document.getElementById('insight-text').innerHTML = insight;
+}
+
+// === EVENT HANDLERS ===
+function setupHandlers() {
+  document.getElementById('years').addEventListener('input', e => {
+    state.years = +e.target.value;
+    document.getElementById('years-val').textContent = state.years + ' years';
+    update();
+  });
+  document.getElementById('amount').addEventListener('input', e => {
+    state.amount = +e.target.value;
+    document.getElementById('amount-val').textContent = fmtAUD(state.amount);
+    update();
+  });
+  document.getElementById('alloc').addEventListener('input', e => {
+    state.alloc = +e.target.value;
+    document.getElementById('alloc-val').textContent = state.alloc + '%';
+    update();
+  });
+  document.getElementById('cost').addEventListener('input', e => {
+    state.cost = +e.target.value;
+    document.getElementById('cost-val').textContent = state.cost.toFixed(1) + '% / yr';
+    update();
+  });
+
+  document.querySelectorAll('.btn[data-portfolio]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.btn[data-portfolio]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.portfolio = btn.dataset.portfolio;
+      // Sync allocation slider
+      const winePct = PORTFOLIOS[state.portfolio].fineWine * 100;
+      state.alloc = Math.round(winePct);
+      document.getElementById('alloc').value = state.alloc;
+      document.getElementById('alloc-val').textContent = state.alloc + '%';
+      update();
+    });
+  });
+
+  document.querySelectorAll('.region-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.region-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.region = chip.dataset.region;
+      update();
+    });
+  });
+}
+
+// === BACKGROUND CANVAS ===
+function initBgCanvas() {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let w, h, particles = [];
+
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Wine-themed floating particles
+  for (let i = 0; i < 30; i++) {
+    particles.push({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: Math.random() * 3 + 1,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.1,
+      hue: 35 + Math.random() * 20,
+      alpha: Math.random() * 0.3 + 0.05,
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, w, h);
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+      if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+      grad.addColorStop(0, `hsla(${p.hue}, 60%, 50%, ${p.alpha})`);
+      grad.addColorStop(1, `hsla(${p.hue}, 60%, 50%, 0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+// === INIT ===
+function init() {
+  buildGrowthChart();
+  buildScatterChart();
+  buildVintageChart();
+  buildRadarChart();
+  buildProductionChart();
+  setupHandlers();
+  initBgCanvas();
+  update();
+}
+
+init();
+</script>
+</body>
+</html>
