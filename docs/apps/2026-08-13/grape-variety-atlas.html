@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Grape Variety Atlas — Global Planting Trends & Diversity Explorer</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{font-size:16px}
+  body{background:#0b0f14;color:#c9d1d9;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+  .disclaimer{background:#1a1610;border-bottom:1px solid #3a3020;color:#c9a060;padding:0.75rem 1rem;text-align:center;font-size:0.85rem;font-family:system-ui,sans-serif;position:sticky;top:0;z-index:100}
+  .disclaimer strong{font-weight:600}
+
+  header{text-align:center;padding:1.5rem 1rem 1rem;border-bottom:1px solid #2a3441}
+  header h1{font-size:clamp(1.3rem,5vw,1.8rem);background:linear-gradient(90deg,#58a6ff,#a371f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
+  header p{color:#8b949e;margin-top:0.4rem;font-size:0.85rem}
+
+  /* CSS Grid layout — no fixed canvas container, mobile-safe */
+  #dashboard{display:grid;grid-template-columns:1fr;gap:1rem;padding:1rem;max-width:1200px;margin:0 auto}
+  @media(min-width:769px){#dashboard{grid-template-columns:1fr 1fr;gap:1rem}}
+
+  .panel{background:#141a22;border:1px solid #2a3441;border-radius:10px;padding:0.8rem}
+  .panel.full{grid-column:1/-1}
+  .panel h2{font-size:0.95rem;color:#58a6ff;margin-bottom:0.5rem}
+  .panel .subtitle{font-size:0.75rem;color:#8b949e;margin-bottom:0.6rem}
+
+  #controls{grid-column:1/-1;background:#141a22;border:1px solid #2a3441;border-radius:10px;padding:0.8rem;display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center}
+  #controls label{font-size:0.8rem;color:#8b949e;display:flex;align-items:center;gap:0.4rem}
+  #controls select,#controls button{background:#0b0f14;color:#c9d1d9;border:1px solid #2a3441;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.8rem;cursor:pointer}
+  #controls select:hover,#controls button:hover{border-color:#58a6ff}
+  #controls button.active{background:#58a6ff;color:#0b0f14;font-weight:600}
+  #controls .sep{width:1px;height:24px;background:#2a3441}
+
+  .plot-container{width:100%;min-height:300px}
+  #map-plot{width:100%;min-height:380px}
+  #heatmap-plot{width:100%;min-height:320px}
+  #trend-plot{width:100%;min-height:300px}
+  #treemap-plot{width:100%;min-height:320px}
+
+  .metrics-bar{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:0.6rem;padding:0.6rem 0.8rem;background:#141a22;border:1px solid #2a3441;border-radius:10px}
+  .metric{flex:1;min-width:100px;text-align:center}
+  .metric .val{font-size:1.3rem;font-weight:700;color:#58a6ff}
+  .metric .label{font-size:0.7rem;color:#8b949e;text-transform:uppercase;letter-spacing:0.05em}
+
+  #detail-panel{grid-column:1/-1}
+  #detail-content{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.6rem;margin-top:0.5rem}
+  .detail-card{background:#0b0f14;border:1px solid #2a3441;border-radius:8px;padding:0.7rem}
+  .detail-card .dc-name{font-size:0.9rem;font-weight:600;color:#c9d1d9}
+  .detail-card .dc-sub{font-size:0.72rem;color:#8b949e;margin-bottom:0.4rem}
+  .detail-card .dc-row{display:flex;justify-content:space-between;font-size:0.75rem;margin:0.15rem 0}
+  .detail-card .dc-row span:first-child{color:#8b949e}
+  .detail-card .dc-row span:last-child{color:#c9d1d9;font-weight:600}
+
+  .loading{color:#8b949e;text-align:center;padding:2rem;font-size:0.9rem}
+
+  footer{text-align:center;padding:1.5rem 1rem;color:#8b949e;font-size:0.78rem;border-top:1px solid #2a3441;margin-top:1rem}
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<header>
+  <h1>Grape Variety Atlas</h1>
+  <p>Global planting trends, diversity & dominance across 25 major wine grape varieties · 1990–2022</p>
+</header>
+
+<div id="dashboard">
+  <div id="controls">
+    <label>Year:
+      <select id="year-select"></select>
+    </label>
+    <div class="sep"></div>
+    <label>View:
+      <select id="view-select">
+        <option value="map">Geographic Bubble Map</option>
+        <option value="heatmap">Variety × Country Heatmap</option>
+      </select>
+    </label>
+    <div class="sep"></div>
+    <label>Metric:
+      <select id="metric-select">
+        <option value="area">Planting Area (ha)</option>
+        <option value="share">% of National Vineyard</option>
+      </select>
+    </label>
+    <div class="sep"></div>
+    <button id="play-btn">▶ Play Timeline</button>
+    <div class="sep"></div>
+    <label>Highlight:
+      <select id="variety-select">
+        <option value="">All Varieties</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="metrics-bar" id="metrics-bar">
+    <div class="metric"><div class="val" id="m-total">—</div><div class="label">Total Area (ha)</div></div>
+    <div class="metric"><div class="val" id="m-varieties">—</div><div class="label">Varieties Tracked</div></div>
+    <div class="metric"><div class="val" id="m-countries">—</div><div class="label">Countries</div></div>
+    <div class="metric"><div class="val" id="m-top">—</div><div class="label">Top Variety</div></div>
+    <div class="metric"><div class="val" id="m-diversity">—</div><div class="label">Diversity Index</div></div>
+  </div>
+
+  <div class="panel full" id="main-panel">
+    <h2 id="main-title">Geographic Distribution</h2>
+    <div class="subtitle" id="main-subtitle">Bubble size = planting area · Colour = variety family</div>
+    <div id="map-plot" class="plot-container"></div>
+  </div>
+
+  <div class="panel" id="trend-panel">
+    <h2>Top 10 Varieties — Planting Trend</h2>
+    <div class="subtitle">Hectares over time · click legend to toggle</div>
+    <div id="trend-plot" class="plot-container"></div>
+  </div>
+
+  <div class="panel" id="treemap-panel">
+    <h2>Variety Family Share</h2>
+    <div class="subtitle">Share of tracked plantings by grape family</div>
+    <div id="treemap-plot" class="plot-container"></div>
+  </div>
+
+  <div class="panel full" id="detail-panel">
+    <h2>Variety Detail Cards</h2>
+    <div class="subtitle">Click a variety in the dropdown or highlight to see details</div>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<footer>Data based on OIV global viticulture statistics & national surveys. Hectares are approximate and modelled for educational purposes.</footer>
+
+<script>
+// ============================================================
+// DATA: 25 major wine grape varieties × 12 countries × years
+// Based on OIV statistics, Anderson & Aryal (2013), and national
+// censuses. Values are approximate/modelled for education.
+// ============================================================
+
+const COUNTRIES = [
+  {code:"FRA", name:"France", lat:46.6, lon:2.2},
+  {code:"ITA", name:"Italy", lat:42.0, lon:12.0},
+  {code:"ESP", name:"Spain", lat:40.0, lon:-3.7},
+  {code:"USA", name:"USA", lat:38.5, lon:-98.0},
+  {code:"AUS", name:"Australia", lat:-25.0, lon:135.0},
+  {code:"ARG", name:"Argentina", lat:-35.0, lon:-65.0},
+  {code:"CHL", name:"Chile", lat:-33.0, lon:-71.0},
+  {code:"ZAF", name:"South Africa", lat:-29.0, lon:24.0},
+  {code:"DEU", name:"Germany", lat:51.0, lon:10.0},
+  {code:"PRT", name:"Portugal", lat:39.5, lon:-8.0},
+  {code:"CHN", name:"China", lat:35.0, lon:105.0},
+  {code:"NZL", name:"New Zealand", lat:-41.0, lon:174.0}
+];
+
+const VARIETIES = [
+  {name:"Cabernet Sauvignon", family:"Bordeaux", color:"#6b2c5e", synonyms:"Petit Cabernet"},
+  {name:"Merlot", family:"Bordeaux", color:"#8b3a5a", synonyms:"Petit Merlot"},
+  {name:"Pinot Noir", family:"Pinot", color:"#c2185b", synonyms:"Spatburgunder, Nero"},
+  {name:"Syrah", family:"Rhône", color:"#7b1f3a", synonyms:"Shiraz (AUS)"},
+  {name:"Tempranillo", family:"Iberian", color:"#9c4a2e", synonyms:"Tinto Roriz, Cencibel"},
+  {name:"Grenache", family:"Rhône", color:"#c75b3a", synonyms:"Garnacha, Cannonau"},
+  {name:"Chardonnay", family:"Chardonnay", color:"#e8c34a", synonyms:"—"},
+  {name:"Sauvignon Blanc", family:"Sauvignon", color:"#7ec850", synonyms:"Fumé Blanc"},
+  {name:"Riesling", family:"Aromatic", color:"#5ec8a0", synonyms:"White Riesling"},
+  {name:"Trebbiano", family:"Italian White", color:"#d4d06a", synonyms:"Ugni Blanc"},
+  {name:"Sangiovese", family:"Italian Red", color:"#a04030", synonyms:"Brunello, Chianti base"},
+  {name:"Nebbiolo", family:"Italian Red", color:"#b0502a", synonyms:"Spanna, Chiavennasca"},
+  {name:"Malbec", family:"Cot", color:"#5a1f3e", synonyms:"Cot, Auxerrois"},
+  {name:"Cabernet Franc", family:"Bordeaux", color:"#8c4a6e", synonyms:"Bouchet"},
+  {name:"Carignan", family:"Iberian", color:"#b04a3e", synonyms:"Cariñena, Mazuelo"},
+  {name:"Airen", family:"Iberian", color:"#e0d85a", synonyms:"—"},
+  {name:"Macabeo", family:"Iberian", color:"#d0c85a", synonyms:"Viura"},
+  {name:"Chenin Blanc", family:"Loire", color:"#a8d060", synonyms:"Steen (ZA)"},
+  {name:"Gewürztraminer", family:"Aromatic", color:"#c8a0d0", synonyms:"Traminer Aromatico"},
+  {name:"Viognier", family:"Rhône", color:"#d4b04a", synonyms:"—"},
+  {name:"Gamay", family:"Gamay", color:"#c0304a", synonyms:"Gamay Noir"},
+  {name:"Pinot Grigio", family:"Pinot", color:"#d0b8c0", synonyms:"Grauburgunder, Pinot Gris"},
+  {name:"Shiraz", family:"Rhône", color:"#5a1a2e", synonyms:"Syrah (identical clone)"},
+  {name:"Petit Verdot", family:"Bordeaux", color:"#4a1f3e", synonyms:"—"},
+  {name:"Mourvèdre", family:"Rhône", color:"#6a2a2a", synonyms:"Monastrell, Mataro"}
+];
+
+const YEARS = [1990, 2000, 2010, 2015, 2020, 2022];
+
+// Planting area in hectares (approximate, modelled from OIV & national data)
+// Structure: [varietyIndex][countryIndex] = {1990: area, 2000: area, ...}
+// Based on real trend patterns: Cab Sauv rose globally then peaked, Pinot Noir
+// rose in 2000s (Sideways effect), Airen declined, Malbec boomed in Argentina, etc.
+
+function generateData(){
+  const data = {}; // data[variety][country] = {year: area}
+  
+  // Base areas (hectares) approximating real-world circa 2010
+  const baseAreas = {
+    "Cabernet Sauvignon": {"FRA":14500,"ITA":9000,"ESP":16500,"USA":34000,"AUS":28000,"ARG":12000,"CHL":8000,"ZAF":6000,"DEU":0,"PRT":1500,"CHN":18000,"NZL":1200},
+    "Merlot": {"FRA":38000,"ITA":26000,"ESP":8000,"USA":18000,"AUS":6000,"ARG":5000,"CHL":6000,"ZAF":2500,"DEU":500,"PRT":1200,"CHN":15000,"NZL":800},
+    "Pinot Noir": {"FRA":10000,"ITA":5000,"ESP":2000,"USA":15000,"AUS":3000,"ARG":1500,"CHL":2000,"ZAF":600,"DEU":11000,"PRT":200,"CHN":3000,"NZL":5600},
+    "Syrah": {"FRA":65000,"ITA":6000,"ESP":12000,"USA":6000,"AUS":35000,"ARG":2500,"CHL":3000,"ZAF":7000,"DEU":200,"PRT":800,"CHN":2000,"NZL":300},
+    "Tempranillo": {"FRA":0,"ITA":0,"ESP":52000,"USA":300,"AUS":400,"ARG":800,"CHL":500,"ZAF":100,"DEU":0,"PRT":2000,"CHN":0,"NZL":50},
+    "Grenache": {"FRA":65000,"ITA":3000,"ESP":40000,"USA":4000,"AUS":10000,"ARG":2000,"CHL":500,"ZAF":2500,"DEU":0,"PRT":800,"CHN":0,"NZL":0},
+    "Chardonnay": {"FRA":9000,"ITA":12000,"ESP":6000,"USA":30000,"AUS":12000,"ARG":3000,"CHL":2500,"ZAF":4000,"DEU":1000,"PRT":1500,"CHN":12000,"NZL":3000},
+    "Sauvignon Blanc": {"FRA":9000,"ITA":3000,"ESP":2000,"USA":5000,"AUS":3000,"ARG":1500,"CHL":3500,"ZAF":2500,"DEU":500,"PRT":1000,"CHN":2000,"NZL":17000},
+    "Riesling": {"FRA":0,"ITA":0,"ESP":0,"USA":2000,"AUS":500,"ARG":0,"CHL":0,"ZAF":200,"DEU":22000,"PRT":0,"CHN":0,"NZL":0},
+    "Trebbiano": {"FRA":3000,"ITA":40000,"ESP":0,"USA":0,"AUS":0,"ARG":0,"CHL":0,"ZAF":0,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Sangiovese": {"FRA":0,"ITA":55000,"ESP":0,"USA":1000,"AUS":200,"ARG":0,"CHL":0,"ZAF":0,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Nebbiolo": {"FRA":0,"ITA":6000,"ESP":0,"USA":300,"AUS":100,"ARG":0,"CHL":0,"ZAF":0,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Malbec": {"FRA":5000,"ITA":0,"ESP":0,"USA":1500,"AUS":300,"ARG":32000,"CHL":1500,"ZAF":100,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Cabernet Franc": {"FRA":14000,"ITA":2000,"ESP":1000,"USA":2000,"AUS":200,"ARG":300,"CHL":200,"ZAF":200,"DEU":200,"PRT":0,"CHN":0,"NZL":0},
+    "Carignan": {"FRA":40000,"ITA":5000,"ESP":20000,"USA":500,"AUS":100,"ARG":500,"CHL":2000,"ZAF":0,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Airen": {"FRA":0,"ITA":0,"ESP":250000,"USA":0,"AUS":0,"ARG":0,"CHL":0,"ZAF":0,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Macabeo": {"FRA":0,"ITA":0,"ESP":28000,"USA":0,"AUS":0,"ARG":0,"CHL":0,"ZAF":0,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Chenin Blanc": {"FRA":3000,"ITA":0,"ESP":0,"USA":2000,"AUS":100,"ARG":0,"CHL":0,"ZAF":15000,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Gewürztraminer": {"FRA":2000,"ITA":0,"ESP":0,"USA":500,"AUS":100,"ARG":0,"CHL":0,"ZAF":0,"DEU":900,"PRT":0,"CHN":0,"NZL":0},
+    "Viognier": {"FRA":3000,"ITA":500,"ESP":500,"USA":800,"AUS":300,"ARG":0,"CHL":0,"ZAF":100,"DEU":100,"PRT":0,"CHN":0,"NZL":0},
+    "Gamay": {"FRA":28000,"ITA":0,"ESP":0,"USA":200,"AUS":0,"ARG":0,"CHL":0,"ZAF":0,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Pinot Grigio": {"FRA":0,"ITA":7000,"ESP":0,"USA":2000,"AUS":100,"ARG":0,"CHL":0,"ZAF":0,"DEU":500,"PRT":0,"CHN":0,"NZL":200},
+    "Shiraz": {"FRA":0,"ITA":0,"ESP":0,"USA":0,"AUS":18000,"ARG":1500,"CHL":2000,"ZAF":3500,"DEU":0,"PRT":0,"CHN":1000,"NZL":200},
+    "Petit Verdot": {"FRA":800,"ITA":100,"ESP":500,"USA":500,"AUS":300,"ARG":200,"CHL":200,"ZAF":100,"DEU":0,"PRT":0,"CHN":0,"NZL":0},
+    "Mourvèdre": {"FRA":5000,"ITA":500,"ESP":8000,"USA":300,"AUS":1200,"ARG":200,"CHL":200,"ZAF":400,"DEU":0,"PRT":0,"CHN":0,"NZL":0}
+  };
+
+  // Growth/decline multipliers per year relative to 2010 baseline
+  // Reflects real trends: Cab Sauv expansion, Airen decline, Pinot boom, Malbec surge
+  const yearMultipliers = {
+    1990: {cab: 0.45, merlot: 0.50, pinot: 0.40, syrah: 0.55, temp: 0.65, gren: 0.80, chard: 0.55, sauv: 0.40, ries: 0.75, treb: 1.15, sang: 0.80, nebb: 0.80, mal: 0.15, cf: 0.60, car: 1.30, airen: 1.20, mac: 1.15, chen: 0.80, gew: 0.70, vio: 0.30, gam: 1.10, pg: 0.20, shiraz: 0.50, pv: 0.10, mour: 0.50},
+    2000: {cab: 0.75, merlot: 0.85, pinot: 0.55, syrah: 0.80, temp: 0.85, gren: 0.90, chard: 0.80, sauv: 0.60, ries: 0.85, treb: 1.05, sang: 0.90, nebb: 0.85, mal: 0.25, cf: 0.80, car: 0.90, airen: 1.05, mac: 1.00, chen: 0.85, gew: 0.80, vio: 0.50, gam: 1.00, pg: 0.45, shiraz: 0.70, pv: 0.25, mour: 0.70},
+    2010: {cab: 1.00, merlot: 1.00, pinot: 1.00, syrah: 1.00, temp: 1.00, gren: 1.00, chard: 1.00, sauv: 1.00, ries: 1.00, treb: 1.00, sang: 1.00, nebb: 1.00, mal: 1.00, cf: 1.00, car: 1.00, mac: 1.00, chen: 1.00, gew: 1.00, vio: 1.00, gam: 1.00, pg: 1.00, shiraz: 1.00, pv: 1.00, mour: 1.00},
+    2015: {cab: 1.10, merlot: 0.90, pinot: 1.30, syrah: 0.95, temp: 1.05, gren: 0.85, chard: 1.05, sauv: 1.15, ries: 0.95, treb: 0.90, sang: 0.95, nebb: 1.05, mal: 1.20, cf: 0.95, car: 0.70, airen: 0.60, mac: 0.85, chen: 0.90, gew: 0.90, vio: 1.10, gam: 0.95, pg: 1.25, shiraz: 1.00, pv: 1.20, mour: 0.90},
+    2020: {cab: 1.15, merlot: 0.80, pinot: 1.40, syrah: 0.90, temp: 1.10, gren: 0.80, chard: 1.00, sauv: 1.25, ries: 0.90, treb: 0.80, sang: 0.90, nebb: 1.10, mal: 1.35, cf: 0.90, car: 0.55, airen: 0.40, mac: 0.75, chen: 0.85, gew: 0.95, vio: 1.15, gam: 0.90, pg: 1.35, shiraz: 0.95, pv: 1.25, mour: 0.85},
+    2022: {cab: 1.10, merlot: 0.75, pinot: 1.35, syrah: 0.88, temp: 1.08, gren: 0.78, chard: 0.95, sauv: 1.30, ries: 0.92, treb: 0.75, sang: 0.88, nebb: 1.12, mal: 1.30, cf: 0.88, car: 0.50, airen: 0.35, mac: 0.70, chen: 0.82, gew: 1.00, vio: 1.10, gam: 0.88, pg: 1.30, shiraz: 0.90, pv: 1.22, mour: 0.82}
+  };
+
+  // Map variety name to its multiplier key
+  const multKeys = {
+    "Cabernet Sauvignon":"cab", "Merlot":"merlot", "Pinot Noir":"pinot", "Syrah":"syrah",
+    "Tempranillo":"temp", "Grenache":"gren", "Chardonnay":"chard", "Sauvignon Blanc":"sauv",
+    "Riesling":"ries", "Trebbiano":"treb", "Sangiovese":"sang", "Nebbiolo":"nebb",
+    "Malbec":"mal", "Cabernet Franc":"cf", "Carignan":"car", "Airen":"airen",
+    "Macabeo":"mac", "Chenin Blanc":"chen", "Gewürztraminer":"gew", "Viognier":"vio",
+    "Gamay":"gam", "Pinot Grigio":"pg", "Shiraz":"shiraz", "Petit Verdot":"pv", "Mourvèdre":"mour"
+  };
+
+  VARIETIES.forEach(v => {
+    data[v.name] = {};
+    const multKey = multKeys[v.name];
+    COUNTRIES.forEach(c => {
+      data[v.name][c.code] = {};
+      const base = (baseAreas[v.name] && baseAreas[v.name][c.code]) || 0;
+      YEARS.forEach(y => {
+        const mult = yearMultipliers[y][multKey];
+        // China grew rapidly from near-zero
+        let chinaBoost = c.code === "CHN" ? (y === 1990 ? 0.1 : y === 2000 ? 0.3 : 1.0) : 1.0;
+        data[v.name][c.code][y] = Math.round(base * mult * chinaBoost);
+      });
+    });
+  });
+
+  return data;
+}
+
+const PLANTING_DATA = generateData();
+
+// Compute national vineyard totals per country per year
+function getCountryTotal(countryCode, year){
+  let total = 0;
+  VARIETIES.forEach(v => {
+    total += (PLANTING_DATA[v.name][countryCode][year] || 0);
+  });
+  return total;
+}
+
+// ============================================================
+// PLOT BUILDING
+// ============================================================
+
+var currentYear = 2022;
+var currentView = "map";
+var currentMetric = "area";
+var highlightVariety = "";
+var playing = false;
+var playTimer = null;
+
+// Populate dropdowns
+(function initDropdowns(){
+  var ys = document.getElementById("year-select");
+  YEARS.forEach(function(y){ var o = document.createElement("option"); o.value = y; o.textContent = y; ys.appendChild(o); });
+  ys.value = currentYear;
+  var vs = document.getElementById("variety-select");
+  VARIETIES.forEach(function(v){ var o = document.createElement("option"); o.value = v.name; o.textContent = v.name; vs.appendChild(o); });
+})();
+
+document.getElementById("year-select").addEventListener("change", function(e){
+  currentYear = parseInt(e.target.value);
+  renderAll();
+});
+document.getElementById("view-select").addEventListener("change", function(e){
+  currentView = e.target.value;
+  var mainPanel = document.getElementById("main-panel");
+  var mapPlot = document.getElementById("map-plot");
+  if (currentView === "heatmap") {
+    mainPanel.querySelector("h2").textContent = "Variety × Country Heatmap";
+    mainPanel.querySelector(".subtitle").textContent = "Colour intensity = " + (currentMetric === "area" ? "planting area (ha)" : "% of national vineyard");
+    mapPlot.id = "heatmap-plot";
+  } else {
+    mainPanel.querySelector("h2").textContent = "Geographic Distribution";
+    mainPanel.querySelector(".subtitle").textContent = "Bubble size = planting area · Colour = variety family";
+    mapPlot.id = "map-plot";
+  }
+  renderMainPlot();
+});
+document.getElementById("metric-select").addEventListener("change", function(e){
+  currentMetric = e.target.value;
+  renderAll();
+});
+document.getElementById("variety-select").addEventListener("change", function(e){
+  highlightVariety = e.target.value;
+  renderAll();
+  renderDetailCards();
+});
+document.getElementById("play-btn").addEventListener("click", function(e){
+  playing = !playing;
+  e.target.textContent = playing ? "⏸ Pause" : "▶ Play Timeline";
+  e.target.classList.toggle("active", playing);
+  if (playing) {
+    playTimer = setInterval(function(){
+      var idx = YEARS.indexOf(currentYear);
+      idx = (idx + 1) % YEARS.length;
+      currentYear = YEARS[idx];
+      document.getElementById("year-select").value = currentYear;
+      renderAll();
+    }, 1500);
+  } else {
+    clearInterval(playTimer);
+  }
+});
+
+var plotConfig = {
+  displayModeBar: false,
+  responsive: true
+};
+
+var darkLayout = {
+  paper_bgcolor: "transparent",
+  plot_bgcolor: "transparent",
+  font: { color: "#c9d1d9", family: "system-ui, sans-serif", size: 11 },
+  margin: { t: 30, r: 15, b: 35, l: 40 },
+  showlegend: true,
+  legend: { bgcolor: "rgba(0,0,0,0)", font: { size: 9 }, orientation: "h", y: -0.15 },
+  xaxis: { gridcolor: "#2a3441", zerolinecolor: "#2a3441" },
+  yaxis: { gridcolor: "#2a3441", zerolinecolor: "#2a3441" }
+};
+
+function renderMainPlot(){
+  var targetDiv = currentView === "heatmap" ? "heatmap-plot" : "map-plot";
+  if (currentView === "map") {
+    renderMapPlot(targetDiv);
+  } else {
+    renderHeatmapPlot(targetDiv);
+  }
+}
+
+function renderMapPlot(divId){
+  var traces = [];
+  var families = {};
+  VARIETIES.forEach(function(v){ families[v.family] = families[v.family] || []; families[v.family].push(v); });
+
+  Object.keys(families).forEach(function(famName){
+    var famVarieties = families[famName];
+    var lons = [], lats = [], texts = [], sizes = [], colors = [], names = [];
+    famVarieties.forEach(function(v){
+      if (highlightVariety && v.name !== highlightVariety) return;
+      COUNTRIES.forEach(function(c){
+        var area = PLANTING_DATA[v.name][c.code][currentYear] || 0;
+        if (area < 50) return;
+        lons.push(c.lon);
+        lats.push(c.lat);
+        var pct = 0;
+        var cTotal = getCountryTotal(c.code, currentYear);
+        if (cTotal > 0) pct = (area / cTotal * 100);
+        texts.push(v.name + " · " + c.name + "<br>" + area.toLocaleString() + " ha (" + pct.toFixed(1) + "%)");
+        sizes.push(currentMetric === "area" ? Math.sqrt(area) * 0.8 : Math.sqrt(pct) * 4);
+        colors.push(v.color);
+        names.push(v.name);
+      });
+    });
+    if (lons.length === 0) return;
+    traces.push({
+      type: "scattergeo",
+      mode: "markers",
+      name: famName,
+      lon: lons,
+      lat: lats,
+      text: texts,
+      hoverinfo: "text",
+      marker: {
+        size: sizes,
+        color: colors,
+        opacity: 0.75,
+        line: { color: "#0b0f14", width: 1 },
+        sizemode: "area",
+        sizeref: 0.5
+      }
+    });
+  });
+
+  var layout = Object.assign({}, darkLayout, {
+    geo: {
+      showland: true,
+      landcolor: "#141a22",
+      showocean: true,
+      oceancolor: "#0b0f14",
+      showcountries: true,
+      countrycolor: "#2a3441",
+      showcoastlines: true,
+      coastlinecolor: "#2a3441",
+      projection: { type: "natural earth" },
+      showframe: false,
+      showlegend: false
+    },
+    margin: { t: 10, r: 5, b: 5, l: 5 },
+    showlegend: false
+  });
+
+  Plotly.react(divId, traces, layout, { displayModeBar: false, responsive: true });
+}
+
+function renderHeatmapPlot(divId){
+  var varietyNames = VARIETIES.map(function(v){ return v.name; });
+  var countryNames = COUNTRIES.map(function(c){ return c.name; });
+  var z = [];
+  VARIETIES.forEach(function(v){
+    var row = [];
+    COUNTRIES.forEach(function(c){
+      var area = PLANTING_DATA[v.name][c.code][currentYear] || 0;
+      if (currentMetric === "share") {
+        var cTotal = getCountryTotal(c.code, currentYear);
+        row.push(cTotal > 0 ? +(area / cTotal * 100).toFixed(2) : 0);
+      } else {
+        row.push(area);
+      }
+    });
+    z.push(row);
+  });
+
+  var trace = {
+    type: "heatmap",
+    z: z,
+    x: countryNames,
+    y: varietyNames,
+    colorscale: [[0, "#0b0f14"], [0.1, "#1a2030"], [0.3, "#2a4050"], [0.5, "#3a7090"], [0.7, "#58a6ff"], [0.9, "#a371f7"], [1, "#e8c34a"]],
+    showscale: true,
+    colorbar: { tickfont: { color: "#8b949e", size: 9 }, len: 0.7, thickness: 10 },
+    hovertemplate: "%{y} · %{x}<br>" + (currentMetric === "area" ? "%{z} ha" : "%{z}%") + "<extra></extra>"
+  };
+
+  var layout = Object.assign({}, darkLayout, {
+    margin: { t: 10, r: 50, b: 60, l: 120 },
+    yaxis: { automargin: true, tickfont: { size: 9 } },
+    xaxis: { tickfont: { size: 9 }, tickangle: -35 },
+    showlegend: false
+  });
+
+  Plotly.react(divId, [trace], layout, { displayModeBar: false, responsive: true });
+}
+
+function renderTrendPlot(){
+  var traces = [];
+  // Get top 10 varieties by total area across all countries in latest year
+  var totals = VARIETIES.map(function(v){
+    var t = 0;
+    COUNTRIES.forEach(function(c){ t += PLANTING_DATA[v.name][c.code][2022] || 0; });
+    return { name: v.name, total: t, color: v.color };
+  }).sort(function(a,b){ return b.total - a.total; }).slice(0, 10);
+
+  totals.forEach(function(t){
+    var series = [];
+    YEARS.forEach(function(y){
+      var sum = 0;
+      COUNTRIES.forEach(function(c){ sum += PLANTING_DATA[t.name][c.code][y] || 0; });
+      series.push(sum);
+    });
+    traces.push({
+      type: "scatter",
+      mode: "lines+markers",
+      name: t.name,
+      x: YEARS,
+      y: series,
+      line: { color: t.color, width: 2 },
+      marker: { size: 5, color: t.color },
+      hovertemplate: t.name + " · %{x}<br>%{y} ha<extra></extra>"
+    });
+  });
+
+  var layout = Object.assign({}, darkLayout, {
+    xaxis: { title: "Year", gridcolor: "#2a3441" },
+    yaxis: { title: "Planting Area (ha)", gridcolor: "#2a3441" },
+    legend: { font: { size: 8 }, orientation: "v", x: 1.02, y: 1 },
+    margin: { t: 10, r: 80, b: 30, l: 50 }
+  });
+
+  Plotly.react("trend-plot", traces, layout, { displayModeBar: false, responsive: true });
+}
+
+function renderTreemapPlot(){
+  // Family share for current year
+  var familyTotals = {};
+  VARIETIES.forEach(function(v){
+    familyTotals[v.family] = familyTotals[v.family] || { total: 0, varieties: [] };
+    var s = 0;
+    COUNTRIES.forEach(function(c){ s += PLANTING_DATA[v.name][c.code][currentYear] || 0; });
+    familyTotals[v.family].total += s;
+    familyTotals[v.family].varieties.push({ name: v.name, area: s, color: v.color });
+  });
+
+  var labels = [], parents = [], values = [], colors = [];
+  labels.push("All"); parents.push(""); values.push(0); colors.push("#141a22");
+
+  Object.keys(familyTotals).forEach(function(fam){
+    var ft = familyTotals[fam];
+    labels.push(fam);
+    parents.push("All");
+    values.push(ft.total);
+    colors.push(ft.varieties[0] ? ft.varieties[0].color : "#2a3441");
+    ft.varieties.forEach(function(vv){
+      labels.push(vv.name);
+      parents.push(fam);
+      values.push(vv.area);
+      colors.push(vv.color);
+    });
+  });
+
+  var trace = {
+    type: "treemap",
+    labels: labels,
+    parents: parents,
+    values: values,
+    marker: { colors: colors, line: { color: "#0b0f14", width: 1 } },
+    textinfo: "label+value",
+    hovertemplate: "%{label}<br>%{value} ha<extra></extra>",
+    branchvalues: "total"
+  };
+
+  var layout = Object.assign({}, darkLayout, {
+    margin: { t: 10, r: 5, b: 5, l: 5 },
+    showlegend: false
+  });
+
+  Plotly.react("treemap-plot", [trace], layout, { displayModeBar: false, responsive: true });
+}
+
+function renderMetrics(){
+  var total = 0;
+  var varietiesPresent = 0;
+  var countriesPresent = 0;
+
+  VARIETIES.forEach(function(v){
+    var vTotal = 0;
+    COUNTRIES.forEach(function(c){
+      vTotal += PLANTING_DATA[v.name][c.code][currentYear] || 0;
+    });
+    if (vTotal > 0) varietiesPresent++;
+    total += vTotal;
+  });
+
+  var countryCounts = COUNTRIES.map(function(c){
+    var cTotal = getCountryTotal(c.code, currentYear);
+    return { code: c.code, name: c.name, total: cTotal };
+  }).sort(function(a,b){ return b.total - a.total; });
+  countriesPresent = countryCounts.filter(function(c){ return c.total > 0; }).length;
+
+  // Top variety
+  var varietyTotals = VARIETIES.map(function(v){
+    var s = 0;
+    COUNTRIES.forEach(function(c){ s += PLANTING_DATA[v.name][c.code][currentYear] || 0; });
+    return { name: v.name, total: s };
+  }).sort(function(a,b){ return b.total - a.total; });
+  var top = varietyTotals[0];
+
+  // Shannon diversity index across varieties
+  var totalForDiv = varietyTotals.reduce(function(s,v){ return s + v.total; }, 0);
+  var diversity = 0;
+  varietyTotals.forEach(function(v){
+    if (v.total > 0 && totalForDiv > 0) {
+      var p = v.total / totalForDiv;
+      if (p > 0) diversity -= p * Math.log(p);
+    }
+  });
+  // Normalize: max diversity = ln(numVarieties)
+  var maxDiv = Math.log(varietiesPresent || 1);
+  var normDiv = maxDiv > 0 ? (diversity / maxDiv * 100) : 0;
+
+  document.getElementById("m-total").textContent = total > 999999 ? (total / 1e6).toFixed(2) + "M" : total.toLocaleString();
+  document.getElementById("m-varieties").textContent = varietiesPresent;
+  document.getElementById("m-countries").textContent = countriesPresent;
+  document.getElementById("m-top").textContent = top ? top.name.replace("Sauvignon","Sauv.").replace("Blanc","").substring(0, 14) : "—";
+  document.getElementById("m-diversity").textContent = normDiv.toFixed(0) + "%";
+}
+
+function renderDetailCards(){
+  var container = document.getElementById("detail-content");
+  if (highlightVariety) {
+    // Show single variety across all countries
+    var v = VARIETIES.find(function(x){ return x.name === highlightVariety; });
+    if (!v) { container.innerHTML = ""; return; }
+    var cards = COUNTRIES.map(function(c){
+      var area = PLANTING_DATA[v.name][c.code][currentYear] || 0;
+      var cTotal = getCountryTotal(c.code, currentYear);
+      var pct = cTotal > 0 ? (area / cTotal * 100) : 0;
+      return '<div class="detail-card" style="border-top:3px solid ' + v.color + '">' +
+        '<div class="dc-name">' + c.name + '</div>' +
+        '<div class="dc-sub">' + v.name + ' · ' + currentYear + '</div>' +
+        '<div class="dc-row"><span>Area</span><span>' + area.toLocaleString() + ' ha</span></div>' +
+        '<div class="dc-row"><span>Share</span><span>' + pct.toFixed(1) + '%</span></div>' +
+        '<div class="dc-row"><span>Family</span><span>' + v.family + '</span></div>' +
+        '</div>';
+    }).join("");
+    container.innerHTML = cards;
+  } else {
+    // Show top 12 varieties with global totals
+    var sorted = VARIETIES.map(function(v){
+      var s = 0, trend = 0;
+      COUNTRIES.forEach(function(c){
+        s += PLANTING_DATA[v.name][c.code][currentYear] || 0;
+        var first = PLANTING_DATA[v.name][c.code][1990] || 0;
+        trend = first > 0 ? ((s / first - 1) * 100) : 0;
+      });
+      return { v: v, total: s, trend: trend };
+    }).sort(function(a,b){ return b.total - a.total; }).slice(0, 12);
+
+    container.innerHTML = sorted.map(function(item){
+      var v = item.v;
+      var trendSym = item.trend > 5 ? "▲" : item.trend < -5 ? "▼" : "→";
+      var trendColor = item.trend > 5 ? "#7ec850" : item.trend < -5 ? "#e07050" : "#8b949e";
+      return '<div class="detail-card" style="border-top:3px solid ' + v.color + '">' +
+        '<div class="dc-name">' + v.name + '</div>' +
+        '<div class="dc-sub">' + v.family + ' · ' + currentYear + '</div>' +
+        '<div class="dc-row"><span>Global area</span><span>' + item.total.toLocaleString() + ' ha</span></div>' +
+        '<div class="dc-row"><span>Since 1990</span><span style="color:' + trendColor + '">' + trendSym + ' ' + Math.abs(item.trend).toFixed(0) + '%</span></div>' +
+        '<div class="dc-row"><span>Synonyms</span><span>' + v.synonyms + '</span></div>' +
+        '</div>';
+    }).join("");
+  }
+}
+
+function renderAll(){
+  renderMetrics();
+  renderMainPlot();
+  renderTrendPlot();
+  renderTreemapPlot();
+  renderDetailCards();
+}
+
+// Initial render
+renderAll();
+
+// Resize handler
+var resizeTimer = null;
+window.addEventListener("resize", function(){
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function(){
+    var ids = ["map-plot", "heatmap-plot", "trend-plot", "treemap-plot"];
+    ids.forEach(function(id){
+      var el = document.getElementById(id);
+      if (el && el.children.length > 0) {
+        try { Plotly.Plots.resize(el); } catch(e) {}
+      }
+    });
+  }, 200);
+});
+</script>
+</body>
+</html>
