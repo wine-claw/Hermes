@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Cocktail Builder — Interactive Mixer Studio</title>
+<script src="https://cdn.jsdelivr.net/npm/konva@9.3.6/konva.min.js"></script>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{ background:#0d0a0e; color:#e0d5d8; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.6; overflow-x:hidden; }
+
+  .disclaimer { background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060; padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui,sans-serif; position:sticky; top:0; z-index:100; }
+  .disclaimer strong { font-weight:600; }
+
+  header{ text-align:center; padding:1.2rem 1rem 0.5rem; }
+  header h1{ font-size:clamp(1.3rem,4vw,1.8rem); background:linear-gradient(90deg,#c0392b,#e8985e,#f5e6c8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; display:inline-block; }
+  header p{ color:#9a8a8d; margin-top:0.3rem; font-size:0.85rem; }
+
+  #app-container{ display:flex; flex-direction:row; gap:0; min-height:600px; position:relative; }
+  #stage-container{ flex:1; position:relative; min-height:500px; overflow:hidden; }
+  #sidebar{ width:320px; background:#14101a; border-left:1px solid #2a2030; padding:1rem; overflow-y:auto; max-height:90vh; }
+
+  .sidebar-section{ margin-bottom:1rem; }
+  .sidebar-section h3{ font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em; color:#c0392b; margin-bottom:0.5rem; border-bottom:1px solid #2a2030; padding-bottom:0.3rem; }
+  .sidebar-section h4{ font-size:0.7rem; text-transform:uppercase; letter-spacing:0.06em; color:#9a8a8d; margin-bottom:0.4rem; }
+
+  .recipe-card{ background:#1a1520; border:1px solid #2a2030; border-radius:8px; padding:0.8rem; margin-bottom:0.6rem; transition:border-color .2s,transform .15s; cursor:pointer; }
+  .recipe-card:hover{ border-color:#c0392b; transform:translateY(-1px); }
+  .recipe-card.active{ border-color:#e8985e; background:#221820; }
+  .recipe-card .name{ font-size:0.9rem; font-weight:600; color:#f5e6c8; }
+  .recipe-card .desc{ font-size:0.78rem; color:#9a8a8d; margin-top:0.2rem; }
+  .recipe-card .ingredients{ font-size:0.72rem; color:#8a7a7d; margin-top:0.3rem; }
+  .recipe-card .abv{ display:inline-block; font-size:0.65rem; padding:0.1rem 0.35rem; border-radius:3px; background:#2a2030; color:#c9a060; margin-top:0.3rem; }
+
+  .btn{ display:inline-block; padding:0.45rem 0.8rem; border-radius:6px; border:1px solid #2a2030; background:#1a1520; color:#e0d5d8; font-size:0.8rem; cursor:pointer; transition:all .15s; text-align:center; }
+  .btn:hover{ border-color:#c0392b; background:#221820; }
+  .btn:active{ transform:scale(0.97); }
+  .btn-primary{ background:linear-gradient(135deg,#c0392b,#8e2d20); border-color:#c0392b; color:#fff; }
+  .btn-primary:hover{ background:linear-gradient(135deg,#d44030,#a03325); }
+
+  .controls-row{ display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem; }
+  .slider-row{ margin-bottom:0.6rem; }
+  .slider-row label{ display:flex; justify-content:space-between; font-size:0.78rem; color:#9a8a8d; margin-bottom:0.2rem; }
+  .slider-row label span{ color:#e8985e; font-weight:600; }
+  .slider-row input[type=range]{ width:100%; height:24px; background:transparent; -webkit-appearance:none; appearance:none; }
+  .slider-row input[type=range]::-webkit-slider-runnable-track{ height:4px; background:#2a2030; border-radius:2px; }
+  .slider-row input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#c0392b; margin-top:-6px; cursor:pointer; }
+  .slider-row input[type=range]::-moz-range-track{ height:4px; background:#2a2030; border-radius:2px; }
+  .slider-row input[type=range]::-moz-range-thumb{ width:16px; height:16px; border:none; border-radius:50%; background:#c0392b; cursor:pointer; }
+
+  .metrics{ display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; }
+  .metric{ background:#1a1520; border:1px solid #2a2030; border-radius:6px; padding:0.4rem 0.5rem; text-align:center; }
+  .metric .label{ font-size:0.62rem; text-transform:uppercase; color:#9a8a8d; letter-spacing:0.04em; }
+  .metric .value{ font-size:0.85rem; font-weight:700; color:#f5e6c8; margin-top:0.1rem; }
+  .metric .value.warn{ color:#e8985e; }
+  .metric .value.danger{ color:#e74c3c; }
+  .metric.full{ grid-column:1/-1; }
+
+  .match-badge{ display:inline-block; font-size:0.65rem; padding:0.15rem 0.4rem; border-radius:3px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; }
+  .match-perfect{ background:#1a3a20; color:#27ae60; }
+  .match-good{ background:#2a3010; color:#f0c040; }
+  .match-poor{ background:#3a1010; color:#e74c3c; }
+  .match-unknown{ background:#2a2030; color:#8a7a7d; }
+
+  #info-panel{ background:#14101a; border-top:1px solid #2a2030; padding:0.8rem 1rem; text-align:center; font-size:0.82rem; color:#9a8a8d; min-height:40px; }
+  #info-panel .highlight{ color:#e8985e; font-weight:600; }
+
+  .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(80px); background:#1a1520; border:1px solid #e8985e; border-radius:8px; padding:0.6rem 1.2rem; color:#f5e6c8; font-size:0.85rem; z-index:200; transition:transform .3s ease; pointer-events:none; }
+  .toast.show{ transform:translateX(-50%) translateY(0); }
+
+  /* DESKTOP (default): stage on left, sidebar on right */
+  #canvas-container{ position:fixed; inset:0; z-index:0; }
+  #app-container{ position:relative; z-index:10; }
+
+  /* MOBILE */
+  @media (max-width:768px){
+    html, body{ overflow-y:auto; height:auto; }
+    #app-container{ flex-direction:column; min-height:auto; }
+    #canvas-container{
+      position:relative !important;
+      width:100% !important;
+      height:48vh !important;
+      min-height:300px;
+      max-height:420px;
+      inset:auto !important;
+      z-index:0;
+    }
+    #stage-container{ min-height:300px; height:48vh; }
+    #sidebar{
+      width:100% !important;
+      max-height:none !important;
+      border-left:none;
+      border-top:1px solid #2a2030;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<header>
+  <h1>Wine Cocktail Builder</h1>
+  <p>Drag wines and mixers into the glass to discover cocktails — or tap a recipe to auto-build</p>
+</header>
+
+<div id="canvas-container">
+  <!-- Konva canvas mounts here -->
+</div>
+
+<div id="app-container" style="display:none;">
+  <div id="stage-container"></div>
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <h3>Current Mix</h3>
+      <div id="current-mix" style="font-size:0.8rem;color:#9a8a8d;">Drag ingredients into the glass...</div>
+      <div class="controls-row" style="margin-top:0.5rem;">
+        <button class="btn" onclick="clearGlass()">Clear Glass</button>
+        <button class="btn btn-primary" onclick="randomRecipe()">Surprise Me</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Garnish & Ice</h3>
+      <div class="controls-row">
+        <button class="btn" id="ice-btn" onclick="toggleIce()">Add Ice</button>
+        <button class="btn" id="garnish-btn" onclick="cycleGarnish()">Garnish: None</button>
+      </div>
+      <div class="slider-row">
+        <label>Glass Size <span id="glass-size-val">Standard (180ml)</span></label>
+        <input type="range" id="glass-size" min="120" max="350" value="180" step="10">
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Live Metrics</h3>
+      <div class="metrics">
+        <div class="metric"><div class="label">Volume</div><div class="value" id="m-volume">0 ml</div></div>
+        <div class="metric"><div class="label">ABV</div><div class="value" id="m-abv">—</div></div>
+        <div class="metric"><div class="label">Fill %</div><div class="value" id="m-fill">0%</div></div>
+        <div class="metric"><div class="label">Sweetness</div><div class="value" id="m-sweet">—</div></div>
+        <div class="metric full"><div class="label">Recipe Match</div><div class="value" id="m-match"><span class="match-badge match-unknown">Empty</span></div></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Cocktail Recipes</h3>
+      <div id="recipe-list"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <h4>Ingredient Palette</h4>
+      <div id="palette-info" style="font-size:0.72rem;color:#8a7a7d;line-height:1.8;">
+        <div>🍷 <b style="color:#c0392b">Red</b>: Cabernet, Merlot, Pinot Noir, Port</div>
+        <div>🥂 <b style="color:#f5e6c8">White</b>: Sauvignon Blanc, Prosecco, Chardonnay, Riesling</div>
+        <div>🌹 <b style="color:#e8985e">Rosé</b>: Provence Rosé, White Zinfandel</div>
+        <div>🍹 <b style="color:#27ae60">Mixers</b>: Soda, Tonic, Lemon, Orange, Sugar, Vermouth, Brandy, Triple Sec</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="info-panel">
+  Drag wines and mixers from the bottom shelf into the glass above. Tap a recipe card to auto-build it.
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+// === DATA ===
+var INGREDIENTS = [
+  // Wines - Red
+  {id:'cabernet', name:'Cabernet Sauvignon', type:'wine-red', color:'#6e1620', abv:14, sweetness:2, defaultMl:90},
+  {id:'merlot', name:'Merlot', type:'wine-red', color:'#722020', abv:13.5, sweetness:3, defaultMl:90},
+  {id:'pinot-noir', name:'Pinot Noir', type:'wine-red', color:'#8a2d3a', abv:13, sweetness:2, defaultMl:90},
+  {id:'port', name:'Port Wine', type:'wine-red', color:'#5a1018', abv:19, sweetness:8, defaultMl:60},
+
+  // Wines - White
+  {id:'sauv-blanc', name:'Sauvignon Blanc', type:'wine-white', color:'#e8e0a0', abv:12.5, sweetness:1, defaultMl:120},
+  {id:'prosecco', name:'Prosecco', type:'wine-white', color:'#f0e890', abv:11, sweetness:3, defaultMl:120},
+  {id:'chardonnay', name:'Chardonnay', type:'wine-white', color:'#dcc870', abv:13, sweetness:2, defaultMl:120},
+  {id:'riesling', name:'Riesling', type:'wine-white', color:'#d8d8a0', abv:11, sweetness:5, defaultMl:120},
+
+  // Rosé
+  {id:'rose-provence', name:'Provence Rosé', type:'wine-rose', color:'#f0a8a0', abv:12, sweetness:2, defaultMl:120},
+  {id:'white-zin', name:'White Zinfandel', type:'wine-rose', color:'#e89890', abv:9, sweetness:6, defaultMl:120},
+
+  // Mixers
+  {id:'soda', name:'Soda Water', type:'mixer', color:'#e8e8e0', abv:0, sweetness:0, defaultMl:60},
+  {id:'tonic', name:'Tonic Water', type:'mixer', color:'#d8e8d8', abv:0, sweetness:1, defaultMl:60},
+  {id:'vermouth-sweet', name:'Sweet Vermouth', type:'mixer', color:'#a07020', abv:16, sweetness:7, defaultMl:30},
+  {id:'vermouth-dry', name:'Dry Vermouth', type:'mixer', color:'#d0c890', abv:18, sweetness:1, defaultMl:30},
+  {id:'brandy', name:'Brandy', type:'mixer', color:'#8a4a10', abv:40, sweetness:2, defaultMl:30},
+  {id:'triple-sec', name:'Triple Sec', type:'mixer', color:'#f0c040', abv:30, sweetness:9, defaultMl:15},
+  {id:'lemon', name:'Lemon Juice', type:'mixer', color:'#f0e850', abv:0, sweetness:0, defaultMl:15},
+  {id:'orange-juice', name:'Orange Juice', type:'mixer', color:'#f5a830', abv:0, sweetness:4, defaultMl:60},
+  {id:'sugar-syrup', name:'Sugar Syrup', type:'mixer', color:'#f0e0c0', abv:0, sweetness:10, defaultMl:10},
+];
+
+var RECIPES = [
+  {name:'Sangria', desc:'Spanish wine punch with citrus and brandy', abv:'~11%', ingredients:[{id:'cabernet',ml:120},{id:'brandy',ml:20},{id:'orange-juice',ml:40},{id:'lemon',ml:15},{id:'sugar-syrup',ml:10}]},
+  {name:'Mimosa', desc:'Classic brunch cocktail — sparkling wine and OJ', abv:'~8%', ingredients:[{id:'prosecco',ml:90},{id:'orange-juice',ml:90}]},
+  {name:'Kalimotxo', desc:'Basque country — equal parts red wine and cola', abv:'~7%', ingredients:[{id:'cabernet',ml:90},{id:'soda',ml:90}]},
+  {name:'Kir Royale', desc:'Champagne with a splash of crème de cassis', abv:'~11%', ingredients:[{id:'prosecco',ml:120},{id:'triple-sec',ml:15}]},
+  {name:'Spritz Veneziano', desc:'Aperitivo — wine, soda, and a bitter touch', abv:'~8%', ingredients:[{id:'prosecco',ml:90},{id:'soda',ml:60},{id:'triple-sec',ml:15}]},
+  {name:'Wine Cooler', desc:'Light and refreshing — white wine with soda', abv:'~6%', ingredients:[{id:'sauv-blanc',ml:90},{id:'soda',ml:60},{id:'lemon',ml:10}]},
+  {name:'Rosé Spritz', desc:'Summer in a glass — rosé, soda, citrus', abv:'~8%', ingredients:[{id:'rose-provence',ml:90},{id:'soda',ml:60},{id:'lemon',ml:10}]},
+  {name:'Port Tonic', desc:'Portuguese classic — port lengthened with tonic', abv:'~8%', ingredients:[{id:'port',ml:60},{id:'tonic',ml:90}]},
+  {name:'Mulled Wine', desc:'Winter warmer — red wine with citrus and spice notes', abv:'~11%', ingredients:[{id:'merlot',ml:120},{id:'orange-juice',ml:30},{id:'sugar-syrup',ml:15},{id:'lemon',ml:10}]},
+  {name:'Manhattan Bianco', desc:'White wine Manhattan — vermouth and brandy', abv:'~22%', ingredients:[{id:'vermouth-sweet',ml:45},{id:'brandy',ml:30},{id:'lemon',ml:5}]},
+  {name:'Tinto de Verano', desc:'Spanish summer — red wine and lemon soda', abv:'~7%', ingredients:[{id:'cabernet',ml:90},{id:'soda',ml:60},{id:'lemon',ml:10},{id:'sugar-syrup',ml:5}]},
+  {name:'Riesling Spritz', desc:'German-style floral spritz with riesling', abv:'~7%', ingredients:[{id:'riesling',ml:90},{id:'soda',ml:60},{id:'lemon',ml:10}]},
+];
+
+// === STATE ===
+var state = {
+  glassContents: [],
+  glassMaxMl: 180,
+  ice: false,
+  garnish: 'none',
+  garnishes: ['none','lemon-wedge','orange-slice','cherry','mint','lime-wheel'],
+  garnishIndex: 0,
+  selectedRecipe: null,
+};
+
+// === KONVA SETUP ===
+var stage, glassLayer, ingredientLayer, particleLayer, uiLayer;
+var glassShape, glassInnerClip;
+var liquidRects = [];
+var iceShapes = [];
+var garnishShape = null;
+var ingredientButtons = [];
+var W = 0, H = 0;
+var draggingIngredient = null;
+
+function initStage(){
+  var container = document.getElementById('stage-container');
+  var containerW = container.clientWidth;
+  var containerH = container.clientHeight;
+  W = containerW;
+  H = containerH;
+
+  stage = new Konva.Stage({
+    container: 'stage-container',
+    width: containerW,
+    height: containerH,
+  });
+
+  particleLayer = new Konva.Layer();
+  glassLayer = new Konva.Layer();
+  ingredientLayer = new Konva.Layer();
+  uiLayer = new Konva.Layer();
+
+  stage.add(particleLayer);
+  stage.add(glassLayer);
+  stage.add(ingredientLayer);
+  stage.add(uiLayer);
+
+  drawGlass();
+  drawIngredientShelf();
+  updateLiquid();
+  updateMetrics();
+
+  // Background particles
+  initParticles();
+}
+
+function drawGlass(){
+  glassLayer.destroyChildren();
+
+  var glassCx = W * 0.5;
+  var glassTopY = H * 0.12;
+  var glassBottomY = H * 0.72;
+  var glassTopHalfW = W * 0.22;
+  var glassBottomHalfW = W * 0.13;
+  var glassRimW = W * 0.008;
+  var stemY = glassBottomY;
+  var stemBottomY = H * 0.85;
+  var baseHalfW = W * 0.08;
+  var baseH = H * 0.02;
+
+  // Glass body outline (trapezoid with curved bottom)
+  var glassPoints = [
+    glassCx - glassTopHalfW, glassTopY,
+    glassCx - glassBottomHalfW, glassBottomY - 20,
+    glassCx - glassBottomHalfW * 0.9, glassBottomY,
+    glassCx + glassBottomHalfW * 0.9, glassBottomY,
+    glassCx + glassBottomHalfW, glassBottomY - 20,
+    glassCx + glassTopHalfW, glassTopY,
+  ];
+
+  // Glass interior fill (slightly inset)
+  var innerPoints = [
+    glassCx - glassTopHalfW + glassRimW, glassTopY + glassRimW,
+    glassCx - glassBottomHalfW + glassRimW, glassBottomY - 20,
+    glassCx - glassBottomHalfW * 0.9 + glassRimW, glassBottomY - glassRimW,
+    glassCx + glassBottomHalfW * 0.9 - glassRimW, glassBottomY - glassRimW,
+    glassCx + glassBottomHalfW - glassRimW, glassBottomY - 20,
+    glassCx + glassTopHalfW - glassRimW, glassTopY + glassRimW,
+  ];
+
+  // Glass background (subtle)
+  var glassBg = new Konva.Shape({
+    sceneFunc: function(ctx){
+      ctx.beginPath();
+      ctx.moveTo(innerPoints[0], innerPoints[1]);
+      for(var i=2; i<innerPoints.length; i+=2){
+        ctx.lineTo(innerPoints[i], innerPoints[i+1]);
+      }
+      ctx.closePath();
+      ctx.fillStrokeShape(this);
+    },
+    fill: 'rgba(255,255,255,0.04)',
+    stroke: 'rgba(255,255,255,0.12)',
+    strokeWidth: 1,
+  });
+  glassLayer.add(glassBg);
+
+  // Liquid clip region
+  state.glassClip = { points: innerPoints, topY: innerPoints[1], bottomY: innerPoints[5], glassCx: glassCx };
+
+  // Glass outline
+  var glassOutline = new Konva.Shape({
+    sceneFunc: function(ctx){
+      ctx.beginPath();
+      ctx.moveTo(glassPoints[0], glassPoints[1]);
+      for(var i=2; i<glassPoints.length; i+=2){
+        ctx.lineTo(glassPoints[i], glassPoints[i+1]);
+      }
+      ctx.closePath();
+      ctx.fillStrokeShape(this);
+    },
+    fill: 'rgba(255,255,255,0.02)',
+    stroke: 'rgba(255,255,255,0.35)',
+    strokeWidth: 2.5,
+    shadowColor: 'rgba(0,0,0,0.5)',
+    shadowBlur: 15,
+    shadowOffsetX: 0,
+    shadowOffsetY: 4,
+  });
+  glassLayer.add(glassOutline);
+
+  // Glass shine highlight (left side)
+  var shine = new Konva.Shape({
+    sceneFunc: function(ctx){
+      ctx.beginPath();
+      ctx.moveTo(glassCx - glassTopHalfW * 0.75, glassTopY + 10);
+      ctx.quadraticCurveTo(glassCx - glassTopHalfW * 0.6, glassTopY + 80, glassCx - glassBottomHalfW * 0.7, glassBottomY - 40);
+      ctx.lineTo(glassCx - glassBottomHalfW * 0.65, glassBottomY - 40);
+      ctx.quadraticCurveTo(glassCx - glassTopHalfW * 0.5, glassTopY + 80, glassCx - glassTopHalfW * 0.6, glassTopY + 10);
+      ctx.closePath();
+      ctx.fillStrokeShape(this);
+    },
+    fill: 'rgba(255,255,255,0.06)',
+  });
+  glassLayer.add(shine);
+
+  // Rim ellipse
+  var rim = new Konva.Ellipse({
+    x: glassCx,
+    y: glassTopY,
+    radiusX: glassTopHalfW,
+    radiusY: glassTopHalfW * 0.12,
+    stroke: 'rgba(255,255,255,0.3)',
+    strokeWidth: 2,
+  });
+  glassLayer.add(rim);
+
+  // Stem
+  var stem = new Konva.Line({
+    points: [glassCx, glassBottomY, glassCx, stemBottomY],
+    stroke: 'rgba(255,255,255,0.25)',
+    strokeWidth: 4,
+    lineCap: 'round',
+  });
+  glassLayer.add(stem);
+
+  // Base
+  var base = new Konva.Ellipse({
+    x: glassCx,
+    y: stemBottomY + baseH * 0.5,
+    radiusX: baseHalfW,
+    radiusY: baseHalfW * 0.18,
+    fill: 'rgba(255,255,255,0.05)',
+    stroke: 'rgba(255,255,255,0.2)',
+    strokeWidth: 1.5,
+  });
+  glassLayer.add(base);
+
+  // Drop target highlight (hidden by default)
+  state.dropHighlight = new Konva.Shape({
+    sceneFunc: function(ctx){
+      ctx.beginPath();
+      ctx.moveTo(innerPoints[0], innerPoints[1]);
+      for(var i=2; i<innerPoints.length; i+=2){
+        ctx.lineTo(innerPoints[i], innerPoints[i+1]);
+      }
+      ctx.closePath();
+      ctx.fillStrokeShape(this);
+    },
+    fill: 'rgba(232,152,94,0.15)',
+    visible: false,
+  });
+  glassLayer.add(state.dropHighlight);
+
+  // Store geometry for liquid rendering
+  state.glassGeom = {
+    cx: glassCx,
+    topY: glassTopY,
+    bottomY: glassBottomY,
+    topHalfW: glassTopHalfW,
+    bottomHalfW: glassBottomHalfW,
+    innerPoints: innerPoints,
+  };
+}
+
+function getGlassWidthAtY(y){
+  var g = state.glassGeom;
+  if(y <= g.topY) return g.topHalfW * 2;
+  if(y >= g.bottomY) return g.bottomHalfW * 2;
+  var t = (y - g.topY) / (g.bottomY - g.topY);
+  var halfW = g.topHalfW + (g.bottomHalfW - g.topHalfW) * t;
+  return halfW * 2;
+}
+
+function updateLiquid(){
+  // Remove old liquid rects
+  liquidRects.forEach(function(r){ r.destroy(); });
+  liquidRects = [];
+
+  if(state.glassContents.length === 0) return;
+
+  var g = state.glassGeom;
+  var totalMl = state.glassContents.reduce(function(s,c){ return s + c.ml; }, 0);
+  var maxMl = state.glassMaxMl;
+  var fillRatio = Math.min(totalMl / maxMl, 1.0);
+
+  // Available height for liquid
+  var liquidTop = g.topY + 8;
+  var liquidBottom = g.bottomY - 4;
+  var liquidHeight = (liquidBottom - liquidTop) * fillRatio;
+  var liquidTopY = liquidBottom - liquidHeight;
+
+  // Draw each layer
+  var currentY = liquidBottom;
+  var contents = state.glassContents.slice().reverse(); // bottom to top
+
+  contents.forEach(function(content){
+    var layerHeight = (content.ml / totalMl) * liquidHeight;
+    var layerTopY = currentY - layerHeight;
+
+    var widthAtTop = getGlassWidthAtY(layerTopY);
+    var widthAtBottom = getGlassWidthAtY(currentY);
+    var halfWTop = widthAtTop / 2;
+    var halfWBottom = widthAtBottom / 2;
+
+    var liquid = new Konva.Shape({
+      sceneFunc: function(ctx){
+        ctx.beginPath();
+        ctx.moveTo(g.cx - halfWBottom + 2, currentY);
+        ctx.lineTo(g.cx - halfWTop + 2, layerTopY);
+        ctx.lineTo(g.cx + halfWTop - 2, layerTopY);
+        ctx.lineTo(g.cx + halfWBottom - 2, currentY);
+        ctx.closePath();
+        ctx.fillStrokeShape(this);
+      },
+      fill: content.color,
+      opacity: 0.88,
+    });
+    glassLayer.add(liquid);
+    liquidRects.push(liquid);
+    // Move liquid below glass outline
+    liquid.moveToBottom();
+
+    // Layer separator line
+    if(contents.indexOf(content) < contents.length - 1){
+      var sep = new Konva.Line({
+        points: [g.cx - halfWTop + 2, layerTopY, g.cx + halfWTop - 2, layerTopY],
+        stroke: 'rgba(255,255,255,0.15)',
+        strokeWidth: 1,
+      });
+      glassLayer.add(sep);
+      liquidRects.push(sep);
+      sep.moveToBottom();
+    }
+
+    currentY = layerTopY;
+  });
+
+  // Surface highlight ellipse at top of liquid
+  if(liquidHeight > 5){
+    var surfHalfW = getGlassWidthAtY(liquidTopY) / 2;
+    var surface = new Konva.Ellipse({
+      x: g.cx,
+      y: liquidTopY,
+      radiusX: surfHalfW - 3,
+      radiusY: Math.max(2, surfHalfW * 0.08),
+      fill: 'rgba(255,255,255,0.12)',
+      stroke: 'rgba(255,255,255,0.08)',
+      strokeWidth: 0.5,
+    });
+    glassLayer.add(surface);
+    liquidRects.push(surface);
+  }
+
+  // Draw ice if enabled
+  drawIce(liquidTopY);
+  // Draw garnish
+  drawGarnish();
+
+  glassLayer.batchDraw();
+}
+
+function drawIce(liquidTopY){
+  iceShapes.forEach(function(s){ s.destroy(); });
+  iceShapes = [];
+
+  if(!state.ice || state.glassContents.length === 0) return;
+
+  var g = state.glassGeom;
+  var liquidBottomY = g.bottomY - 4;
+  var availableH = liquidBottomY - liquidTopY;
+  if(availableH < 20) return;
+
+  var iceCount = 5;
+  for(var i=0; i<iceCount; i++){
+    var ry = liquidTopY + 10 + Math.random() * (availableH - 20);
+    var rw = getGlassWidthAtY(ry) / 2;
+    var rx = g.cx + (Math.random() - 0.5) * (rw * 1.4);
+    var size = 8 + Math.random() * 8;
+
+    var ice = new Konva.Rect({
+      x: rx - size/2,
+      y: ry - size/2,
+      width: size,
+      height: size,
+      fill: 'rgba(220,240,255,0.35)',
+      stroke: 'rgba(200,230,255,0.5)',
+      strokeWidth: 1,
+      rotation: Math.random() * 60 - 30,
+      cornerRadius: 2,
+    });
+    glassLayer.add(ice);
+    iceShapes.push(ice);
+  }
+}
+
+function drawGarnish(){
+  if(garnishShape){ garnishShape.destroy(); garnishShape = null; }
+  if(state.garnish === 'none') return;
+
+  var g = state.glassGeom;
+  var glassCx = g.cx;
+  var glassRimY = g.topY;
+  var rimHalfW = g.topHalfW;
+
+  if(state.garnish === 'lemon-wedge'){
+    garnishShape = new Konva.Shape({
+      sceneFunc: function(ctx){
+        var cx = glassCx + rimHalfW * 0.5;
+        var cy = glassRimY - 5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, 16, -Math.PI*0.3, Math.PI*0.3);
+        ctx.closePath();
+        ctx.fillStrokeShape(this);
+      },
+      fill: '#f0e850',
+      stroke: '#d0c830',
+      strokeWidth: 1.5,
+    });
+  } else if(state.garnish === 'orange-slice'){
+    garnishShape = new Konva.Shape({
+      sceneFunc: function(ctx){
+        var cx = glassCx + rimHalfW * 0.5;
+        var cy = glassRimY - 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fillStrokeShape(this);
+      },
+      fill: '#f5a830',
+      stroke: '#d09020',
+      strokeWidth: 1.5,
+    });
+    // Inner circle
+    var inner = new Konva.Circle({
+      x: glassCx + rimHalfW * 0.5,
+      y: glassRimY - 3,
+      radius: 10,
+      stroke: 'rgba(255,255,255,0.3)',
+      strokeWidth: 1,
+    });
+    glassLayer.add(inner);
+    iceShapes.push(inner);
+  } else if(state.garnish === 'cherry'){
+    garnishShape = new Konva.Circle({
+      x: glassCx + rimHalfW * 0.4,
+      y: glassRimY - 2,
+      radius: 6,
+      fill: '#c0392b',
+      stroke: '#8e2d20',
+      strokeWidth: 1,
+    });
+    // Stem
+    var cherryStem = new Konva.Line({
+      points: [glassCx + rimHalfW * 0.4 + 4, glassRimY - 6, glassCx + rimHalfW * 0.4 + 8, glassRimY - 14],
+      stroke: '#4a3020',
+      strokeWidth: 1.5,
+      lineCap: 'round',
+    });
+    glassLayer.add(cherryStem);
+    iceShapes.push(cherryStem);
+  } else if(state.garnish === 'mint'){
+    garnishShape = new Konva.Shape({
+      sceneFunc: function(ctx){
+        var cx = glassCx - rimHalfW * 0.4;
+        var cy = glassRimY - 5;
+        for(var i=0; i<4; i++){
+          ctx.beginPath();
+          ctx.ellipse(cx + i*3 - 4, cy - i*2, 5, 3, 0.3, 0, Math.PI*2);
+          ctx.fillStrokeShape(this);
+        }
+      },
+      fill: '#27ae60',
+      stroke: '#1e8449',
+      strokeWidth: 0.8,
+    });
+  } else if(state.garnish === 'lime-wheel'){
+    garnishShape = new Konva.Shape({
+      sceneFunc: function(ctx){
+        var cx = glassCx - rimHalfW * 0.5;
+        var cy = glassRimY - 5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fillStrokeShape(this);
+      },
+      fill: '#7ab83d',
+      stroke: '#5a9230',
+      strokeWidth: 1.5,
+    });
+    var limeInner = new Konva.Circle({
+      x: glassCx - rimHalfW * 0.5,
+      y: glassRimY - 5,
+      radius: 9,
+      stroke: 'rgba(255,255,255,0.25)',
+      strokeWidth: 1,
+    });
+    glassLayer.add(limeInner);
+    iceShapes.push(limeInner);
+  }
+
+  if(garnishShape){
+    glassLayer.add(garnishShape);
+  }
+  glassLayer.batchDraw();
+}
+
+// === INGREDIENT SHELF ===
+function drawIngredientShelf(){
+  ingredientLayer.destroyChildren();
+  ingredientButtons = [];
+
+  var shelfY = H * 0.88;
+  var padding = 8;
+  var availableW = W - padding * 2;
+  var cols = W < 500 ? 6 : 9;
+  var rows = Math.ceil(INGREDIENTS.length / cols);
+  var cellW = availableW / cols;
+  var cellH = (H - shelfY - padding) / rows;
+  var btnSize = Math.min(cellW - 4, cellH - 4, 48);
+
+  // Shelf background
+  var shelfBg = new Konva.Rect({
+    x: 0,
+    y: shelfY - 8,
+    width: W,
+    height: H - shelfY + 8,
+    fill: 'rgba(20,16,26,0.6)',
+    stroke: 'rgba(42,32,48,0.8)',
+    strokeWidth: 1,
+  });
+  ingredientLayer.add(shelfBg);
+
+  INGREDIENTS.forEach(function(ing, idx){
+    var col = idx % cols;
+    var row = Math.floor(idx / cols);
+    var bx = padding + col * cellW + (cellW - btnSize) / 2;
+    var by = shelfY + row * cellH;
+
+    // Bottle/button shape
+    var group = new Konva.Group({
+      x: bx,
+      y: by,
+      width: btnSize,
+      height: btnSize,
+      draggable: true,
+    });
+
+    // Bottle body
+    var bottleW = btnSize * 0.55;
+    var bottleH = btnSize * 0.7;
+    var bottleX = (btnSize - bottleW) / 2;
+    var bottleY = (btnSize - bottleH) / 2 + 2;
+
+    // Neck
+    var neck = new Konva.Rect({
+      x: bottleX + bottleW * 0.35,
+      y: bottleY - 6,
+      width: bottleW * 0.3,
+      height: 8,
+      fill: ing.color,
+      cornerRadius: 1,
+    });
+    group.add(neck);
+
+    // Cap
+    var cap = new Konva.Rect({
+      x: bottleX + bottleW * 0.33,
+      y: bottleY - 9,
+      width: bottleW * 0.34,
+      height: 4,
+      fill: '#3a2830',
+      cornerRadius: 1,
+    });
+    group.add(cap);
+
+    // Body
+    var body = new Konva.Rect({
+      x: bottleX,
+      y: bottleY,
+      width: bottleW,
+      height: bottleH,
+      fill: ing.color,
+      cornerRadius: 3,
+      shadowColor: 'rgba(0,0,0,0.4)',
+      shadowBlur: 4,
+      shadowOffsetY: 2,
+    });
+    group.add(body);
+
+    // Label on bottle
+    var label = new Konva.Rect({
+      x: bottleX + 2,
+      y: bottleY + bottleH * 0.35,
+      width: bottleW - 4,
+      height: bottleH * 0.3,
+      fill: 'rgba(255,255,255,0.15)',
+      cornerRadius: 1,
+    });
+    group.add(label);
+
+    // Name text
+    var nameText = new Konva.Text({
+      x: 0,
+      y: btnSize - 4,
+      width: btnSize,
+      text: ing.name.length > 10 ? ing.name.substring(0, 9) + '…' : ing.name,
+      fontSize: 8,
+      fontFamily: 'system-ui',
+      fill: '#9a8a8d',
+      align: 'center',
+    });
+    group.add(nameText);
+
+    // Drag events
+    group.on('dragstart', function(){
+      draggingIngredient = ing;
+      this.opacity(0.6);
+      ingredientLayer.batchDraw();
+    });
+
+    group.on('dragmove', function(){
+      var pos = stage.getPointerPosition();
+      if(!pos) return;
+      var g = state.glassGeom;
+      if(pos.x > g.cx - g.topHalfW && pos.x < g.cx + g.topHalfW &&
+         pos.y > g.topY && pos.y < g.bottomY){
+        if(state.dropHighlight) state.dropHighlight.visible(true);
+        glassLayer.batchDraw();
+      } else {
+        if(state.dropHighlight) state.dropHighlight.visible(false);
+        glassLayer.batchDraw();
+      }
+    });
+
+    group.on('dragend', function(){
+      this.opacity(1);
+      this.x(bx);
+      this.y(by);
+      if(state.dropHighlight) state.dropHighlight.visible(false);
+      ingredientLayer.batchDraw();
+
+      var pos = stage.getPointerPosition();
+      if(!pos) { draggingIngredient = null; return; }
+      var g = state.glassGeom;
+      if(pos.x > g.cx - g.topHalfW && pos.x < g.cx + g.topHalfW &&
+         pos.y > g.topY && pos.y < g.bottomY){
+        addIngredient(ing, ing.defaultMl);
+      }
+      draggingIngredient = null;
+    });
+
+    // Click to add on mobile
+    group.on('tap click', function(){
+      if(draggingIngredient) return;
+      addIngredient(ing, ing.defaultMl);
+    });
+
+    ingredientLayer.add(group);
+    ingredientButtons.push(group);
+  });
+
+  ingredientLayer.batchDraw();
+}
+
+// === PARTICLES ===
+var particles = [];
+var particleAnim = null;
+
+function initParticles(){
+  for(var i=0; i<30; i++){
+    particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -0.2 - Math.random() * 0.3,
+      r: 1 + Math.random() * 2,
+      alpha: 0.1 + Math.random() * 0.2,
+      color: Math.random() > 0.5 ? '#c0392b' : '#e8985e',
+    });
+  }
+
+  particleAnim = new Konva.Animation(function(){
+    particleLayer.destroyChildren();
+
+    particles.forEach(function(p){
+      p.x += p.vx;
+      p.y += p.vy;
+
+      if(p.y < -10) { p.y = H + 10; p.x = Math.random() * W; }
+      if(p.x < -10) p.x = W + 10;
+      if(p.x > W + 10) p.x = -10;
+
+      var dot = new Konva.Circle({
+        x: p.x,
+        y: p.y,
+        radius: p.r,
+        fill: p.color,
+        opacity: p.alpha,
+      });
+      particleLayer.add(dot);
+    });
+
+    particleLayer.batchDraw();
+  }, particleLayer);
+
+  particleAnim.start();
+}
+
+// === ACTIONS ===
+function addIngredient(ing, ml){
+  var totalMl = state.glassContents.reduce(function(s,c){ return s + c.ml; }, 0);
+  if(totalMl >= state.glassMaxMl){
+    showToast('Glass is full! Clear it first.');
+    return;
+  }
+  var remaining = state.glassMaxMl - totalMl;
+  var addMl = Math.min(ml, remaining);
+
+  state.glassContents.push({
+    id: ing.id,
+    name: ing.name,
+    color: ing.color,
+    abv: ing.abv,
+    sweetness: ing.sweetness,
+    ml: addMl,
+  });
+
+  updateLiquid();
+  updateMetrics();
+  updateMixList();
+  checkRecipeMatch();
+  showToast('Added ' + ing.name + ' (' + Math.round(addMl) + 'ml)');
+}
+
+function clearGlass(){
+  state.glassContents = [];
+  state.selectedRecipe = null;
+  updateLiquid();
+  updateMetrics();
+  updateMixList();
+  checkRecipeMatch();
+  document.querySelectorAll('.recipe-card').forEach(function(c){ c.classList.remove('active'); });
+  setInfo('Glass cleared. Ready for a new creation!');
+}
+
+function randomRecipe(){
+  clearGlass();
+  var recipe = RECIPES[Math.floor(Math.random() * RECIPES.length)];
+  buildRecipe(recipe);
+}
+
+function buildRecipe(recipe){
+  clearGlass();
+  recipe.ingredients.forEach(function(ri){
+    var ing = INGREDIENTS.find(function(i){ return i.id === ri.id; });
+    if(ing){
+      state.glassContents.push({
+        id: ing.id,
+        name: ing.name,
+        color: ing.color,
+        abv: ing.abv,
+        sweetness: ing.sweetness,
+        ml: ri.ml,
+      });
+    }
+  });
+  state.selectedRecipe = recipe;
+  updateLiquid();
+  updateMetrics();
+  updateMixList();
+  checkRecipeMatch();
+
+  // Highlight the recipe card
+  document.querySelectorAll('.recipe-card').forEach(function(c){
+    c.classList.toggle('active', c.dataset.name === recipe.name);
+  });
+
+  showToast('Built: ' + recipe.name);
+  setInfo('<span class="highlight">' + recipe.name + '</span> — ' + recipe.desc);
+}
+
+function toggleIce(){
+  state.ice = !state.ice;
+  document.getElementById('ice-btn').textContent = state.ice ? 'Remove Ice' : 'Add Ice';
+  updateLiquid();
+}
+
+function cycleGarnish(){
+  state.garnishIndex = (state.garnishIndex + 1) % state.garnishes.length;
+  state.garnish = state.garnishes[state.garnishIndex];
+  var labels = {
+    'none':'None',
+    'lemon-wedge':'Lemon Wedge',
+    'orange-slice':'Orange Slice',
+    'cherry':'Cherry',
+    'mint':'Mint',
+    'lime-wheel':'Lime Wheel',
+  };
+  document.getElementById('garnish-btn').textContent = 'Garnish: ' + (labels[state.garnish] || state.garnish);
+  drawGarnish();
+}
+
+// === METRICS ===
+function updateMetrics(){
+  var totalMl = state.glassContents.reduce(function(s,c){ return s + c.ml; }, 0);
+  var totalAlcMl = state.glassContents.reduce(function(s,c){ return s + c.ml * (c.abv / 100); }, 0);
+  var abv = totalMl > 0 ? (totalAlcMl / totalMl * 100) : 0;
+  var fillPct = Math.min(totalMl / state.glassMaxMl * 100, 100);
+  var avgSweet = totalMl > 0 ? state.glassContents.reduce(function(s,c){ return s + c.sweetness * c.ml; }, 0) / totalMl : 0;
+
+  document.getElementById('m-volume').textContent = Math.round(totalMl) + ' ml';
+  document.getElementById('m-abv').textContent = totalMl > 0 ? abv.toFixed(1) + '%' : '—';
+
+  var abvEl = document.getElementById('m-abv');
+  abvEl.className = 'value';
+  if(abv > 20) abvEl.className = 'value danger';
+  else if(abv > 15) abvEl.className = 'value warn';
+
+  document.getElementById('m-fill').textContent = Math.round(fillPct) + '%';
+  document.getElementById('m-sweet').textContent = totalMl > 0 ? (avgSweet < 2 ? 'Dry' : avgSweet < 4 ? 'Off-Dry' : avgSweet < 6 ? 'Medium' : 'Sweet') : '—';
+}
+
+function updateMixList(){
+  var el = document.getElementById('current-mix');
+  if(state.glassContents.length === 0){
+    el.innerHTML = '<span style="color:#5a4a4d">Empty glass — drag ingredients in!</span>';
+    return;
+  }
+  var html = state.glassContents.map(function(c){
+    return '<div style="display:flex;justify-content:space-between;padding:0.2rem 0;border-bottom:1px solid #2a2030;">' +
+      '<span style="color:#e0d5d8">' + c.name + '</span>' +
+      '<span style="color:#9a8a8d">' + Math.round(c.ml) + 'ml</span>' +
+      '</div>';
+  }).join('');
+  el.innerHTML = html;
+}
+
+function checkRecipeMatch(){
+  var matchEl = document.getElementById('m-match');
+  if(state.glassContents.length === 0){
+    matchEl.innerHTML = '<span class="match-badge match-unknown">Empty</span>';
+    return;
+  }
+
+  var bestMatch = null;
+  var bestScore = 0;
+
+  RECIPES.forEach(function(recipe){
+    var score = scoreRecipeMatch(recipe);
+    if(score > bestScore){
+      bestScore = score;
+      bestMatch = recipe;
+    }
+  });
+
+  if(bestMatch && bestScore >= 0.85){
+    matchEl.innerHTML = '<span class="match-badge match-perfect">' + bestMatch.name + '!</span>';
+    if(state.selectedRecipe !== bestMatch){
+      state.selectedRecipe = bestMatch;
+      setInfo('<span class="highlight">' + bestMatch.name + '</span> — ' + bestMatch.desc);
+    }
+  } else if(bestMatch && bestScore >= 0.5){
+    matchEl.innerHTML = '<span class="match-badge match-good">~' + bestMatch.name + '</span>';
+  } else {
+    matchEl.innerHTML = '<span class="match-badge match-poor">Custom Mix</span>';
+  }
+}
+
+function scoreRecipeMatch(recipe){
+  var recipeTotalMl = recipe.ingredients.reduce(function(s,r){ return s + r.ml; }, 0);
+  var glassTotalMl = state.glassContents.reduce(function(s,c){ return s + c.ml; }, 0);
+
+  if(recipeTotalMl === 0 || glassTotalMl === 0) return 0;
+
+  // Check all recipe ingredients are present
+  var matched = 0;
+  var extra = 0;
+
+  recipe.ingredients.forEach(function(ri){
+    var glassItem = state.glassContents.find(function(c){ return c.id === ri.id; });
+    if(glassItem){
+      var ratioDiff = Math.abs(glassItem.ml - ri.ml) / Math.max(ri.ml, glassItem.ml);
+      matched += 1 - Math.min(ratioDiff, 1);
+    } else {
+      matched -= 0.3;
+    }
+  });
+
+  // Count extras
+  state.glassContents.forEach(function(c){
+    var inRecipe = recipe.ingredients.find(function(r){ return r.id === c.id; });
+    if(!inRecipe) extra += 0.2;
+  });
+
+  var totalIngredients = recipe.ingredients.length;
+  var matchScore = Math.max(0, matched / totalIngredients - extra * 0.1);
+
+  // Volume similarity
+  var volRatio = Math.min(recipeTotalMl, glassTotalMl) / Math.max(recipeTotalMl, glassTotalMl);
+  matchScore *= (0.5 + 0.5 * volRatio);
+
+  return Math.min(matchScore, 1.0);
+}
+
+// === UI HELPERS ===
+function showToast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2000);
+}
+
+function setInfo(html){
+  document.getElementById('info-panel').innerHTML = html;
+}
+
+function renderRecipeList(){
+  var html = RECIPES.map(function(r){
+    var ingNames = r.ingredients.map(function(i){
+      var ing = INGREDIENTS.find(function(x){ return x.id === i.id; });
+      return ing ? ing.name : i.id;
+    }).join(', ');
+    return '<div class="recipe-card" data-name="' + r.name + '" onclick="buildRecipeByName(\'' + r.name.replace(/'/g, "\\'") + '\')">' +
+      '<div class="name">' + r.name + '</div>' +
+      '<div class="desc">' + r.desc + '</div>' +
+      '<div class="ingredients">' + ingNames + '</div>' +
+      '<span class="abv">' + r.abv + '</span>' +
+      '</div>';
+  }).join('');
+  document.getElementById('recipe-list').innerHTML = html;
+}
+
+window.buildRecipeByName = function(name){
+  var recipe = RECIPES.find(function(r){ return r.name === name; });
+  if(recipe) buildRecipe(recipe);
+};
+
+window.clearGlass = clearGlass;
+window.randomRecipe = randomRecipe;
+window.toggleIce = toggleIce;
+window.cycleGarnish = cycleGarnish;
+
+// === RESIZE ===
+function resize(){
+  var container = document.getElementById('stage-container');
+  W = container.clientWidth;
+  H = container.clientHeight;
+  stage.width(W);
+  stage.height(H);
+  drawGlass();
+  drawIngredientShelf();
+  updateLiquid();
+  glassLayer.batchDraw();
+  ingredientLayer.batchDraw();
+}
+
+var resizeTimer = null;
+window.addEventListener('resize', function(){
+  if(resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resize, 200);
+});
+
+// === GLASS SIZE SLIDER ===
+document.getElementById('glass-size').addEventListener('input', function(e){
+  state.glassMaxMl = parseInt(e.target.value);
+  var sizes = {120:'Small (120ml)',180:'Standard (180ml)',250:'Large (250ml)',350:'Bottle (350ml)'};
+  var label = sizes[state.glassMaxMl] || state.glassMaxMl + 'ml';
+  document.getElementById('glass-size-val').textContent = label;
+  updateLiquid();
+  updateMetrics();
+});
+
+// === INIT ===
+function start(){
+  document.getElementById('app-container').style.display = 'flex';
+  // Set initial container height
+  var isMobile = window.innerWidth <= 768;
+  if(!isMobile){
+    document.getElementById('stage-container').style.height = (window.innerHeight - 100) + 'px';
+  }
+
+  setTimeout(function(){
+    initStage();
+    renderRecipeList();
+  }, 50);
+}
+
+// Wait for Konva to load
+if(typeof Konva !== 'undefined'){
+  start();
+} else {
+  window.addEventListener('load', function(){
+    if(typeof Konva !== 'undefined') start();
+    else setTimeout(start, 200);
+  });
+}
+
+})();
+</script>
+</body>
+</html>
