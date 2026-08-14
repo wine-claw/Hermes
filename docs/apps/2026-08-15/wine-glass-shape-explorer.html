@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Glass Shape Explorer — 3D Aroma & Geometry Analysis</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg: #0a0d12; --surface: #121820; --surface2: #1a2330; --border: #2a3548; --text: #d0dae5; --muted: #7a8898;
+    --accent: #6ba0d5; --accent2: #c08a40; --gold: #d4a843; --wine: #722f37; --wine2: #8b3a42;
+  }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  canvas { display: block; }
+
+  #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+  #controls {
+    position: absolute; top: 12px; left: 12px; width: 280px; max-height: calc(100vh - 24px); overflow-y: auto;
+    background: rgba(18, 24, 32, 0.88); border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+    pointer-events: auto; backdrop-filter: blur(8px);
+  }
+  #controls h2 { font-size: 1.05rem; margin-bottom: 10px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  #controls h3 { font-size: 0.82rem; color: var(--gold); margin-top: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  #controls label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; margin-top: 8px; }
+  #controls input[type="range"] { width: 100%; accent-color: var(--accent); height: 4px; }
+  #controls select { width: 100%; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; font-size: 0.82rem; }
+  #controls .slider-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; }
+  #controls .slider-row span { color: var(--accent); font-weight: 600; }
+
+  .glass-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
+  .glass-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 4px; font-size: 0.72rem; cursor: pointer; text-align: center; transition: all 0.15s; pointer-events: auto; }
+  .glass-btn:hover { border-color: var(--accent); background: rgba(107, 160, 213, 0.12); }
+  .glass-btn.active { border-color: var(--gold); background: rgba(212, 168, 67, 0.15); color: var(--gold); }
+
+  .preset-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+  .preset-btn { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 5px 4px; font-size: 0.68rem; cursor: pointer; transition: all 0.15s; pointer-events: auto; }
+  .preset-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  #metrics {
+    position: absolute; top: 12px; right: 12px; width: 250px; max-height: calc(100vh - 24px); overflow-y: auto;
+    background: rgba(18, 24, 32, 0.88); border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+    pointer-events: auto; backdrop-filter: blur(8px);
+  }
+  #metrics h2 { font-size: 1.05rem; margin-bottom: 10px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .metric-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; border-bottom: 1px solid rgba(42, 53, 72, 0.4); }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-label { font-size: 0.76rem; color: var(--muted); }
+  .metric-value { font-size: 0.85rem; color: var(--text); font-weight: 600; }
+  .metric-value.accent { color: var(--accent); }
+  .metric-value.gold { color: var(--gold); }
+  .metric-value.wine { color: var(--wine2); }
+
+  .aroma-bars { margin-top: 10px; }
+  .aroma-bars h3 { font-size: 0.78rem; color: var(--gold); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .aroma-bar-row { margin-bottom: 5px; }
+  .aroma-bar-row .label { font-size: 0.68rem; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .aroma-bar-track { height: 6px; background: rgba(42, 53, 72, 0.5); border-radius: 3px; overflow: hidden; }
+  .aroma-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+  .glass-info { margin-top: 10px; padding: 8px; background: rgba(42, 53, 72, 0.25); border-radius: 6px; border-left: 3px solid var(--gold); }
+  .glass-info .name { font-size: 0.85rem; color: var(--gold); font-weight: 600; margin-bottom: 4px; }
+  .glass-info .desc { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
+
+  #compare-toggle {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(18, 24, 32, 0.88); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px;
+    pointer-events: auto; backdrop-filter: blur(8px); display: flex; gap: 10px; align-items: center;
+  }
+  #compare-toggle label { font-size: 0.75rem; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 4px; }
+  #compare-toggle input { accent-color: var(--accent); }
+  #compare-toggle .hint { font-size: 0.68rem; color: var(--muted); }
+
+  .section-divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+  /* MOBILE */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important; width: 100% !important; height: 42vh !important;
+      min-height: 280px; max-height: 400px; inset: auto !important; z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 0; border-radius: 0;
+      border-left: none; border-right: none;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 0; border-radius: 0; border-left: none; border-right: none;
+    }
+    #compare-toggle {
+      position: relative !important; bottom: auto !important; left: auto !important; transform: none !important;
+      border-radius: 0; margin: 0; justify-content: center;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <canvas id="renderCanvas"></canvas>
+</div>
+
+<div id="ui-layer">
+  <div id="controls">
+    <h2>🍷 Glass Shape Explorer</h2>
+
+    <h3>Glass Type</h3>
+    <div class="glass-buttons" id="glass-buttons"></div>
+
+    <h3>Wine Style</h3>
+    <select id="wine-style-select">
+      <option value="cabernet">Cabernet Sauvignon — Full Red</option>
+      <option value="pinotnoir">Pinot Noir — Light Red</option>
+      <option value="syrah">Syrah/Shiraz — Spicy Red</option>
+      <option value="chardonnay">Chardonnay — Full White</option>
+      <option value="riesling">Riesling — Aromatic White</option>
+      <option value="champagne">Champagne — Sparkling</option>
+      <option value="port">Port — Fortified</option>
+    </select>
+
+    <label>Serving Temperature: <span id="temp-val">16°C</span></label>
+    <input type="range" id="temp-slider" min="6" max="22" value="16" step="0.5">
+
+    <label>Fill Level: <span id="fill-val">30%</span></label>
+    <input type="range" id="fill-slider" min="15" max="60" value="30" step="5">
+
+    <label>Swirl Intensity: <span id="swirl-val">50%</span></label>
+    <input type="range" id="swirl-slider" min="0" max="100" value="50" step="5">
+
+    <label>Aroma Particle Density: <span id="particle-val">60%</span></label>
+    <input type="range" id="particle-slider" min="0" max="100" value="60" step="5">
+
+    <div class="section-divider"></div>
+
+    <h3>Presets</h3>
+    <div class="preset-buttons">
+      <button class="preset-btn" data-preset="sommelier">Sommelier Service</button>
+      <button class="preset-btn" data-preset="casual">Casual Dinner</button>
+      <button class="preset-btn" data-preset="tasting">ISO Tasting</button>
+      <button class="preset-btn" data-preset="party">Party Mode</button>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <h2>📊 Live Analysis</h2>
+    <div id="glass-info-box" class="glass-info">
+      <div class="name" id="glass-name">Bordeaux Grand Cru</div>
+      <div class="desc" id="glass-desc"></div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="metric-row"><span class="metric-label">Bowl Volume</span><span class="metric-value accent" id="m-volume">— mL</span></div>
+    <div class="metric-row"><span class="metric-label">Rim Diameter</span><span class="metric-value" id="m-rim">— mm</span></div>
+    <div class="metric-row"><span class="metric-label">Bowl Height</span><span class="metric-value" id="m-height">— mm</span></div>
+    <div class="metric-row"><span class="metric-label">Max Bowl Width</span><span class="metric-value" id="m-width">— mm</span></div>
+    <div class="metric-row"><span class="metric-label">Surface Area (wine)</span><span class="metric-value" id="m-surface">— cm²</span></div>
+    <div class="metric-row"><span class="metric-label">Headspace Ratio</span><span class="metric-value gold" id="m-headspace">—</span></div>
+    <div class="metric-row"><span class="metric-label">Aroma Concentration</span><span class="metric-value accent" id="m-aroma">— %</span></div>
+    <div class="metric-row"><span class="metric-label">Aroma Release Score</span><span class="metric-value gold" id="m-release">— /100</span></div>
+    <div class="metric-row"><span class="metric-label">Glass Suitability</span><span class="metric-value wine" id="m-suit">—</span></div>
+
+    <div class="aroma-bars">
+      <h3>Aroma Profile</h3>
+      <div id="aroma-bars-container"></div>
+    </div>
+  </div>
+
+  <div id="compare-toggle">
+    <label><input type="checkbox" id="show-all-glasses"> Show all glasses (comparison)</label>
+    <span class="hint">· Drag to rotate · Scroll to zoom</span>
+  </div>
+</div>
+
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script>
+/* ===== GLASS PROFILES ===== */
+/* Each profile: [radius_mm, height_mm] from base to rim, scaled to scene units (1 unit = 10mm) */
+var GLASS_TYPES = {
+  bordeaux: {
+    name: "Bordeaux Grand Cru",
+    desc: "Tall bowl with wide shoulder and narrow rim. Directs aromas to the rear of the nasal cavity. Ideal for full-bodied reds with high tannin and alcohol.",
+    profile: [
+      [0, 0], [30, 0], [32, 2], [28, 8], [22, 25], [28, 40], [38, 60], [46, 80], [48, 100], [44, 120], [34, 135], [24, 145], [18, 150]
+    ],
+    stemHeight: 80, stemRadius: 4, baseRadius: 40, baseHeight: 3,
+    recommended: ["cabernet", "syrah", "port"],
+    rimOpening: 0.75
+  },
+  burgundy: {
+    name: "Burgundy Balloon",
+    desc: "Rounded balloon bowl with slightly flared rim. Captures delicate aromas and directs them to the tip of the nose. Perfect for nuanced Pinot Noir and Nebbiolo.",
+    profile: [
+      [0, 0], [28, 0], [30, 2], [26, 8], [20, 20], [30, 35], [44, 55], [52, 75], [54, 95], [48, 115], [36, 130], [28, 140], [24, 148]
+    ],
+    stemHeight: 85, stemRadius: 4, baseRadius: 38, baseHeight: 3,
+    recommended: ["pinotnoir", "chardonnay"],
+    rimOpening: 0.85
+  },
+  flute: {
+    name: "Champagne Flute",
+    desc: "Tall narrow flute preserves effervescence and concentrates delicate yeast aromas. Slim profile shows the bubble stream beautifully.",
+    profile: [
+      [0, 0], [22, 0], [24, 2], [20, 8], [16, 20], [18, 35], [22, 55], [24, 75], [23, 95], [20, 115], [18, 135], [16, 155], [15, 165]
+    ],
+    stemHeight: 90, stemRadius: 3.5, baseRadius: 35, baseHeight: 3,
+    recommended: ["champagne"],
+    rimOpening: 0.94
+  },
+  coupe: {
+    name: "Champagne Coupe",
+    desc: "Wide shallow saucer. Maximum surface area releases aromas quickly but allows bubbles to dissipate rapidly. Historical 1920s style.",
+    profile: [
+      [0, 0], [24, 0], [26, 2], [22, 8], [18, 15], [28, 25], [42, 35], [52, 45], [54, 50], [48, 55], [36, 58], [24, 60]
+    ],
+    stemHeight: 80, stemRadius: 4, baseRadius: 40, baseHeight: 3,
+    recommended: ["champagne"],
+    rimOpening: 1.0
+  },
+  iso: {
+    name: "ISO 35CL Tasting",
+    desc: "Egg-shaped standardised tasting glass. Neutral design suitable for all wine types. The official glass for competitive tasting per ISO 3591.",
+    profile: [
+      [0, 0], [24, 0], [26, 2], [22, 8], [16, 18], [22, 30], [32, 45], [36, 60], [32, 80], [26, 95], [22, 105], [20, 112]
+    ],
+    stemHeight: 75, stemRadius: 3.5, baseRadius: 33, baseHeight: 3,
+    recommended: ["cabernet", "pinotnoir", "chardonnay", "riesling", "champagne", "syrah", "port"],
+    rimOpening: 0.88
+  },
+  riesling: {
+    name: "Riesling / Aromatic White",
+    desc: "Small narrow bowl with flared rim. Preserves delicate floral and citrus aromas while the narrow shape keeps white wine cool longer.",
+    profile: [
+      [0, 0], [22, 0], [24, 2], [20, 8], [14, 18], [20, 30], [28, 45], [30, 60], [26, 80], [20, 95], [18, 105], [17, 112]
+    ],
+    stemHeight: 78, stemRadius: 3.5, baseRadius: 32, baseHeight: 3,
+    recommended: ["riesling", "chardonnay"],
+    rimOpening: 0.90
+  }
+};
+
+/* Wine style data: aroma profiles (relative intensity 0-1 for each family) */
+var WINE_STYLES = {
+  cabernet: { name: "Cabernet Sauvignon", aromas: { Fruity: 0.7, Floral: 0.2, Spicy: 0.5, Earthy: 0.6, Oak: 0.8, Mineral: 0.3 }, color: 0x6e1f2a, tempOptimal: 18 },
+  pinotnoir: { name: "Pinot Noir", aromas: { Fruity: 0.6, Floral: 0.5, Spicy: 0.3, Earthy: 0.8, Oak: 0.3, Mineral: 0.4 }, color: 0x9a2a3a, tempOptimal: 16 },
+  syrah: { name: "Syrah/Shiraz", aromas: { Fruity: 0.6, Floral: 0.2, Spicy: 0.8, Earthy: 0.5, Oak: 0.7, Mineral: 0.3 }, color: 0x5a1a25, tempOptimal: 18 },
+  chardonnay: { name: "Chardonnay", aromas: { Fruity: 0.7, Floral: 0.4, Spicy: 0.1, Earthy: 0.2, Oak: 0.6, Mineral: 0.3 }, color: 0xd8b878, tempOptimal: 12 },
+  riesling: { name: "Riesling", aromas: { Fruity: 0.8, Floral: 0.8, Spicy: 0.1, Earthy: 0.1, Oak: 0.05, Mineral: 0.6 }, color: 0xc8d870, tempOptimal: 10 },
+  champagne: { name: "Champagne", aromas: { Fruity: 0.5, Floral: 0.3, Spicy: 0.1, Earthy: 0.4, Oak: 0.2, Mineral: 0.5 }, color: 0xe8d8a0, tempOptimal: 8 },
+  port: { name: "Port", aromas: { Fruity: 0.8, Floral: 0.2, Spicy: 0.6, Earthy: 0.4, Oak: 0.7, Mineral: 0.1 }, color: 0x5a1520, tempOptimal: 18 }
+};
+
+var AROMA_COLORS = { Fruity: 0xff6b6b, Floral: 0xff8cc8, Spicy: 0xffa040, Earthy: 0x8b6b3a, Oak: 0xc08a40, Mineral: 0x6ba0d5 };
+
+/* ===== STATE ===== */
+var currentGlassKey = "bordeaux";
+var currentWineKey = "cabernet";
+var servingTemp = 16;
+var fillLevel = 30;
+var swirlIntensity = 50;
+var particleDensity = 60;
+var showAllGlasses = false;
+
+/* ===== THREE.JS SETUP ===== */
+var canvas = document.getElementById("renderCanvas");
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+var scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0a0d12, 40, 120);
+
+var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(0, 35, 55);
+camera.lookAt(0, 25, 0);
+
+/* Lighting */
+var ambient = new THREE.AmbientLight(0x404858, 0.5);
+scene.add(ambient);
+
+var keyLight = new THREE.DirectionalLight(0xffeedd, 0.8);
+keyLight.position.set(20, 40, 20);
+scene.add(keyLight);
+
+var fillLight = new THREE.DirectionalLight(0x6080a0, 0.4);
+fillLight.position.set(-15, 20, -10);
+scene.add(fillLight);
+
+var rimLight = new THREE.DirectionalLight(0xc0a060, 0.3);
+rimLight.position.set(0, 10, -30);
+scene.add(rimLight);
+
+/* Ground plane (subtle) */
+var groundGeo = new THREE.CircleGeometry(80, 64);
+var groundMat = new THREE.MeshStandardMaterial({ color: 0x0d1018, roughness: 0.9, metalness: 0.0 });
+var ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.1;
+scene.add(ground);
+
+/* ===== GLASS BUILDING ===== */
+var glassGroup = null;
+var wineMesh = null;
+var aromaParticles = [];
+var particleSystem = null;
+var allGlassGroups = [];
+
+var SCALE = 0.1; /* 1 scene unit = 10mm */
+
+function buildGlassProfile(profilePoints) {
+  /* Convert [r_mm, h_mm] to Vector2 (scaled), ensuring non-negative radius */
+  var pts = [];
+  for (var i = 0; i < profilePoints.length; i++) {
+    var r = Math.max(0.005, profilePoints[i][0] * SCALE);
+    var h = profilePoints[i][1] * SCALE;
+    pts.push(new THREE.Vector2(r, h));
+  }
+  return pts;
+}
+
+function buildGlass(key, offsetX, offsetZ) {
+  var g = GLASS_TYPES[key];
+  var group = new THREE.Group();
+
+  /* Stem */
+  var stemHeight = g.stemHeight * SCALE;
+  var stemGeo = new THREE.CylinderGeometry(g.stemRadius * SCALE * 0.7, g.stemRadius * SCALE, stemHeight, 16);
+  var glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xeef0f5, transparent: true, opacity: 0.22,
+    roughness: 0.05, metalness: 0.0,
+    clearcoat: 1.0, clearcoatRoughness: 0.0,
+    side: THREE.DoubleSide, depthWrite: false,
+    transmission: 0.8, ior: 1.5
+  });
+  var stem = new THREE.Mesh(stemGeo, glassMat);
+  stem.position.y = stemHeight / 2;
+  group.add(stem);
+
+  /* Base */
+  var baseGeo = new THREE.CylinderGeometry(g.baseRadius * SCALE, g.baseRadius * SCALE, g.baseHeight * SCALE, 32);
+  var base = new THREE.Mesh(baseGeo, glassMat);
+  base.position.y = g.baseHeight * SCALE / 2;
+  group.add(base);
+
+  /* Bowl via LatheGeometry */
+  var profilePts = buildGlassProfile(g.profile);
+  var bowlGeo = new THREE.LatheGeometry(profilePts, 48);
+  var bowl = new THREE.Mesh(bowlGeo, glassMat);
+  bowl.position.y = stemHeight;
+  group.add(bowl);
+
+  /* Wine liquid — partial lathe up to fill height */
+  var wineStyle = WINE_STYLES[currentWineKey];
+  var totalBowlH = g.profile[g.profile.length - 1][1];
+  var fillH = totalBowlH * (fillLevel / 100);
+
+  var winePts = [];
+  for (var i = 0; i < g.profile.length; i++) {
+    var p = g.profile[i];
+    if (p[1] <= fillH) {
+      var r = Math.max(0.01, p[0] * SCALE);
+      winePts.push(new THREE.Vector2(r, p[1] * SCALE));
+    } else {
+      /* interpolate */
+      var prev = g.profile[i - 1];
+      var t = (fillH - prev[1]) / (p[1] - prev[1]);
+      var r = prev[0] + t * (p[0] - prev[0]);
+      winePts.push(new THREE.Vector2(Math.max(0.01, r * SCALE), fillH * SCALE));
+      break;
+    }
+  }
+
+  if (winePts.length >= 2) {
+    var wineGeo = new THREE.LatheGeometry(winePts, 48);
+    var wineMat = new THREE.MeshPhysicalMaterial({
+      color: wineStyle.color, transparent: true, opacity: 0.85,
+      roughness: 0.15, metalness: 0.0,
+      side: THREE.DoubleSide, depthWrite: true,
+      transmission: 0.3, ior: 1.35,
+      clearcoat: 0.5
+    });
+    var wine = new THREE.Mesh(wineGeo, wineMat);
+    wine.position.y = stemHeight;
+    group.add(wine);
+  }
+
+  /* Position the group */
+  group.position.x = offsetX || 0;
+  group.position.z = offsetZ || 0;
+  group.userData = { key: key, glassType: g, stemHeight: stemHeight };
+
+  return group;
+}
+
+function disposeGroup(group) {
+  group.traverse(function(obj) {
+    if (obj.isMesh) {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    }
+  });
+}
+
+function rebuildScene() {
+  /* Clear existing */
+  if (glassGroup) {
+    scene.remove(glassGroup);
+    disposeGroup(glassGroup);
+  }
+  allGlassGroups.forEach(function(g) { scene.remove(g); disposeGroup(g); });
+  allGlassGroups = [];
+  clearParticles();
+
+  if (showAllGlasses) {
+    var keys = Object.keys(GLASS_TYPES);
+    var spacing = 14;
+    var total = keys.length;
+    var startX = -(total - 1) * spacing / 2;
+    for (var i = 0; i < total; i++) {
+      var grp = buildGlass(keys[i], startX + i * spacing, 0);
+      scene.add(grp);
+      allGlassGroups.push(grp);
+    }
+  } else {
+    glassGroup = buildGlass(currentGlassKey, 0, 0);
+    scene.add(glassGroup);
+    initParticles();
+  }
+}
+
+/* ===== AROMA PARTICLES ===== */
+function clearParticles() {
+  aromaParticles.forEach(function(p) {
+    if (p.mesh) {
+      scene.remove(p.mesh);
+      if (p.mesh.geometry) p.mesh.geometry.dispose();
+      if (p.mesh.material) p.mesh.material.dispose();
+    }
+  });
+  aromaParticles = [];
+}
+
+function initParticles() {
+  clearParticles();
+  if (particleDensity === 0) return;
+
+  var count = Math.floor(particleDensity * 0.8) + 5;
+  var wineStyle = WINE_STYLES[currentWineKey];
+  var glassType = GLASS_TYPES[currentGlassKey];
+  var stemH = glassType.stemHeight * SCALE;
+  var profile = glassType.profile;
+
+  for (var i = 0; i < count; i++) {
+    /* Pick a random aroma family weighted by the wine's profile */
+    var families = Object.keys(wineStyle.aromas);
+    var totalWeight = 0;
+    families.forEach(function(f) { totalWeight += wineStyle.aromas[f]; });
+    var r = Math.random() * totalWeight;
+    var cumW = 0;
+    var chosen = families[0];
+    for (var f = 0; f < families.length; f++) {
+      cumW += wineStyle.aromas[families[f]];
+      if (r <= cumW) { chosen = families[f]; break; }
+    }
+
+    var color = AROMA_COLORS[chosen];
+    var size = 0.15 + Math.random() * 0.25;
+
+    var pGeo = new THREE.SphereGeometry(size, 8, 6);
+    var pMat = new THREE.MeshBasicMaterial({
+      color: color, transparent: true, opacity: 0.6,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    var sphere = new THREE.Mesh(pGeo, pMat);
+    scene.add(sphere);
+
+    /* Start position: near the wine surface */
+    var surfaceH = profile[profile.length - 1][1] * (fillLevel / 100) * SCALE + stemH;
+    var angle = Math.random() * Math.PI * 2;
+    var startR = Math.random() * 2;
+    sphere.position.set(Math.cos(angle) * startR, surfaceH + 0.5, Math.sin(angle) * startR);
+
+    aromaParticles.push({
+      mesh: sphere,
+      vx: (Math.random() - 0.5) * 0.05,
+      vy: 0.08 + Math.random() * 0.15,
+      vz: (Math.random() - 0.5) * 0.05,
+      life: 1.0,
+      maxLife: 2.0 + Math.random() * 3.0,
+      family: chosen,
+      baseY: surfaceH,
+      color: color
+    });
+  }
+}
+
+function getWallRadiusAtHeight(h, profile) {
+  for (var i = 0; i < profile.length - 1; i++) {
+    var h1 = profile[i][1] * SCALE, h2 = profile[i + 1][1] * SCALE;
+    if (h >= h1 && h <= h2) {
+      var t = (h - h1) / (h2 - h1);
+      return (profile[i][0] + t * (profile[i + 1][0] - profile[i][0])) * SCALE;
+    }
+  }
+  return -1;
+}
+
+function updateParticles(dt) {
+  var glassType = GLASS_TYPES[currentGlassKey];
+  var stemH = glassType.stemHeight * SCALE;
+  var profile = glassType.profile;
+  var maxBowlH = profile[profile.length - 1][1] * SCALE;
+
+  for (var i = aromaParticles.length - 1; i >= 0; i--) {
+    var p = aromaParticles[i];
+    p.mesh.position.x += p.vx * dt * 60;
+    p.mesh.position.y += p.vy * dt * 60;
+    p.mesh.position.z += p.vz * dt * 60;
+
+    /* Swirl effect */
+    if (swirlIntensity > 0) {
+      var swirlForce = (swirlIntensity / 100) * 0.02;
+      var dx = p.mesh.position.x, dz = p.mesh.position.z;
+      p.mesh.position.x += -dz * swirlForce;
+      p.mesh.position.z += dx * swirlForce;
+    }
+
+    /* Wall constraint */
+    var localH = p.mesh.position.y - stemH;
+    if (localH >= 0 && localH <= maxBowlH) {
+      var wallR = getWallRadiusAtHeight(localH, profile);
+      if (wallR > 0) {
+        var dist = Math.sqrt(p.mesh.position.x * p.mesh.position.x + p.mesh.position.z * p.mesh.position.z);
+        if (dist > wallR - 0.15) {
+          var angle = Math.atan2(p.mesh.position.z, p.mesh.position.x);
+          p.mesh.position.x = Math.cos(angle) * (wallR - 0.15);
+          p.mesh.position.z = Math.sin(angle) * (wallR - 0.15);
+          p.vx *= 0.4;
+          p.vz *= 0.4;
+        }
+      }
+    }
+
+    /* Temperature affects volatility — higher temp = faster rise, shorter life */
+    var tempFactor = 0.5 + (servingTemp - 6) / 32; /* 0.5 at 6°C, 1.5 at 22°C */
+    p.life -= dt * 0.3 * tempFactor;
+
+    /* Fade out near rim and after life expires */
+    var rimY = stemH + maxBowlH;
+    var distAboveRim = p.mesh.position.y - rimY;
+    if (distAboveRim > 0) {
+      p.mesh.material.opacity = Math.max(0, 0.6 * (1 - distAboveRim / 8));
+    }
+    if (p.life <= 0 || p.mesh.position.y > rimY + 10) {
+      /* Respawn at surface */
+      var surfaceH = profile[profile.length - 1][1] * (fillLevel / 100) * SCALE + stemH;
+      var angle2 = Math.random() * Math.PI * 2;
+      var startR = Math.random() * 2;
+      p.mesh.position.set(Math.cos(angle2) * startR, surfaceH + 0.3, Math.sin(angle2) * startR);
+      p.vx = (Math.random() - 0.5) * 0.05;
+      p.vy = 0.08 + Math.random() * 0.15 * tempFactor;
+      p.vz = (Math.random() - 0.5) * 0.05;
+      p.life = 1.0;
+      p.mesh.material.opacity = 0.6;
+    }
+  }
+}
+
+/* ===== METRICS CALCULATION ===== */
+function calculateMetrics() {
+  var g = GLASS_TYPES[currentGlassKey];
+  var wineStyle = WINE_STYLES[currentWineKey];
+
+  /* Bowl volume via cross-sectional area * revolution (sum of trapezoidal rings) */
+  var volume = 0;
+  for (var i = 0; i < g.profile.length - 1; i++) {
+    var r1 = g.profile[i][0], r2 = g.profile[i + 1][0];
+    var h1 = g.profile[i][1], h2 = g.profile[i + 1][1];
+    var avgR = (r1 + r2) / 2;
+    var dh = h2 - h1;
+    volume += Math.PI * avgR * avgR * dh;
+  }
+  /* Convert mm³ to mL (1 mL = 1000 mm³) */
+  volume = volume / 1000;
+
+  var rimDiameter = g.profile[g.profile.length - 1][0] * 2;
+  var bowlHeight = g.profile[g.profile.length - 1][1];
+  var maxWidth = 0;
+  for (var j = 0; j < g.profile.length; j++) {
+    if (g.profile[j][0] > maxWidth) maxWidth = g.profile[j][0];
+  }
+  maxWidth *= 2;
+
+  /* Wine surface area at fill level */
+  var fillH = bowlHeight * (fillLevel / 100);
+  var fillRadius = 0;
+  for (var k = 0; k < g.profile.length - 1; k++) {
+    if (g.profile[k][1] <= fillH && g.profile[k + 1][1] >= fillH) {
+      var t = (fillH - g.profile[k][1]) / (g.profile[k + 1][1] - g.profile[k][1]);
+      fillRadius = g.profile[k][0] + t * (g.profile[k + 1][0] - g.profile[k][0]);
+      break;
+    }
+  }
+  var surfaceArea = Math.PI * fillRadius * fillRadius / 100; /* cm² */
+
+  /* Headspace ratio = (1 - fillLevel/100) */
+  var headspace = (1 - fillLevel / 100).toFixed(2);
+
+  /* Aroma concentration: higher temp + more surface area + narrower rim = more concentration */
+  var tempFactor = 0.4 + (servingTemp - 6) / 32;
+  var rimFactor = 1 - (rimDiameter / maxWidth) * 0.5;
+  var aromaConcentration = Math.min(100, surfaceArea * 2.5 * tempFactor * rimFactor);
+
+  /* Aroma release score: combination of glass suitability + temperature match + swirl */
+  var isRecommended = g.recommended.indexOf(currentWineKey) >= 0;
+  var glassSuit = isRecommended ? 1.0 : 0.55;
+  var tempMatch = 1 - Math.abs(servingTemp - wineStyle.tempOptimal) / 16;
+  tempMatch = Math.max(0.2, tempMatch);
+  var swirlFactor = 0.6 + swirlIntensity / 250;
+  var releaseScore = Math.round(aromaConcentration * glassSuit * tempMatch * swirlFactor);
+  releaseScore = Math.min(100, Math.max(0, releaseScore));
+
+  /* Suitability label */
+  var suitLabel = isRecommended ? "★★★ Excellent" : (glassSuit > 0.5 ? "★★ Acceptable" : "★ Poor");
+  if (isRecommended && tempMatch > 0.8) suitLabel = "★★★ Excellent";
+
+  /* Aroma profile bars */
+  var aromaBarsHtml = "";
+  var families = Object.keys(wineStyle.aromas);
+  families.forEach(function(fam) {
+    var intensity = wineStyle.aromas[fam];
+    var tempBoost = 1 + (servingTemp - wineStyle.tempOptimal) * 0.03;
+    tempBoost = Math.max(0.5, Math.min(1.3, tempBoost));
+    var releasePct = Math.round(intensity * aromaConcentration * tempBoost * glassSuit);
+    releasePct = Math.min(100, Math.max(0, releasePct));
+    var colorHex = "#" + AROMA_COLORS[fam].toString(16).padStart(6, "0");
+    aromaBarsHtml += '<div class="aroma-bar-row">' +
+      '<div class="label"><span>' + fam + '</span><span>' + releasePct + '%</span></div>' +
+      '<div class="aroma-bar-track"><div class="aroma-bar-fill" style="width:' + releasePct + '%;background:' + colorHex + '"></div></div>' +
+      '</div>';
+  });
+
+  return {
+    volume: Math.round(volume),
+    rim: Math.round(rimDiameter),
+    height: Math.round(bowlHeight),
+    width: Math.round(maxWidth),
+    surface: surfaceArea.toFixed(1),
+    headspace: headspace,
+    aroma: Math.round(aromaConcentration),
+    release: releaseScore,
+    suit: suitLabel,
+    aromaBars: aromaBarsHtml
+  };
+}
+
+function updateMetricsDisplay() {
+  var m = calculateMetrics();
+  document.getElementById("glass-name").textContent = GLASS_TYPES[currentGlassKey].name;
+  document.getElementById("glass-desc").textContent = GLASS_TYPES[currentGlassKey].desc;
+  document.getElementById("m-volume").textContent = m.volume + " mL";
+  document.getElementById("m-rim").textContent = m.rim + " mm";
+  document.getElementById("m-height").textContent = m.height + " mm";
+  document.getElementById("m-width").textContent = m.width + " mm";
+  document.getElementById("m-surface").textContent = m.surface + " cm²";
+  document.getElementById("m-headspace").textContent = m.headspace;
+  document.getElementById("m-aroma").textContent = m.aroma + " %";
+  document.getElementById("m-release").textContent = m.release + " /100";
+  document.getElementById("m-suit").textContent = m.suit;
+  document.getElementById("aroma-bars-container").innerHTML = m.aromaBars;
+}
+
+/* ===== UI WIRING ===== */
+function buildGlassButtons() {
+  var container = document.getElementById("glass-buttons");
+  container.innerHTML = "";
+  Object.keys(GLASS_TYPES).forEach(function(key) {
+    var btn = document.createElement("div");
+    btn.className = "glass-btn" + (key === currentGlassKey ? " active" : "");
+    btn.textContent = GLASS_TYPES[key].name;
+    btn.dataset.key = key;
+    btn.addEventListener("click", function() {
+      currentGlassKey = key;
+      document.querySelectorAll(".glass-btn").forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      rebuildScene();
+      updateMetricsDisplay();
+    });
+    container.appendChild(btn);
+  });
+}
+
+document.getElementById("wine-style-select").addEventListener("change", function(e) {
+  currentWineKey = e.target.value;
+  rebuildScene();
+  updateMetricsDisplay();
+});
+
+document.getElementById("temp-slider").addEventListener("input", function(e) {
+  servingTemp = parseFloat(e.target.value);
+  document.getElementById("temp-val").textContent = servingTemp + "°C";
+  updateMetricsDisplay();
+});
+
+document.getElementById("fill-slider").addEventListener("input", function(e) {
+  fillLevel = parseInt(e.target.value);
+  document.getElementById("fill-val").textContent = fillLevel + "%";
+  rebuildScene();
+  updateMetricsDisplay();
+});
+
+document.getElementById("swirl-slider").addEventListener("input", function(e) {
+  swirlIntensity = parseInt(e.target.value);
+  document.getElementById("swirl-val").textContent = swirlIntensity + "%";
+  updateMetricsDisplay();
+});
+
+document.getElementById("particle-slider").addEventListener("input", function(e) {
+  particleDensity = parseInt(e.target.value);
+  document.getElementById("particle-val").textContent = particleDensity + "%";
+  if (!showAllGlasses) initParticles();
+});
+
+document.getElementById("show-all-glasses").addEventListener("change", function(e) {
+  showAllGlasses = e.target.checked;
+  rebuildScene();
+});
+
+/* Presets */
+document.querySelectorAll(".preset-btn").forEach(function(btn) {
+  btn.addEventListener("click", function() {
+    var preset = btn.dataset.preset;
+    if (preset === "sommelier") {
+      currentGlassKey = "bordeaux"; currentWineKey = "cabernet";
+      servingTemp = 18; fillLevel = 30; swirlIntensity = 50; particleDensity = 60;
+    } else if (preset === "casual") {
+      currentGlassKey = "iso"; currentWineKey = "pinotnoir";
+      servingTemp = 16; fillLevel = 40; swirlIntensity = 30; particleDensity = 40;
+    } else if (preset === "tasting") {
+      currentGlassKey = "iso"; currentWineKey = "riesling";
+      servingTemp = 10; fillLevel = 25; swirlIntensity = 40; particleDensity = 50;
+    } else if (preset === "party") {
+      currentGlassKey = "coupe"; currentWineKey = "champagne";
+      servingTemp = 8; fillLevel = 50; swirlIntensity = 70; particleDensity = 80;
+    }
+    syncUIControls();
+    rebuildScene();
+    updateMetricsDisplay();
+  });
+});
+
+function syncUIControls() {
+  document.getElementById("wine-style-select").value = currentWineKey;
+  document.getElementById("temp-slider").value = servingTemp;
+  document.getElementById("temp-val").textContent = servingTemp + "°C";
+  document.getElementById("fill-slider").value = fillLevel;
+  document.getElementById("fill-val").textContent = fillLevel + "%";
+  document.getElementById("swirl-slider").value = swirlIntensity;
+  document.getElementById("swirl-val").textContent = swirlIntensity + "%";
+  document.getElementById("particle-slider").value = particleDensity;
+  document.getElementById("particle-val").textContent = particleDensity + "%";
+  document.querySelectorAll(".glass-btn").forEach(function(b) {
+    b.classList.toggle("active", b.dataset.key === currentGlassKey);
+  });
+}
+
+/* ===== CAMERA CONTROLS (manual orbit) ===== */
+var camAngleH = 0, camAngleV = 0.35, camDist = 55;
+var isDragging = false, prevMouseX = 0, prevMouseY = 0;
+var camTargetY = 25;
+
+canvas.addEventListener("mousedown", function(e) {
+  isDragging = true; prevMouseX = e.clientX; prevMouseY = e.clientY;
+});
+window.addEventListener("mouseup", function() { isDragging = false; });
+window.addEventListener("mousemove", function(e) {
+  if (!isDragging) return;
+  var dx = e.clientX - prevMouseX, dy = e.clientY - prevMouseY;
+  prevMouseX = e.clientX; prevMouseY = e.clientY;
+  camAngleH -= dx * 0.005;
+  camAngleV = Math.max(0.05, Math.min(0.95, camAngleV - dy * 0.005));
+  updateCamera();
+});
+
+canvas.addEventListener("touchstart", function(e) {
+  if (e.touches.length === 1) {
+    isDragging = true; prevMouseX = e.touches[0].clientX; prevMouseY = e.touches[0].clientY;
+  }
+}, { passive: true });
+canvas.addEventListener("touchend", function() { isDragging = false; });
+canvas.addEventListener("touchmove", function(e) {
+  if (!isDragging || e.touches.length !== 1) return;
+  e.preventDefault();
+  var dx = e.touches[0].clientX - prevMouseX, dy = e.touches[0].clientY - prevMouseY;
+  prevMouseX = e.touches[0].clientX; prevMouseY = e.touches[0].clientY;
+  camAngleH -= dx * 0.005;
+  camAngleV = Math.max(0.05, Math.min(0.95, camAngleV - dy * 0.005));
+  updateCamera();
+}, { passive: false });
+
+canvas.addEventListener("wheel", function(e) {
+  e.preventDefault();
+  camDist = Math.max(25, Math.min(100, camDist + e.deltaY * 0.05));
+  updateCamera();
+}, { passive: false });
+
+function updateCamera() {
+  var r = camDist;
+  var phi = camAngleV * Math.PI;
+  var theta = camAngleH;
+  camera.position.x = r * Math.sin(phi) * Math.cos(theta);
+  camera.position.y = camTargetY + r * Math.cos(phi);
+  camera.position.z = r * Math.sin(phi) * Math.sin(theta);
+  camera.lookAt(0, camTargetY, 0);
+}
+
+/* ===== RESIZE ===== */
+function onResize() {
+  var container = document.getElementById("canvas-container");
+  var w = container.clientWidth;
+  var h = container.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", onResize);
+
+/* ===== ANIMATION LOOP ===== */
+var lastTime = performance.now();
+function animate() {
+  requestAnimationFrame(animate);
+  var now = performance.now();
+  var dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  if (!showAllGlasses) {
+    updateParticles(dt);
+  } else {
+    /* Slowly rotate all glasses */
+    allGlassGroups.forEach(function(g, i) {
+      g.rotation.y += dt * 0.15 * (i % 2 === 0 ? 1 : -1);
+    });
+  }
+
+  /* Gentle auto-rotate when not dragging */
+  if (!isDragging && !showAllGlasses) {
+    camAngleH += dt * 0.05;
+    updateCamera();
+  }
+
+  renderer.render(scene, camera);
+}
+
+/* ===== INIT ===== */
+buildGlassButtons();
+rebuildScene();
+updateMetricsDisplay();
+updateCamera();
+onResize();
+animate();
+</script>
+</body>
+</html>
