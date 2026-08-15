@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Aroma Synergy & Masking Explorer</title>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:15px; }
+  body{ background:#0a0d14; color:#d0d8e0; font-family:system-ui,-apple-system,sans-serif; line-height:1.5; overflow-x:hidden; }
+  .disclaimer{ background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060; padding:0.75rem 1rem; text-align:center; font-size:0.85rem; position:sticky; top:0; z-index:100; }
+  .disclaimer strong{ font-weight:600; }
+  h1{ text-align:center; font-size:1.3rem; margin:0.8rem 0 0.2rem; background:linear-gradient(90deg,#e8b060,#a371f7,#58a6ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; display:block; }
+  .subtitle{ text-align:center; font-size:0.8rem; color:#7a8290; margin-bottom:0.6rem; }
+
+  /* Canvas background */
+  #canvas-container{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+  #bg-canvas{ width:100%; height:100%; display:block; }
+
+  #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+
+  #controls{
+    position:absolute; top:12px; left:12px; width:300px; max-height:calc(100vh - 24px);
+    overflow-y:auto; pointer-events:auto;
+    background:rgba(18,22,30,0.88); border:1px solid #2a3441; border-radius:12px; padding:0.9rem;
+    backdrop-filter:blur(8px);
+  }
+  #controls h2{ font-size:0.85rem; color:#58a6ff; margin-bottom:0.4rem; border-bottom:1px solid #2a3441; padding-bottom:0.3rem; }
+  #controls h3{ font-size:0.78rem; color:#a371f7; margin:0.6rem 0 0.3rem; }
+  .ctrl-group{ margin-bottom:0.5rem; }
+  .ctrl-label{ font-size:0.72rem; color:#8b949e; display:flex; justify-content:space-between; margin-bottom:0.15rem; }
+  .ctrl-label span:last-child{ color:#e8b060; }
+  input[type=range]{ width:100%; accent-color:#58a6ff; height:4px; }
+  .preset-btns{ display:flex; flex-wrap:wrap; gap:4px; }
+  .preset-btn{ background:#1a2330; border:1px solid #2a3441; color:#c9d1d9; border-radius:6px; padding:0.3rem 0.5rem; font-size:0.7rem; cursor:pointer; transition:all .15s; }
+  .preset-btn:hover{ border-color:#58a6ff; color:#58a6ff; }
+  .preset-btn.active{ background:#1a3040; border-color:#58a6ff; color:#58a6ff; }
+
+  #graph-panel{
+    position:absolute; top:12px; left:328px; right:12px; bottom:12px;
+    pointer-events:auto;
+    background:rgba(12,16,22,0.82); border:1px solid #2a3441; border-radius:12px;
+    overflow:hidden;
+  }
+  #graph-svg{ width:100%; height:100%; display:block; }
+
+  #metrics{
+    position:absolute; top:12px; right:12px; width:240px;
+    pointer-events:auto;
+    background:rgba(18,22,30,0.88); border:1px solid #2a3441; border-radius:12px; padding:0.8rem;
+    backdrop-filter:blur(8px);
+    max-height:calc(100vh - 24px); overflow-y:auto;
+  }
+  #metrics h2{ font-size:0.82rem; color:#e8b060; margin-bottom:0.4rem; border-bottom:1px solid #2a3441; padding-bottom:0.3rem; }
+  .metric-row{ display:flex; justify-content:space-between; font-size:0.72rem; margin-bottom:0.2rem; }
+  .metric-row span:last-child{ font-weight:600; }
+  #radar-svg{ width:100%; height:auto; margin-top:0.4rem; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:6px; margin-top:0.4rem; }
+  .legend-item{ display:flex; align-items:center; gap:4px; font-size:0.68rem; }
+  .legend-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .legend-line{ width:14px; height:3px; flex-shrink:0; }
+
+  .node-tooltip{ position:absolute; pointer-events:none; background:rgba(10,14,20,0.95); border:1px solid #3a4452; border-radius:8px; padding:0.5rem 0.7rem; font-size:0.72rem; max-width:200px; z-index:50; display:none; }
+  .node-tooltip .tt-name{ font-weight:600; color:#58a6ff; margin-bottom:0.2rem; }
+  .node-tooltip .tt-desc{ color:#8b949e; font-size:0.68rem; margin-bottom:0.3rem; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important; width: 100% !important;
+      height: 200px !important; min-height: 160px; max-height: 220px;
+      inset: auto !important; z-index: 0;
+    }
+    #bg-canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer { position: relative !important; inset: auto !important; pointer-events: auto; }
+    #controls {
+      position: relative !important; top: auto !important; left: auto !important;
+      width: auto !important; max-height: none !important; margin: 8px;
+      border-radius: 10px;
+    }
+    #graph-panel {
+      position: relative !important; top: auto !important; left: auto !important;
+      right: auto !important; bottom: auto !important;
+      width: auto !important; margin: 8px; height: 380px; border-radius: 10px;
+    }
+    #metrics {
+      position: relative !important; top: auto !important; right: auto !important;
+      width: auto !important; margin: 8px; border-radius: 10px; max-height: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+<h1>Wine Aroma Synergy & Masking Explorer</h1>
+<div class="subtitle">How aroma compounds interact — synergy, masking, and cross-modal perception in wine</div>
+
+<div id="canvas-container"><canvas id="bg-canvas"></canvas></div>
+
+<div id="ui-layer">
+  <div id="controls">
+    <h2>Compound Controls</h2>
+    <div id="compound-sliders"></div>
+    <h3>Presets</h3>
+    <div class="preset-btns" id="preset-btns"></div>
+    <h3>Interaction Legend</h3>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-line" style="background:#3fb950"></div> Synergy (1+1&gt;2)</div>
+      <div class="legend-item"><div class="legend-line" style="background:#f85149"></div> Masking</div>
+      <div class="legend-item"><div class="legend-line" style="background:#58a6ff;opacity:0.6"></div> Cross-modal</div>
+    </div>
+    <h3>Aroma Families</h3>
+    <div class="legend" id="family-legend"></div>
+    <h3>Actions</h3>
+    <button class="preset-btn" id="reset-btn" style="width:100%;margin-top:0.3rem">↺ Reset to Defaults</button>
+    <button class="preset-btn" id="clear-btn" style="width:100%;margin-top:0.3rem">✕ Clear All Compounds</button>
+  </div>
+
+  <div id="graph-panel">
+    <svg id="graph-svg"></svg>
+  </div>
+
+  <div id="metrics">
+    <h2>Perceived Aroma Profile</h2>
+    <div id="perceived-intensity-bars"></div>
+    <h2 style="margin-top:0.6rem">Interaction Summary</h2>
+    <div id="interaction-summary"></div>
+    <svg id="radar-svg" viewBox="0 0 200 200"></svg>
+  </div>
+</div>
+
+<div class="node-tooltip" id="tooltip"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+"use strict";
+
+// ===== Aroma compound data =====
+const COMPOUNDS = [
+  { id: "isoamyl_acetate", name: "Isoamyl Acetate", family: "fruity", desc: "Banana, pear drops", defaultConc: 0.6, threshold: 0.3 },
+  { id: "ethyl_hexanoate", name: "Ethyl Hexanoate", family: "fruity", desc: "Green apple, fruity", defaultConc: 0.5, threshold: 0.08 },
+  { id: "ethyl_butyrate", name: "Ethyl Butyrate", family: "fruity", desc: "Pineapple, tropical", defaultConc: 0.4, threshold: 0.02 },
+  { id: "damascenone", name: "β-Damascenone", family: "fruity", desc: "Dried fruit, rose, quince", defaultConc: 0.7, threshold: 0.00005 },
+  { id: "linalool", name: "Linalool", family: "floral", desc: "Rose, lavender, coriander", defaultConc: 0.5, threshold: 0.1 },
+  { id: "geraniol", name: "Geraniol", family: "floral", desc: "Rose, geranium", defaultConc: 0.3, threshold: 0.2 },
+  { id: "ionone", name: "β-Ionone", family: "floral", desc: "Violet, raspberry", defaultConc: 0.4, threshold: 0.00009 },
+  { id: "ibmp", name: "IBMP", family: "vegetal", desc: "Bell pepper, asparagus", defaultConc: 0.2, threshold: 0.000002 },
+  { id: "hexenol", name: "cis-3-Hexenol", family: "vegetal", desc: "Fresh cut grass, leaves", defaultConc: 0.3, threshold: 0.4 },
+  { id: "4eg", name: "4-Ethylguaiacol", family: "spicy", desc: "Clove, phenolic spice", defaultConc: 0.15, threshold: 0.04 },
+  { id: "4ep", name: "4-Ethylphenol", family: "spicy", desc: "Smoky, medicinal, leather", defaultConc: 0.1, threshold: 0.12 },
+  { id: "vanillin", name: "Vanillin", family: "oak", desc: "Vanilla, sweet oak", defaultConc: 0.2, threshold: 0.3 },
+  { id: "oak_lactone", name: "cis-Lactone", family: "oak", desc: "Coconut, sweet oak", defaultConc: 0.25, threshold: 0.067 },
+  { id: "furfural", name: "Furfural", family: "oak", desc: "Caramel, almond, toast", defaultConc: 0.2, threshold: 15 },
+  { id: "3mh", name: "3-MH (3-sulfanylhexanol)", family: "sulfury", desc: "Passion fruit, grapefruit", defaultConc: 0.0, threshold: 0.00006 },
+  { id: "3ma", name: "3-MHA (3-sulfanylhexyl acetate)", family: "sulfury", desc: "Boxwood, grapefruit zest", defaultConc: 0.0, threshold: 0.000004 },
+  { id: "acetaldehyde", name: "Acetaldehyde", family: "chemical", desc: "Oxidation, bruised apple", defaultConc: 0.1, threshold: 0.5 },
+  { id: "tdn", name: "TDN", family: "chemical", desc: "Kerosene, petrol (Riesling)", defaultConc: 0.1, threshold: 0.001 },
+];
+
+// Interaction edges: type = synergy | masking | crossmodal
+const INTERACTIONS = [
+  // Fruity synergy
+  { source: "isoamyl_acetate", target: "ethyl_hexanoate", type: "synergy", strength: 0.35 },
+  { source: "ethyl_hexanoate", target: "ethyl_butyrate", type: "synergy", strength: 0.30 },
+  { source: "isoamyl_acetate", target: "ethyl_butyrate", type: "synergy", strength: 0.25 },
+  // Floral synergy
+  { source: "linalool", target: "geraniol", type: "synergy", strength: 0.40 },
+  { source: "linalool", target: "ionone", type: "synergy", strength: 0.30 },
+  // Cross-modal: damascenone bridges fruity and floral
+  { source: "damascenone", target: "linalool", type: "crossmodal", strength: 0.35 },
+  { source: "damascenone", target: "ionone", type: "crossmodal", strength: 0.25 },
+  { source: "damascenone", target: "isoamyl_acetate", type: "crossmodal", strength: 0.20 },
+  // Sulfury synergy
+  { source: "3mh", target: "3ma", type: "synergy", strength: 0.45 },
+  // Oak synergy
+  { source: "vanillin", target: "furfural", type: "synergy", strength: 0.35 },
+  { source: "oak_lactone", target: "vanillin", type: "synergy", strength: 0.25 },
+  { source: "oak_lactone", target: "furfural", type: "crossmodal", strength: 0.20 },
+  // Spicy cross-modal with oak
+  { source: "4eg", target: "vanillin", type: "crossmodal", strength: 0.30 },
+  { source: "4eg", target: "oak_lactone", type: "crossmodal", strength: 0.20 },
+  // Masking: IBMP masks fruity and floral
+  { source: "ibmp", target: "isoamyl_acetate", type: "masking", strength: 0.40 },
+  { source: "ibmp", target: "ethyl_hexanoate", type: "masking", strength: 0.35 },
+  { source: "ibmp", target: "damascenone", type: "masking", strength: 0.30 },
+  { source: "ibmp", target: "linalool", type: "masking", strength: 0.25 },
+  // Masking: acetaldehyde masks floral
+  { source: "acetaldehyde", target: "linalool", type: "masking", strength: 0.35 },
+  { source: "acetaldehyde", target: "geraniol", type: "masking", strength: 0.30 },
+  { source: "acetaldehyde", target: "ionone", type: "masking", strength: 0.25 },
+  // Masking: TDN masks floral and fruity
+  { source: "tdn", target: "linalool", type: "masking", strength: 0.30 },
+  { source: "tdn", target: "damascenone", type: "masking", strength: 0.20 },
+  // Masking: 4-EP masks fruity
+  { source: "4ep", target: "ethyl_hexanoate", type: "masking", strength: 0.30 },
+  { source: "4ep", target: "ethyl_butyrate", type: "masking", strength: 0.25 },
+  // 4-EP and 4-EG synergy (Brett complex)
+  { source: "4ep", target: "4eg", type: "synergy", strength: 0.35 },
+  // Hexenol cross-modal with IBMP (green complex)
+  { source: "hexenol", target: "ibmp", type: "crossmodal", strength: 0.25 },
+];
+
+// Family colors
+const FAMILY_COLORS = {
+  fruity:   "#f9a825",
+  floral:   "#ec7bc0",
+  vegetal:  "#4caf50",
+  spicy:    "#e57373",
+  oak:      "#a1887f",
+  sulfury:  "#ffd54f",
+  chemical: "#90a4ae",
+};
+
+const FAMILY_LABELS = {
+  fruity: "Fruity", floral: "Floral", vegetal: "Vegetal",
+  spicy: "Spicy", oak: "Oak/Vanilla", sulfury: "Sulfury", chemical: "Chemical",
+};
+
+// Presets
+const PRESETS = {
+  "Young Cabernet": {
+    isoamyl_acetate: 0.5, ethyl_hexanoate: 0.4, ethyl_butyrate: 0.2, damascenone: 0.6,
+    linalool: 0.15, geraniol: 0.1, ionone: 0.2,
+    ibmp: 0.35, hexenol: 0.2,
+    "4eg": 0.05, "4ep": 0.03,
+    vanillin: 0.15, oak_lactone: 0.2, furfural: 0.15,
+    "3mh": 0.0, "3ma": 0.0,
+    acetaldehyde: 0.08, tdn: 0.02,
+  },
+  "Aged Pinot Noir": {
+    isoamyl_acetate: 0.2, ethyl_hexanoate: 0.15, ethyl_butyrate: 0.1, damascenone: 0.8,
+    linalool: 0.1, geraniol: 0.05, ionone: 0.35,
+    ibmp: 0.05, hexenol: 0.1,
+    "4eg": 0.08, "4ep": 0.05,
+    vanillin: 0.3, oak_lactone: 0.15, furfural: 0.25,
+    "3mh": 0.0, "3ma": 0.0,
+    acetaldehyde: 0.15, tdn: 0.05,
+  },
+  "Riesling (Aged)": {
+    isoamyl_acetate: 0.3, ethyl_hexanoate: 0.35, ethyl_butyrate: 0.25, damascenone: 0.5,
+    linalool: 0.4, geraniol: 0.2, ionone: 0.15,
+    ibmp: 0.02, hexenol: 0.15,
+    "4eg": 0.0, "4ep": 0.0,
+    vanillin: 0.0, oak_lactone: 0.0, furfural: 0.0,
+    "3mh": 0.0, "3ma": 0.0,
+    acetaldehyde: 0.1, tdn: 0.6,
+  },
+  "Sauvignon Blanc": {
+    isoamyl_acetate: 0.3, ethyl_hexanoate: 0.35, ethyl_butyrate: 0.3, damascenone: 0.4,
+    linalool: 0.15, geraniol: 0.05, ionone: 0.1,
+    ibmp: 0.15, hexenol: 0.35,
+    "4eg": 0.0, "4ep": 0.0,
+    vanillin: 0.0, oak_lactone: 0.0, furfural: 0.0,
+    "3mh": 0.7, "3ma": 0.5,
+    acetaldehyde: 0.05, tdn: 0.0,
+  },
+  "Oaked Chardonnay": {
+    isoamyl_acetate: 0.25, ethyl_hexanoate: 0.3, ethyl_butyrate: 0.2, damascenone: 0.35,
+    linalool: 0.1, geraniol: 0.05, ionone: 0.1,
+    ibmp: 0.02, hexenol: 0.1,
+    "4eg": 0.03, "4ep": 0.01,
+    vanillin: 0.5, oak_lactone: 0.4, furfural: 0.35,
+    "3mh": 0.0, "3ma": 0.0,
+    acetaldehyde: 0.1, tdn: 0.0,
+  },
+  "Brett-affected": {
+    isoamyl_acetate: 0.3, ethyl_hexanoate: 0.25, ethyl_butyrate: 0.15, damascenone: 0.4,
+    linalool: 0.2, geraniol: 0.1, ionone: 0.15,
+    ibmp: 0.1, hexenol: 0.15,
+    "4eg": 0.6, "4ep": 0.7,
+    vanillin: 0.2, oak_lactone: 0.15, furfural: 0.2,
+    "3mh": 0.0, "3ma": 0.0,
+    acetaldehyde: 0.2, tdn: 0.05,
+  },
+  "Oxidized Wine": {
+    isoamyl_acetate: 0.15, ethyl_hexanoate: 0.1, ethyl_butyrate: 0.05, damascenone: 0.3,
+    linalool: 0.08, geraniol: 0.04, ionone: 0.1,
+    ibmp: 0.05, hexenol: 0.08,
+    "4eg": 0.1, "4ep": 0.05,
+    vanillin: 0.2, oak_lactone: 0.15, furfural: 0.3,
+    "3mh": 0.0, "3ma": 0.0,
+    acetaldehyde: 0.7, tdn: 0.1,
+  },
+};
+
+// ===== State =====
+const state = {};
+COMPOUNDS.forEach(c => { state[c.id] = c.defaultConc; });
+let activePreset = "";
+
+// ===== Compute perceived intensity per family =====
+function computePerceived() {
+  const familyIntensities = {};
+  Object.keys(FAMILY_COLORS).forEach(f => { familyIntensities[f] = { base: 0, perceived: 0, compounds: 0 }; });
+
+  // Base intensity = sum of concentration-normalized intensities per family
+  COMPOUNDS.forEach(c => {
+    const conc = state[c.id];
+    if (conc <= 0) return;
+    // Normalize: concentration relative to threshold gives perceptual intensity
+    const intensity = Math.min(1.0, conc * 2); // scale 0-1
+    familyIntensities[c.family].base += intensity;
+    familyIntensities[c.family].compounds++;
+  });
+
+  // Compute interactions
+  let synergyCount = 0, maskingCount = 0, crossModalCount = 0;
+  const familyBoost = {};
+  Object.keys(FAMILY_COLORS).forEach(f => familyBoost[f] = 1.0);
+
+  INTERACTIONS.forEach(int => {
+    const sConc = state[int.source];
+    const tConc = state[int.target];
+    if (sConc <= 0 || tConc <= 0) return;
+    const sComp = COMPOUNDS.find(c => c.id === int.source);
+    const tComp = COMPOUNDS.find(c => c.id === int.target);
+    const sIntensity = Math.min(1.0, sConc * 2);
+    const tIntensity = Math.min(1.0, tConc * 2);
+    const product = sIntensity * tIntensity * int.strength;
+
+    if (int.type === "synergy") {
+      synergyCount++;
+      familyBoost[sComp.family] += product * 0.3;
+      familyBoost[tComp.family] += product * 0.2;
+    } else if (int.type === "masking") {
+      maskingCount++;
+      // Source masks target
+      familyBoost[tComp.family] -= product * 0.5;
+    } else if (int.type === "crossmodal") {
+      crossModalCount++;
+      familyBoost[sComp.family] += product * 0.15;
+      familyBoost[tComp.family] += product * 0.15;
+    }
+  });
+
+  // Perceived = base * boost, clamped 0-2
+  Object.keys(familyIntensities).forEach(f => {
+    familyIntensities[f].perceived = Math.max(0, Math.min(2.0, familyIntensities[f].base * familyBoost[f]));
+  });
+
+  return { familyIntensities, synergyCount, maskingCount, crossModalCount };
+}
+
+// ===== Build compound sliders =====
+function buildSliders() {
+  const container = document.getElementById("compound-sliders");
+  container.innerHTML = "";
+  COMPOUNDS.forEach(c => {
+    const div = document.createElement("div");
+    div.className = "ctrl-group";
+    const label = document.createElement("div");
+    label.className = "ctrl-label";
+    label.innerHTML = `<span style="color:${FAMILY_COLORS[c.family]}">${c.name}</span><span id="val-${c.id}">${(state[c.id]*100).toFixed(0)}%</span>`;
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = "0"; input.max = "100"; input.step = "1";
+    input.value = state[c.id] * 100;
+    input.addEventListener("input", function() {
+      state[c.id] = parseFloat(this.value) / 100;
+      document.getElementById("val-" + c.id).textContent = (state[c.id]*100).toFixed(0) + "%";
+      activePreset = "";
+      updatePresetButtons();
+      updateAll();
+    });
+    div.appendChild(label);
+    div.appendChild(input);
+    container.appendChild(div);
+  });
+}
+
+// ===== Presets =====
+function buildPresets() {
+  const container = document.getElementById("preset-btns");
+  container.innerHTML = "";
+  Object.keys(PRESETS).forEach(name => {
+    const btn = document.createElement("button");
+    btn.className = "preset-btn";
+    btn.textContent = name;
+    btn.addEventListener("click", function() {
+      applyPreset(name);
+    });
+    container.appendChild(btn);
+  });
+}
+
+function buildActionButtons() {
+  document.getElementById("reset-btn").addEventListener("click", function() {
+    COMPOUNDS.forEach(c => { state[c.id] = c.defaultConc; });
+    activePreset = "";
+    buildSliders();
+    updatePresetButtons();
+    updateAll();
+  });
+  document.getElementById("clear-btn").addEventListener("click", function() {
+    COMPOUNDS.forEach(c => { state[c.id] = 0; });
+    activePreset = "";
+    buildSliders();
+    updatePresetButtons();
+    updateAll();
+  });
+}
+
+function applyPreset(name) {
+  const preset = PRESETS[name];
+  Object.keys(preset).forEach(id => { state[id] = preset[id]; });
+  activePreset = name;
+  // Update sliders
+  COMPOUNDS.forEach(c => {
+    const slider = document.querySelector(`#compound-sliders input[type=range]`);
+  });
+  // Rebuild sliders to reflect new values
+  buildSliders();
+  updatePresetButtons();
+  updateAll();
+}
+
+function updatePresetButtons() {
+  document.querySelectorAll(".preset-btn").forEach(btn => {
+    if (btn.textContent === activePreset) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+}
+
+// ===== Family legend =====
+function buildFamilyLegend() {
+  const container = document.getElementById("family-legend");
+  container.innerHTML = "";
+  Object.keys(FAMILY_COLORS).forEach(f => {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.innerHTML = `<div class="legend-dot" style="background:${FAMILY_COLORS[f]}"></div> ${FAMILY_LABELS[f]}`;
+    container.appendChild(item);
+  });
+}
+
+// ===== D3 Force Graph =====
+let simulation, svgSel, gNode, gLink, graphW, graphH;
+
+function initGraph() {
+  const panel = document.getElementById("graph-panel");
+  const rect = panel.getBoundingClientRect();
+  graphW = Math.max(300, rect.width);
+  graphH = Math.max(300, rect.height);
+
+  svgSel = d3.select("#graph-svg");
+  svgSel.selectAll("*").remove();
+  svgSel.attr("viewBox", `0 0 ${graphW} ${graphH}`);
+
+  // Build node and link data
+  const nodes = COMPOUNDS.map(c => ({
+    ...c,
+    conc: state[c.id],
+    active: state[c.id] > 0.01,
+  }));
+
+  const links = INTERACTIONS.filter(int => {
+    return state[int.source] > 0.01 && state[int.target] > 0.01;
+  }).map(int => ({
+    ...int,
+    activeStrength: int.strength * Math.min(1.0, state[int.source]*2) * Math.min(1.0, state[int.target]*2),
+  }));
+
+  // Defs for arrowheads / glow
+  const defs = svgSel.append("defs");
+  // Glow filter
+  const filter = defs.append("filter").attr("id", "glow").attr("x", "-50%").attr("y", "-50%").attr("width", "200%").attr("height", "200%");
+  filter.append("feGaussianBlur").attr("stdDeviation", "3").attr("result", "coloredBlur");
+  const merge = filter.append("feMerge");
+  merge.append("feMergeNode").attr("in", "coloredBlur");
+  merge.append("feMergeNode").attr("in", "SourceGraphic");
+
+  gLink = svgSel.append("g").attr("class", "links");
+  gNode = svgSel.append("g").attr("class", "nodes");
+
+  simulation = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => d.id).distance(d => {
+      if (d.type === "synergy") return 60;
+      if (d.type === "masking") return 90;
+      return 75;
+    }).strength(d => 0.3 + d.activeStrength * 0.4))
+    .force("charge", d3.forceManyBody().strength(-180))
+    .force("center", d3.forceCenter(graphW / 2, graphH / 2))
+    .force("collide", d3.forceCollide().radius(d => nodeRadius(d) + 4))
+    .force("x", d3.forceX(graphW / 2).strength(0.03))
+    .force("y", d3.forceY(graphH / 2).strength(0.03));
+
+  updateGraph();
+
+  simulation.on("tick", () => {
+    if (!gLink || !gNode) return;
+    gLink.selectAll("line")
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+    gNode.selectAll("circle")
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y);
+    gNode.selectAll("text")
+      .attr("x", d => d.x)
+      .attr("y", d => d.y);
+  });
+}
+
+function nodeRadius(d) {
+  const conc = d.conc !== undefined ? d.conc : state[d.id];
+  return 6 + Math.max(0, conc) * 16;
+}
+
+function updateGraph() {
+  if (!simulation) return;
+
+  // Update node conc/active
+  simulation.nodes().forEach(n => {
+    n.conc = state[n.id];
+    n.active = state[n.id] > 0.01;
+  });
+
+  // Filter links
+  const activeLinks = INTERACTIONS.filter(int => {
+    return state[int.source] > 0.01 && state[int.target] > 0.01;
+  }).map(int => ({
+    ...int,
+    source: simulation.nodes().find(n => n.id === int.source),
+    target: simulation.nodes().find(n => n.id === int.target),
+  })).filter(l => l.source && l.target);
+
+  // Link colors
+  const linkColor = { synergy: "#3fb950", masking: "#f85149", crossmodal: "#58a6ff" };
+  const linkDash = { synergy: "none", masking: "6,3", crossmodal: "2,3" };
+
+  // Update links
+  const linkSel = gLink.selectAll("line").data(activeLinks, d => d.source.id + "-" + d.target.id);
+  linkSel.exit().remove();
+  const linkEnter = linkSel.enter().append("line")
+    .attr("stroke", d => linkColor[d.type])
+    .attr("stroke-width", d => 1 + d.activeStrength * 4)
+    .attr("stroke-dasharray", d => linkDash[d.type])
+    .attr("opacity", d => 0.3 + d.activeStrength * 0.5)
+    .attr("pointer-events", "none");
+  linkEnter.merge(linkSel)
+    .transition().duration(200)
+    .attr("stroke-width", d => 1 + d.activeStrength * 4)
+    .attr("opacity", d => 0.3 + d.activeStrength * 0.5);
+
+  // Update nodes
+  const nodeSel = gNode.selectAll("g.node-group").data(simulation.nodes(), d => d.id);
+  nodeSel.exit().remove();
+
+  const nodeEnter = nodeSel.enter().append("g")
+    .attr("class", "node-group")
+    .style("cursor", "grab")
+    .call(d3.drag()
+      .on("start", (event, d) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+      })
+      .on("drag", (event, d) => {
+        d.fx = event.x; d.fy = event.y;
+      })
+      .on("end", (event, d) => {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+      })
+    );
+
+  nodeEnter.append("circle")
+    .attr("r", d => nodeRadius(d))
+    .attr("fill", d => FAMILY_COLORS[d.family])
+    .attr("stroke", d => d.active ? "#fff" : "#3a4452")
+    .attr("stroke-width", d => d.active ? 1.5 : 0.8)
+    .attr("opacity", d => d.active ? 0.85 : 0.25)
+    .attr("filter", d => d.active ? "url(#glow)" : null);
+
+  nodeEnter.append("text")
+    .attr("text-anchor", "middle")
+    .attr("dy", d => nodeRadius(d) + 12)
+    .attr("font-size", "9px")
+    .attr("font-family", "system-ui, sans-serif")
+    .attr("fill", d => d.active ? "#c9d1d9" : "#4a5260")
+    .attr("pointer-events", "none")
+    .text(d => d.name);
+
+  // Tooltip events
+  nodeEnter.on("mouseover", function(event, d) {
+    const tt = document.getElementById("tooltip");
+    tt.innerHTML = `<div class="tt-name">${d.name}</div><div class="tt-desc">${d.desc}</div><div class="tt-desc" style="color:${FAMILY_COLORS[d.family]}">Family: ${FAMILY_LABELS[d.family]}</div><div class="tt-desc">Conc: ${(state[d.id]*100).toFixed(0)}% | Threshold: ${d.threshold}</div>`;
+    tt.style.display = "block";
+  })
+  .on("mousemove", function(event) {
+    const tt = document.getElementById("tooltip");
+    tt.style.left = (event.clientX + 12) + "px";
+    tt.style.top = (event.clientY + 12) + "px";
+  })
+  .on("mouseout", function() {
+    document.getElementById("tooltip").style.display = "none";
+  });
+
+  // Update existing nodes
+  const allNodes = nodeEnter.merge(nodeSel);
+  allNodes.select("circle")
+    .transition().duration(200)
+    .attr("r", d => nodeRadius(d))
+    .attr("opacity", d => d.active ? 0.85 : 0.25)
+    .attr("stroke", d => d.active ? "#fff" : "#3a4452")
+    .attr("stroke-width", d => d.active ? 1.5 : 0.8)
+    .attr("filter", d => d.active ? "url(#glow)" : null);
+  allNodes.select("text")
+    .attr("dy", d => nodeRadius(d) + 12)
+    .attr("fill", d => d.active ? "#c9d1d9" : "#4a5260")
+    .text(d => d.name);
+
+  // Update link data in simulation
+  simulation.force("link").links(activeLinks.map(l => ({
+    source: l.source.id,
+    target: l.target.id,
+    type: l.type,
+    strength: l.strength,
+    activeStrength: l.activeStrength,
+  })));
+  simulation.force("collide").radius(d => nodeRadius(d) + 4);
+  simulation.alpha(0.5).restart();
+}
+
+// ===== Metrics / Radar =====
+function updateMetrics() {
+  const result = computePerceived();
+  const fi = result.familyIntensities;
+
+  // Intensity bars
+  const barsContainer = document.getElementById("perceived-intensity-bars");
+  barsContainer.innerHTML = "";
+  Object.keys(FAMILY_COLORS).forEach(f => {
+    const perceived = fi[f].perceived;
+    const base = fi[f].base;
+    const pct = Math.min(100, perceived * 50);
+    const basePct = Math.min(100, base * 50);
+    const diff = perceived - base;
+    const diffColor = diff > 0.05 ? "#3fb950" : (diff < -0.05 ? "#f85149" : "#8b949e");
+    const diffText = diff > 0.05 ? `+${diff.toFixed(2)}` : (diff < -0.05 ? diff.toFixed(2) : "±0");
+    const row = document.createElement("div");
+    row.style.marginBottom = "0.35rem";
+    row.innerHTML = `
+      <div class="metric-row">
+        <span style="color:${FAMILY_COLORS[f]}">${FAMILY_LABELS[f]}</span>
+        <span style="color:${diffColor}">${diffText}</span>
+      </div>
+      <div style="background:#1a2330; border-radius:4px; height:6px; overflow:hidden; position:relative;">
+        <div style="position:absolute; left:0; top:0; height:100%; width:${basePct}%; background:#2a3441; border-radius:4px;"></div>
+        <div style="position:absolute; left:0; top:0; height:100%; width:${pct}%; background:${FAMILY_COLORS[f]}; border-radius:4px; opacity:0.85; transition:width .3s;"></div>
+      </div>
+    `;
+    barsContainer.appendChild(row);
+  });
+
+  // Interaction summary
+  const summary = document.getElementById("interaction-summary");
+  summary.innerHTML = `
+    <div class="metric-row"><span style="color:#3fb950">Synergy pairs</span><span>${result.synergyCount}</span></div>
+    <div class="metric-row"><span style="color:#f85149">Masking pairs</span><span>${result.maskingCount}</span></div>
+    <div class="metric-row"><span style="color:#58a6ff">Cross-modal</span><span>${result.crossModalCount}</span></div>
+  `;
+
+  // Radar chart
+  drawRadar(fi);
+}
+
+function drawRadar(fi) {
+  const radarSvg = d3.select("#radar-svg");
+  radarSvg.selectAll("*").remove();
+  const cx = 100, cy = 100, maxR = 70;
+  const families = Object.keys(FAMILY_COLORS);
+  const n = families.length;
+  const maxVal = 2.0;
+
+  // Grid circles
+  [0.25, 0.5, 0.75, 1.0].forEach(scale => {
+    radarSvg.append("circle")
+      .attr("cx", cx).attr("cy", cy)
+      .attr("r", maxR * scale)
+      .attr("fill", "none")
+      .attr("stroke", "#2a3441")
+      .attr("stroke-width", 0.5);
+  });
+
+  // Axes and labels
+  families.forEach((f, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const x2 = cx + Math.cos(angle) * maxR;
+    const y2 = cy + Math.sin(angle) * maxR;
+    radarSvg.append("line")
+      .attr("x1", cx).attr("y1", cy)
+      .attr("x2", x2).attr("y2", y2)
+      .attr("stroke", "#2a3441").attr("stroke-width", 0.5);
+    // Label
+    const lx = cx + Math.cos(angle) * (maxR + 14);
+    const ly = cy + Math.sin(angle) * (maxR + 14);
+    radarSvg.append("text")
+      .attr("x", lx).attr("y", ly)
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "middle")
+      .attr("font-size", "7px")
+      .attr("fill", FAMILY_COLORS[f])
+      .text(FAMILY_LABELS[f]);
+  });
+
+  // Base polygon (dashed)
+  const basePoints = families.map((f, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const r = (fi[f].base / maxVal) * maxR;
+    return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r];
+  });
+  radarSvg.append("polygon")
+    .attr("points", basePoints.map(p => p.join(",")).join(" "))
+    .attr("fill", "none")
+    .attr("stroke", "#4a5260")
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "3,2")
+    .attr("opacity", 0.5);
+
+  // Perceived polygon (solid)
+  const percPoints = families.map((f, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const r = (fi[f].perceived / maxVal) * maxR;
+    return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r];
+  });
+  radarSvg.append("polygon")
+    .attr("points", percPoints.map(p => p.join(",")).join(" "))
+    .attr("fill", "rgba(88,166,255,0.15)")
+    .attr("stroke", "#58a6ff")
+    .attr("stroke-width", 1.5);
+
+  // Dots at vertices
+  percPoints.forEach((p, i) => {
+    radarSvg.append("circle")
+      .attr("cx", p[0]).attr("cy", p[1])
+      .attr("r", 2.5)
+      .attr("fill", FAMILY_COLORS[families[i]]);
+  });
+
+  // Legend
+  radarSvg.append("text")
+    .attr("x", 100).attr("y", 195)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "6.5px")
+    .attr("fill", "#8b949e")
+    .text("Dashed = base · Solid = perceived (with interactions)");
+}
+
+// ===== Canvas 2D animated background =====
+let bgCanvas, bgCtx, bgParticles = [];
+let bgAnimating = true;
+
+function initBgCanvas() {
+  bgCanvas = document.getElementById("bg-canvas");
+  bgCtx = bgCanvas.getContext("2d");
+  resizeBgCanvas();
+  initBgParticles();
+  animateBg();
+}
+
+function resizeBgCanvas() {
+  if (!bgCanvas) return;
+  const container = document.getElementById("canvas-container");
+  const dpr = window.devicePixelRatio || 1;
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  bgCanvas.width = w * dpr;
+  bgCanvas.height = h * dpr;
+  bgCanvas.style.width = w + "px";
+  bgCanvas.style.height = h + "px";
+  bgCtx.scale(dpr, dpr);
+}
+
+function initBgParticles() {
+  bgParticles = [];
+  const w = document.getElementById("canvas-container").clientWidth;
+  const h = document.getElementById("canvas-container").clientHeight;
+  const count = Math.min(60, Math.floor(w * h / 12000));
+  const familyList = Object.values(FAMILY_COLORS);
+  for (let i = 0; i < count; i++) {
+    bgParticles.push({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      r: 1.5 + Math.random() * 3,
+      color: familyList[Math.floor(Math.random() * familyList.length)],
+      alpha: 0.1 + Math.random() * 0.15,
+      pulse: Math.random() * Math.PI * 2,
+    });
+  }
+}
+
+function animateBg() {
+  if (!bgAnimating) return;
+  const w = document.getElementById("canvas-container").clientWidth;
+  const h = document.getElementById("canvas-container").clientHeight;
+  bgCtx.clearRect(0, 0, w, h);
+
+  // Draw connections between nearby particles
+  bgCtx.lineWidth = 0.5;
+  for (let i = 0; i < bgParticles.length; i++) {
+    for (let j = i + 1; j < bgParticles.length; j++) {
+      const dx = bgParticles[i].x - bgParticles[j].x;
+      const dy = bgParticles[i].y - bgParticles[j].y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 120) {
+        bgCtx.strokeStyle = `rgba(88,166,255,${(1 - dist/120) * 0.08})`;
+        bgCtx.beginPath();
+        bgCtx.moveTo(bgParticles[i].x, bgParticles[i].y);
+        bgCtx.lineTo(bgParticles[j].x, bgParticles[j].y);
+        bgCtx.stroke();
+      }
+    }
+  }
+
+  // Draw particles
+  bgParticles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.pulse += 0.02;
+    if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+    if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+    const pulseR = p.r * (1 + Math.sin(p.pulse) * 0.3);
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, pulseR, 0, Math.PI * 2);
+    const rgba = p.color.replace("#", "");
+    const r = parseInt(rgba.substr(0,2), 16);
+    const g = parseInt(rgba.substr(2,2), 16);
+    const b = parseInt(rgba.substr(4,2), 16);
+    bgCtx.fillStyle = `rgba(${r},${g},${b},${p.alpha})`;
+    bgCtx.fill();
+  });
+
+  requestAnimationFrame(animateBg);
+}
+
+// ===== Update all =====
+let updateTimer = null;
+function updateAll() {
+  updateGraph();
+  updateMetrics();
+}
+
+// ===== Resize handler =====
+let resizeTimer = null;
+window.addEventListener("resize", function() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function() {
+    resizeBgCanvas();
+    initBgParticles();
+    // Re-init graph with new dimensions
+    initGraph();
+  }, 250);
+});
+
+// ===== Init =====
+function init() {
+  buildSliders();
+  buildPresets();
+  buildActionButtons();
+  buildFamilyLegend();
+  initBgCanvas();
+  initGraph();
+  updateMetrics();
+}
+
+// Wait for DOM
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
