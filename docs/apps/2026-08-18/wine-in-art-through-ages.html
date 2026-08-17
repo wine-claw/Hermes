@@ -1,0 +1,2026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine in Art Through the Ages — Visual History Gallery</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0a08;
+    --surface: #1a120e;
+    --surface2: #241814;
+    --border: #3a2a20;
+    --text: #e8d8c8;
+    --muted: #9a8070;
+    --accent: #c9a060;
+    --accent2: #8b4040;
+    --gold: #d4af37;
+    --crimson: #8b2030;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  /* Layout */
+  #app-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+  }
+
+  header {
+    text-align: center;
+    padding: 2rem 1rem 1.5rem;
+  }
+  header h1 {
+    font-size: clamp(1.8rem, 5vw, 2.8rem);
+    color: var(--gold);
+    text-shadow: 0 2px 20px rgba(212,175,55,0.15);
+    letter-spacing: 0.02em;
+  }
+  header .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-top: 0.5rem;
+    font-family: system-ui, sans-serif;
+    font-style: italic;
+  }
+
+  /* Timeline */
+  #timeline-bar {
+    position: relative;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    margin: 1.5rem 0 0.5rem;
+    overflow: hidden;
+  }
+  #timeline-progress {
+    position: absolute;
+    top: 0; left: 0; height: 100%;
+    background: linear-gradient(90deg, var(--gold), var(--accent));
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.6s ease;
+  }
+
+  #era-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+    margin: 1rem 0 1.5rem;
+  }
+  .era-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.4rem 0.7rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-family: system-ui, sans-serif;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .era-btn:hover { border-color: var(--accent); color: var(--text); }
+  .era-btn.active {
+    background: linear-gradient(135deg, var(--surface2), var(--surface));
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 0 12px rgba(212,175,55,0.15);
+  }
+
+  /* Artwork display */
+  #artwork-stage {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    min-height: 420px;
+  }
+
+  #artwork-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Info panel */
+  #info-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-top: 1rem;
+  }
+  #info-panel .era-label {
+    font-size: 0.72rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-family: system-ui, sans-serif;
+  }
+  #info-panel .artwork-title {
+    font-size: 1.4rem;
+    color: var(--gold);
+    margin: 0.3rem 0 0.2rem;
+  }
+  #info-panel .artwork-artist {
+    font-size: 0.9rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+  #info-panel .artwork-desc {
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-top: 0.8rem;
+    line-height: 1.65;
+    font-family: system-ui, sans-serif;
+  }
+  #info-panel .wine-context {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-family: system-ui, sans-serif;
+  }
+  #info-panel .wine-context strong { color: var(--accent); }
+
+  /* Controls */
+  #controls {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 1rem 0;
+    flex-wrap: wrap;
+  }
+  .ctrl-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: system-ui, sans-serif;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .ctrl-btn:hover { border-color: var(--accent); background: var(--surface); }
+  .ctrl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ctrl-btn .icon { font-size: 1rem; }
+
+  #play-btn {
+    background: linear-gradient(135deg, var(--surface2), var(--surface));
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+
+  #speed-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-family: system-ui, sans-serif;
+    cursor: pointer;
+  }
+
+  /* Palette */
+  #palette-bar {
+    display: flex;
+    gap: 4px;
+    margin-top: 0.8rem;
+    flex-wrap: wrap;
+  }
+  .palette-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .palette-swatch:hover { transform: scale(1.12); }
+  .palette-swatch.active { border: 2px solid var(--gold); box-shadow: 0 0 8px rgba(212,175,55,0.3); }
+
+  /* Gallery grid at bottom */
+  #gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.7rem;
+    margin-top: 1.5rem;
+  }
+  .thumb {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .thumb:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .thumb.active { border-color: var(--gold); box-shadow: 0 0 10px rgba(212,175,55,0.15); }
+  .thumb svg { width: 100%; height: 60px; display: block; margin-bottom: 0.3rem; }
+  .thumb .thumb-title {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: system-ui, sans-serif;
+    line-height: 1.2;
+  }
+  .thumb.active .thumb-title { color: var(--gold); }
+
+  /* Technique bar */
+  #technique-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-family: system-ui, sans-serif;
+    font-size: 0.82rem;
+  }
+  #technique-bar .label { color: var(--accent); font-weight: 600; }
+  #technique-bar .value { color: var(--text); }
+  #technique-bar .divider { width: 1px; height: 16px; background: var(--border); }
+
+  /* Decorative frame elements */
+  .frame-corner {
+    position: absolute;
+    width: 24px; height: 24px;
+    border: 2px solid var(--gold);
+    opacity: 0.4;
+  }
+  .frame-corner.tl { top: 8px; left: 8px; border-right: none; border-bottom: none; }
+  .frame-corner.tr { top: 8px; right: 8px; border-left: none; border-bottom: none; }
+  .frame-corner.bl { bottom: 8px; left: 8px; border-right: none; border-top: none; }
+  .frame-corner.br { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    #app-container { padding: 0.5rem; }
+    #artwork-stage { min-height: 280px; }
+    #info-panel { padding: 0.9rem; }
+    #info-panel .artwork-title { font-size: 1.15rem; }
+    #gallery-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.5rem; }
+    .thumb svg { height: 48px; }
+    #era-nav { gap: 0.25rem; }
+    .era-btn { font-size: 0.7rem; padding: 0.3rem 0.5rem; }
+    #controls { gap: 0.4rem; }
+    .ctrl-btn { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+    #technique-bar { gap: 0.5rem; font-size: 0.75rem; }
+    #technique-bar .divider { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="app-container">
+  <header>
+    <h1>Wine in Art Through the Ages</h1>
+    <p class="subtitle">From ancient Egyptian tomb walls to 20th-century canvases — explore how wine has shaped visual culture across 3,500 years of art</p>
+  </header>
+
+  <div id="timeline-bar">
+    <div id="timeline-progress"></div>
+  </div>
+
+  <div id="era-nav"></div>
+
+  <div id="controls">
+    <button class="ctrl-btn" id="prev-btn"><span class="icon">◀</span> Previous</button>
+    <button class="ctrl-btn" id="play-btn"><span class="icon">▶</span> <span id="play-label">Auto-Play</span></button>
+    <button class="ctrl-btn" id="next-btn">Next <span class="icon">▶</span></button>
+    <select id="speed-select">
+      <option value="4000">4s per artwork</option>
+      <option value="6000" selected>6s per artwork</option>
+      <option value="9000">9s per artwork</option>
+      <option value="15000">15s per artwork</option>
+    </select>
+  </div>
+
+  <div id="artwork-stage">
+    <div class="frame-corner tl"></div>
+    <div class="frame-corner tr"></div>
+    <div class="frame-corner bl"></div>
+    <div class="frame-corner br"></div>
+    <svg id="artwork-svg" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+
+  <div id="technique-bar">
+    <span class="label">Period:</span><span class="value" id="tb-period">—</span>
+    <div class="divider"></div>
+    <span class="label">Technique:</span><span class="value" id="tb-technique">—</span>
+    <div class="divider"></div>
+    <span class="label">Wine's Role:</span><span class="value" id="tb-role">—</span>
+  </div>
+
+  <div id="info-panel">
+    <div class="era-label" id="info-era">—</div>
+    <div class="artwork-title" id="info-title">—</div>
+    <div class="artwork-artist" id="info-artist">—</div>
+    <div class="artwork-desc" id="info-desc">—</div>
+    <div class="wine-context" id="info-context">—</div>
+  </div>
+
+  <div id="palette-bar"></div>
+
+  <div id="gallery-grid"></div>
+</div>
+
+<script>
+// ============================================================
+// WINE IN ART THROUGH THE AGES
+// 12 artworks across 3,500 years, each rendered as SVG
+// ============================================================
+
+const ARTWORKS = [
+  {
+    id: 'egypt',
+    era: 'Ancient Egypt',
+    period: 'c. 1400 BC',
+    title: 'Tomb of Nakht — Vintage Scene',
+    artist: 'Unknown Egyptian artisan, Theban Necropolis',
+    technique: 'Fresco on plastered tomb wall',
+    role: 'Funerary offering',
+    desc: 'Nobleman Nakht and his wife receive offerings of wine in the afterlife. Servants pour wine from amphorae into bowls while musicians play. The wall painting ensured eternal sustenance — wine was sacred to Osiris, god of the afterlife.',
+    context: 'Wine in ancient Egypt was exclusively for the elite and the gods. Vineyards along the Nile Delta produced red wine for temple rituals and royal banquets. The grape was associated with Osiris, and wine jars were often sealed with clay stoppers stamped with the vintage year and vineyard name — the world\'s first wine labels.',
+    palette: ['#d4a060', '#8b4020', '#3a1a0a', '#c98030', '#e8c080', '#5a2a10'],
+    svg: egyptSVG
+  },
+  {
+    id: 'greek',
+    era: 'Ancient Greece',
+    period: 'c. 500 BC',
+    title: 'Dionysian Kylix — Wine Cup Painting',
+    artist: 'Unknown red-figure vase painter, Attic workshop',
+    technique: 'Red-figure ceramic painting',
+    role: 'Symposium vessel',
+    desc: 'A kylix (drinking cup) depicts Dionysus, god of wine, holding a kantharos and surrounded by maenads and satyrs. The cup itself was used in symposia — elite drinking parties where wine was mixed with water and philosophical discourse flowed.',
+    context: 'The Greek symposium was a cornerstone of intellectual and social life. Wine was always diluted (never drunk neat — that was barbarian). The kylix\'s painted scene was revealed as the drinker emptied the cup, a playful reward for finishing. Dionysus represented both wine\'s ecstasy and its dangers — divine madness and liberation.',
+    palette: ['#1a0a08', '#c96020', '#e8a050', '#3a1a0a', '#d44020', '#8b3010'],
+    svg: greekSVG
+  },
+  {
+    id: 'roman',
+    era: 'Roman Empire',
+    period: 'c. 79 AD',
+    title: 'Pompeii Bacchus Fresco — Wall of the Mysteries',
+    artist: 'Unknown Roman fresco painter, Pompeii',
+    technique: 'Pompeian fresco (Fourth Style)',
+    role: 'Religious initiation',
+    desc: 'A covered figure, likely a bride being initiated into the cult of Bacchus, receives wine from a satyr. The Villa of the Mysteries fresco cycle depicts a secret Dionysian rite. Wine was the sacrament of the mystery cult — a path to communion with the god.',
+    context: 'Roman wine culture was ubiquitous. Pompeii alone had over 200 bars (thermopolia) serving wine. The cult of Bacchus promised spiritual rebirth through wine-induced ecstasy. When Vesuvius erupted in 79 AD, it preserved these frescoes in ash — and carbonised wine bottles still bearing the inscription "Vesvinum" (wine of Vesuvius).',
+    palette: ['#8b2030', '#d4a060', '#3a1a0a', '#c94030', '#5a2a10', '#e8c080'],
+    svg: romanSVG
+  },
+  {
+    id: 'medieval',
+    era: 'Medieval',
+    period: 'c. 1180 AD',
+    title: 'Hildegard von Bingen — Wine as Medicine',
+    artist: 'Monastic illumination, Rhineland',
+    technique: 'Tempera on vellum, gold leaf',
+    role: 'Monastic medicine',
+    desc: 'A medieval manuscript illumination shows a monk offering wine to a sick patient. Hildegard of Bingen prescribed wine for ailments from fever to melancholy. Monasteries were the preservers of viticulture through the Dark Ages — the cellars of Cluny and the vineyards of the Cistercians.',
+    context: 'After Rome fell, monasteries became Europe\'s wine custodians. The Rule of Saint Benedict allotted each monk a hemina (about 0.27 L) of wine per day — "because wine is not the drink of monks, but in our times one cannot persuade the monks of this." Wine was both medicine and sustenance, and monastic vineyards would become the great wine regions of Burgundy, Champagne, and the Rheingau.',
+    palette: ['#d4af37', '#8b1010', '#1a0a08', '#c98040', '#e8d080', '#5a1a08'],
+    svg: medievalSVG
+  },
+  {
+    id: 'renaissance',
+    era: 'Renaissance',
+    period: 'c. 1595',
+    title: 'Caravaggio — Bacchus',
+    artist: 'Michelangelo Merisi da Caravaggio',
+    technique: 'Oil on canvas',
+    role: 'Mythological allegory',
+    desc: 'A youthful Bacchus reclines with a goblet of dark red wine, offering it to the viewer. The fruit basket is overripe, the wine glass trembling — Caravaggio captured wine\'s sensual pleasure and its undertone of decay. The model was possibly Caravaggio\'s lover, Mario Minniti.',
+    context: 'Caravaggio\'s Bacchus was revolutionary — no idealised god, but a real, slightly unhealthy young man offering wine with a knowing smile. The wine in the glass is rendered with extraordinary precision — one can see the light refracting through it, the sediment settling. Caravaggio himself was notorious for tavern brawls and would die at 38, partly from the wine-soaked life Bacchus embodies.',
+    palette: ['#c94020', '#e8a060', '#3a1a0a', '#d4af37', '#8b3010', '#5a2a08'],
+    svg: caravaggioSVG
+  },
+  {
+    id: 'dutch',
+    era: 'Dutch Golden Age',
+    period: 'c. 1660',
+    title: 'Jan Steen — The Merry Family',
+    artist: 'Jan Havicksz. Steen',
+    technique: 'Oil on canvas',
+    role: 'Genre scene / moral warning',
+    desc: 'A raucous family scene: father and mother drink wine with children, a dog licks spills, laundry sits undone. Steen\'s "Jan Steen household" became a Dutch proverb for chaos. The wine flows freely, but the painting warns: "As the old sing, so pipe the young."',
+    context: 'The Dutch Golden Age saw wine become a middle-class pleasure, not just aristocratic. The Dutch Republic controlled the European wine trade through its shipping fleet. Genre paintings like Steen\'s carried moral messages beneath their merry surfaces — the wine bottle is both celebration and warning. The Dutch also invented the fusing of wine bottles with dark glass to protect contents from light.',
+    palette: ['#8b3010', '#d4a060', '#2a1a0a', '#c98040', '#e8c080', '#5a2a08'],
+    svg: dutchSVG
+  },
+  {
+    id: 'rococo',
+    era: 'Rococo',
+    period: 'c. 1750',
+    title: 'Watteau — Fête Galante with Wine',
+    artist: 'Jean-Antoine Watteau',
+    technique: 'Oil on panel',
+    role: 'Aristocratic leisure',
+    desc: 'Elegant figures in a parkland setting sip wine from delicate glasses while a musician plays. The fête galante — a new genre Watteau invented — depicted the aristocracy at dreamy leisure, wine as the accompaniment to refined conversation and flirtation.',
+    context: 'Rococo wine culture was all refinement and porcelain. Champagne had just been perfected by Dom Pérignon (c. 1693) and was becoming the drink of Versailles. The delicate flûte glass was born in this era. Wine was no longer just sustenance or medicine — it was a social art form, a prop in the theatre of aristocratic life that would soon be swept away by the Revolution.',
+    palette: ['#d4a0a0', '#8b4060', '#e8c0c0', '#c98080', '#5a2a30', '#f0d0d0'],
+    svg: rococoSVG
+  },
+  {
+    id: 'romantic',
+    era: 'Romantic',
+    period: 'c. 1827',
+    title: 'Delacroix — The Death of Sardanapalus',
+    artist: 'Eugène Delacroix',
+    technique: 'Oil on canvas',
+    role: 'Dramatic symbol',
+    desc: 'The last Assyrian king reclines on his bed amid the chaos of his final feast — wine goblets spill, concubines are slain, treasure is scattered. Wine here is the companion of excess and doom, the blood-red river of a civilisation\'s end.',
+    context: 'Delacroix\'s massive canvas (12 × 2.5m) shocked the 1827 Salon. Wine spills alongside blood — the colour of both is the same crimson. The Romantics saw wine as passion unleashed: Byron drank it, Shelley wrote of it, Hugo\'s characters raised it. Wine was the liquid of revolution, of the barricades, of liberté — and of the terrible price of both.',
+    palette: ['#8b1010', '#d4a020', '#3a0808', '#c94020', '#5a1008', '#e8a030'],
+    svg: romanticSVG
+  },
+  {
+    id: 'impressionist',
+    era: 'Impressionism',
+    period: 'c. 1876',
+    title: 'Renoir — Bal du moulin de la Galette',
+    artist: 'Pierre-Auguste Renoir',
+    technique: 'Oil on canvas',
+    role: 'Working-class celebration',
+    desc: 'A Sunday afternoon dance at Montmartre. Working-class Parisians drink wine and dance under dappled sunlight. Wine glasses catch the light, faces flush with pleasure. Renoir captures wine as ordinary joy — the democrat of pleasures.',
+    context: 'Impressionism was the art of the new Paris. The wine in this painting is not ceremonial or symbolic — it is just wine, drunk by ordinary people on a day off. Montmartre was then still semi-rural, with its own vineyards. The Moulin de la Galette sold wine from the last Parisian vineyard, the Clos Montmartre, which still exists today and produces ~1,000 bottles annually.',
+    palette: ['#d4b080', '#8ba060', '#c96040', '#e8d0a0', '#5a7a40', '#b08040'],
+    svg: impressionistSVG
+  },
+  {
+    id: 'postimp',
+    era: 'Post-Impressionism',
+    period: 'c. 1888',
+    title: 'Vincent van Gogh — The Night Café',
+    artist: 'Vincent van Gogh',
+    technique: 'Oil on canvas',
+    role: 'Symbol of alienation',
+    desc: 'A blood-red café room with green ceilings, empty glasses on tables. Van Gogh wrote he sought to express "the terrible passions of humanity by the means of red and green." Wine here is the anesthetic of the lonely and the poor.',
+    context: 'Van Gogh drank absinthe and wine heavily, often painting with a glass at his elbow. The Night Café in Arles was a real place where he spent his worst nights. The clashing red and green, the unnatural perspective — wine is present as the glasses and bottles, but it offers no comfort here. It is the drink of despair, not celebration. Van Gogh would cut off his ear months later in the same town.',
+    palette: ['#8b1010', '#2a5a20', '#c92010', '#1a3a10', '#d44020', '#5a2a08'],
+    svg: postimpSVG
+  },
+  {
+    id: 'cubist',
+    era: 'Cubism',
+    period: 'c. 1912',
+    title: 'Picasso — Bottle of Wine and Wineglass',
+    artist: 'Pablo Picasso',
+    technique: 'Oil and collage on canvas',
+    role: 'Fragmented still life',
+    desc: 'A bottle of wine and glass are shattered into geometric facets and overlaid with newspaper collage. The bistro table — wine, newspaper, cigarette — was the everyday subject of early Cubism, which turned ordinary Parisian café life into radical abstraction.',
+    context: 'Cubism\'s subjects were deliberately ordinary: bottles, glasses, newspapers, pipes. Picasso and Braque frequented the cafés of Montmartre, where wine by the carafe was cheap. By fragmenting the wine bottle, they shattered the Renaissance window of perspective that had framed art for 400 years. The café table with its wine bottle became the site where modern art was born.',
+    palette: ['#8b6030', '#d4b080', '#3a2a10', '#c98050', '#5a4020', '#e8c890'],
+    svg: cubistSVG
+  },
+  {
+    id: 'popart',
+    era: 'Pop Art',
+    period: 'c. 1962',
+    title: 'Wayne Thiebaud — Wine Glasses',
+    artist: 'Wayne Thiebaud',
+    technique: 'Oil on canvas',
+    role: 'Commodity celebration',
+    desc: 'Rows of wine glasses lined up like consumer goods, each outlined with thick strokes of paint that look like frosting. Thiebaud painted food and drink as American abundance — the deli counter rendered as high art.',
+    context: 'Pop Art elevated the everyday to museum status. Thiebaud\'s wine glasses, like his pies and cakes, are simultaneously sensual and ironic — they celebrate the abundance of post-war America while acknowledging its consumerism. Wine, once the drink of European aristocrats and priests, had become an American supermarket product. The painting\'s thick paint ridges mimic real glass rims, creating a trompe-l\'oeil of touch.',
+    palette: ['#8b2030', '#d46040', '#e8a080', '#c94020', '#5a1020', '#f0c0a0'],
+    svg: popartSVG
+  }
+];
+
+// ============================================================
+// SVG RENDERERS — each returns SVG string content for the artwork
+// ============================================================
+
+function egyptSVG() {
+  return `
+  <defs>
+    <linearGradient id="egypt-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8c080"/>
+      <stop offset="100%" stop-color="#d4a060"/>
+    </linearGradient>
+    <pattern id="egypt-pattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="#d4a060" opacity="0.1"/>
+      <circle cx="10" cy="10" r="1" fill="#8b4020" opacity="0.2"/>
+    </pattern>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#egypt-sky)"/>
+  <rect x="0" y="0" width="800" height="420" fill="url(#egypt-pattern)"/>
+  <!-- hieroglyphics band -->
+  <g opacity="0.4" fill="#5a2a10">
+    <rect x="40" y="20" width="8" height="8"/>
+    <circle cx="60" cy="24" r="5"/>
+    <rect x="75" y="18" width="12" height="12" rx="2"/>
+    <path d="M95 20 L100 28 L105 20 Z"/>
+    <rect x="120" y="20" width="8" height="8"/>
+    <circle cx="140" cy="24" r="5"/>
+    <rect x="155" y="18" width="12" height="12" rx="2"/>
+    <path d="M175 20 L180 28 L185 20 Z"/>
+    <rect x="200" y="20" width="8" height="8"/>
+    <circle cx="220" cy="24" r="5"/>
+    <rect x="235" y="18" width="12" height="12" rx="2"/>
+    <path d="M255 20 L260 28 L265 20 Z"/>
+    <rect x="280" y="20" width="8" height="8"/>
+    <circle cx="300" cy="24" r="5"/>
+    <rect x="315" y="18" width="12" height="12" rx="2"/>
+    <path d="M335 20 L340 28 L345 20 Z"/>
+  </g>
+  <!-- profile figure - Nakht -->
+  <g transform="translate(250, 80)" fill="#3a1a0a">
+    <!-- head profile -->
+    <path d="M20 10 Q10 10 8 25 Q8 40 18 42 L22 42 L20 52 Q20 60 28 60 L35 55 L30 45 Q40 42 40 25 Q40 10 30 8 Z" fill="#c98030"/>
+    <!-- eye -->
+    <ellipse cx="25" cy="25" rx="4" ry="3" fill="#fff"/>
+    <circle cx="26" cy="25" r="2" fill="#3a1a0a"/>
+    <!-- body -->
+    <path d="M30 55 L35 80 L30 160 L20 160 L18 80 Z" fill="#c98030"/>
+    <!-- white kilt -->
+    <path d="M18 80 L40 80 L42 160 L15 160 Z" fill="#e8c080"/>
+    <!-- arm holding amphora -->
+    <path d="M32 70 L50 75 L55 100 L48 102 L40 78 Z" fill="#c98030"/>
+    <!-- amphora -->
+    <ellipse cx="58" cy="95" rx="12" ry="22" fill="#8b4020"/>
+    <path d="M52 78 Q55 75 64 78 L62 72 Q58 70 54 72 Z" fill="#8b4020"/>
+    <rect x="55" y="68" width="6" height="8" fill="#5a2a10"/>
+  </g>
+  <!-- seated wife figure -->
+  <g transform="translate(430, 100)" fill="#c98030">
+    <!-- head profile facing left -->
+    <path d="M30 10 Q40 10 42 25 Q42 40 32 42 L28 42 L30 52 Q30 60 22 60 L15 55 L20 45 Q10 42 10 25 Q10 10 20 8 Z" fill="#c98030"/>
+    <ellipse cx="25" cy="25" rx="4" ry="3" fill="#fff"/>
+    <circle cx="24" cy="25" r="2" fill="#3a1a0a"/>
+    <!-- seated body -->
+    <path d="M18 55 L15 100 L50 100 L52 55 Z"/>
+    <!-- white dress -->
+    <path d="M15 55 L55 55 L58 130 L12 130 Z" fill="#e8c080"/>
+    <!-- legs sitting -->
+    <path d="M15 120 L60 120 L62 135 L12 135 Z" fill="#e8c080"/>
+  </g>
+  <!-- offering table with wine jars -->
+  <g transform="translate(350, 200)">
+    <rect x="0" y="20" width="120" height="12" fill="#5a2a10"/>
+    <rect x="0" y="32" width="120" height="4" fill="#3a1a0a"/>
+    <!-- wine jars on table -->
+    <ellipse cx="25" cy="8" rx="10" ry="18" fill="#8b4020"/>
+    <rect x="22" y="-5" width="6" height="10" fill="#5a2a10"/>
+    <ellipse cx="60" cy="8" rx="10" ry="18" fill="#8b4020"/>
+    <rect x="57" y="-5" width="6" height="10" fill="#5a2a10"/>
+    <ellipse cx="95" cy="8" rx="10" ry="18" fill="#8b4020"/>
+    <rect x="92" y="-5" width="6" height="10" fill="#5a2a10"/>
+  </g>
+  <!-- servant pouring wine -->
+  <g transform="translate(130, 160)" fill="#c98030">
+    <path d="M15 5 Q5 5 3 20 Q3 35 13 37 L17 37 L15 47 Q15 55 23 55 L30 50 L25 40 Q35 37 35 20 Q35 5 25 3 Z"/>
+    <ellipse cx="20" cy="20" rx="4" ry="3" fill="#fff"/>
+    <circle cx="21" cy="20" r="2" fill="#3a1a0a"/>
+    <path d="M25 50 L30 75 L25 140 L15 140 L12 75 Z"/>
+    <path d="M15 70 L35 70 L37 140 L10 140 Z" fill="#e8c080"/>
+    <!-- arm with jar pouring -->
+    <path d="M27 65 L45 68 L50 80 L43 82 L35 72 Z"/>
+    <ellipse cx="48" cy="75" rx="8" ry="12" fill="#8b4020"/>
+    <!-- wine stream -->
+    <path d="M48 87 Q48 95 46 110" stroke="#8b2030" stroke-width="3" fill="none" opacity="0.7"/>
+    <!-- bowl catching -->
+    <path d="M35 110 Q35 120 45 122 Q55 120 55 110 Z" fill="#5a2a10"/>
+  </g>
+  <!-- ground line -->
+  <rect x="0" y="370" width="800" height="50" fill="#5a2a10"/>
+  <rect x="0" y="370" width="800" height="3" fill="#3a1a0a"/>
+  <!-- palm tree decorative -->
+  <g transform="translate(650, 80)" opacity="0.5" fill="#5a2a10">
+    <rect x="18" y="40" width="4" height="200" fill="#3a1a0a"/>
+    <path d="M20 40 Q5 30 0 45 Q5 35 20 40 Q35 30 40 45 Q35 35 20 40 Q10 20 15 38 Q25 20 20 40 Q40 20 38 38 Q25 25 20 40"/>
+  </g>
+  `;
+}
+
+function greekSVG() {
+  return `
+  <defs>
+    <radialGradient id="greek-bg" cx="0.5" cy="0.4">
+      <stop offset="0%" stop-color="#3a1a0a"/>
+      <stop offset="100%" stop-color="#1a0a08"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#greek-bg)"/>
+  <!-- kylix (drinking cup) silhouette -->
+  <ellipse cx="400" cy="260" rx="280" ry="30" fill="#1a0a08" opacity="0.3"/>
+  <path d="M140 200 Q140 260 400 260 Q660 260 660 200 L640 200 Q640 250 400 250 Q160 250 160 200 Z" fill="#d44020" opacity="0.85"/>
+  <ellipse cx="400" cy="200" rx="260" ry="12" fill="#c96020" opacity="0.9"/>
+  <ellipse cx="400" cy="198" rx="260" ry="6" fill="#e8a050" opacity="0.6"/>
+  <!-- kylix stem -->
+  <rect x="390" y="260" width="20" height="40" fill="#d44020" opacity="0.85"/>
+  <ellipse cx="400" cy="305" rx="50" ry="8" fill="#c96020" opacity="0.8"/>
+  <!-- meander pattern border -->
+  <g stroke="#c96020" stroke-width="2" fill="none" opacity="0.5">
+    <path d="M120 195 L120 185 L130 185 L130 190 L125 190 L125 195 Z"/>
+    <path d="M140 195 L140 185 L150 185 L150 190 L145 190 L145 195 Z"/>
+    <path d="M160 195 L160 185 L170 185 L170 190 L165 190 L165 195 Z"/>
+    <path d="M640 195 L640 185 L650 185 L650 190 L645 190 L645 195 Z"/>
+    <path d="M660 195 L660 185 L670 185 L670 190 L665 190 L665 195 Z"/>
+    <path d="M680 195 L680 185 L690 185 L690 190 L685 190 L685 195 Z"/>
+  </g>
+  <!-- Dionysus figure (red-figure style: dark body, red background) -->
+  <g transform="translate(400, 100)">
+    <!-- body silhouette in dark -->
+    <g fill="#1a0a08">
+      <!-- head with ivy wreath -->
+      <ellipse cx="0" cy="20" rx="14" ry="16"/>
+      <!-- torso -->
+      <path d="M-10 35 Q-12 55 -8 80 L8 80 Q12 55 10 35 Z"/>
+      <!-- legs -->
+      <path d="M-8 80 L-12 140 L-4 140 L0 85 Z"/>
+      <path d="M8 80 L12 140 L4 140 L0 85 Z"/>
+      <!-- arm holding kantharos -->
+      <path d="M10 40 L25 45 L30 65 L22 67 L15 45 Z"/>
+      <!-- other arm -->
+      <path d="M-10 40 L-25 55 L-22 75 L-15 73 L-8 45 Z"/>
+    </g>
+    <!-- ivy wreath -->
+    <g fill="#2a5a20" stroke="#1a3a10" stroke-width="1">
+      <ellipse cx="-8" cy="6" rx="5" ry="3" transform="rotate(-30 -8 6)"/>
+      <ellipse cx="0" cy="4" rx="5" ry="3"/>
+      <ellipse cx="8" cy="6" rx="5" ry="3" transform="rotate(30 8 6)"/>
+      <ellipse cx="-14" cy="10" rx="4" ry="2" transform="rotate(-50 -14 10)"/>
+      <ellipse cx="14" cy="10" rx="4" ry="2" transform="rotate(50 14 10)"/>
+    </g>
+    <!-- eye (red-figure: white outline) -->
+    <ellipse cx="4" cy="18" rx="3" ry="2" fill="#e8a050" opacity="0.4"/>
+    <!-- kantharos (wine cup with handles) -->
+    <g transform="translate(28, 50)">
+      <path d="M0 0 Q-8 5 -5 20 Q0 28 10 28 Q20 28 25 20 Q28 5 20 0 Z" fill="#d44020"/>
+      <path d="M-8 5 Q-18 10 -15 25" stroke="#d44020" stroke-width="2.5" fill="none"/>
+      <path d="M28 5 Q38 10 35 25" stroke="#d44020" stroke-width="2.5" fill="none"/>
+      <!-- wine in cup -->
+      <ellipse cx="10" cy="4" rx="10" ry="3" fill="#8b3010"/>
+    </g>
+  </g>
+  <!-- maenad (female follower) to the right -->
+  <g transform="translate(600, 90)" fill="#1a0a08">
+    <ellipse cx="0" cy="20" rx="12" ry="14"/>
+    <!-- flowing dress -->
+    <path d="M-8 34 Q-15 60 -18 110 L18 110 Q15 60 8 34 Z"/>
+    <!-- arm raised -->
+    <path d="M8 38 L22 25 L25 40 L15 45 Z"/>
+    <!-- tympanum (hand drum) -->
+    <circle cx="25" cy="20" r="12" fill="#1a0a08" stroke="#d44020" stroke-width="2"/>
+    <line x1="20" y1="10" x2="30" y2="30" stroke="#d44020" stroke-width="1"/>
+  </g>
+  <!-- satyr to the left -->
+  <g transform="translate(200, 90)" fill="#1a0a08">
+    <ellipse cx="0" cy="20" rx="12" ry="14"/>
+    <!-- horns -->
+    <path d="M-5 8 L-10 0 L-7 5 Z" fill="#1a0a08"/>
+    <path d="M5 8 L10 0 L7 5 Z" fill="#1a0a08"/>
+    <!-- body -->
+    <path d="M-8 34 L-12 80 L-6 130 L6 130 L12 80 L8 34 Z"/>
+    <!-- goat legs -->
+    <path d="M-6 120 L-14 140 L-8 142 L-4 125 Z"/>
+    <path d="M6 120 L14 140 L8 142 L4 125 Z"/>
+    <!-- arm with thyrsus -->
+    <path d="M8 40 L25 30 L28 50 L18 48 Z"/>
+    <!-- thyrsus staff -->
+    <line x1="28" y1="30" x2="28" y2="-10" stroke="#d44020" stroke-width="2"/>
+    <ellipse cx="28" cy="-12" rx="5" ry="6" fill="#c96020"/>
+    <ellipse cx="24" cy="-15" rx="4" ry="5" fill="#d44020" opacity="0.6"/>
+    <ellipse cx="32" cy="-15" rx="4" ry="5" fill="#d44020" opacity="0.6"/>
+  </g>
+  <!-- grapevine decoration -->
+  <g transform="translate(100, 300)" opacity="0.6" fill="#8b3010">
+    <path d="M0 0 Q40 -20 80 0 Q120 20 160 0" stroke="#2a5a20" stroke-width="2" fill="none"/>
+    <circle cx="20" cy="-10" r="4"/>
+    <circle cx="60" cy="-8" r="4"/>
+    <circle cx="100" cy="5" r="4"/>
+    <circle cx="40" cy="-5" r="3" fill="#d44020"/>
+    <circle cx="80" cy="-2" r="3" fill="#d44020"/>
+  </g>
+  <g transform="translate(560, 310)" opacity="0.6" fill="#8b3010">
+    <path d="M0 0 Q40 20 80 0 Q120 -20 160 0" stroke="#2a5a20" stroke-width="2" fill="none"/>
+    <circle cx="20" cy="10" r="4"/>
+    <circle cx="60" cy="8" r="4"/>
+    <circle cx="100" cy="-5" r="4"/>
+    <circle cx="40" cy="5" r="3" fill="#d44020"/>
+    <circle cx="80" cy="2" r="3" fill="#d44020"/>
+  </g>
+  `;
+}
+
+function romanSVG() {
+  return `
+  <defs>
+    <linearGradient id="roman-wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8b2030" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#5a1020" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#3a0a10" stop-opacity="0.7"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="#d4a060"/>
+  <rect x="0" y="0" width="800" height="420" fill="url(#roman-wall)"/>
+  <!-- architectural elements - Roman wall panels -->
+  <g stroke="#3a1a0a" stroke-width="1" opacity="0.3" fill="none">
+    <rect x="20" y="20" width="760" height="380"/>
+    <line x1="200" y1="20" x2="200" y2="400"/>
+    <line x1="600" y1="20" x2="600" y2="400"/>
+  </g>
+  <!-- central seated figure (initiate/bride) -->
+  <g transform="translate(400, 60)">
+    <!-- veiled figure -->
+    <path d="M-50 10 Q-50 5 -40 0 Q0 -10 40 0 Q50 5 50 10 L60 200 Q60 210 50 215 L-50 215 Q-60 210 -60 200 Z" fill="#c94030" opacity="0.9"/>
+    <!-- veil draping -->
+    <path d="M-50 5 Q-60 30 -55 60 L-40 55 Q-42 25 -35 5 Z" fill="#8b2030" opacity="0.7"/>
+    <path d="M50 5 Q60 30 55 60 L40 55 Q42 25 35 5 Z" fill="#8b2030" opacity="0.7"/>
+    <!-- gold trim -->
+    <path d="M-50 0 Q0 -10 50 0" stroke="#d4af37" stroke-width="2" fill="none" opacity="0.6"/>
+    <!-- seated legs -->
+    <path d="M-40 180 L-30 250 L-15 250 L-25 180 Z" fill="#c94030"/>
+    <path d="M40 180 L30 250 L15 250 L25 180 Z" fill="#c94030"/>
+    <!-- hands in lap -->
+    <ellipse cx="-10" cy="150" rx="8" ry="5" fill="#e8c080" opacity="0.6"/>
+    <ellipse cx="10" cy="150" rx="8" ry="5" fill="#e8c080" opacity="0.6"/>
+  </g>
+  <!-- satyr offering wine (right side) -->
+  <g transform="translate(620, 120)">
+    <!-- body -->
+    <path d="M-15 30 L-20 80 L-10 120 L10 120 L20 80 L15 30 Z" fill="#5a2a10"/>
+    <!-- head -->
+    <ellipse cx="0" cy="20" rx="12" ry="14" fill="#8b4020"/>
+    <!-- pointed ears -->
+    <path d="M-12 15 L-18 5 L-10 12 Z" fill="#8b4020"/>
+    <path d="M12 15 L18 5 L10 12 Z" fill="#8b4020"/>
+    <!-- arm extended with wine vessel -->
+    <path d="M-15 40 L-40 55 L-38 70 L-20 55 Z" fill="#5a2a10"/>
+    <!-- rhyton (horn-shaped vessel) -->
+    <path d="M-45 50 Q-55 55 -52 75 Q-48 85 -38 80 L-35 58 Z" fill="#d4af37" opacity="0.7"/>
+    <path d="M-52 75 Q-50 80 -42 78" stroke="#d4af37" stroke-width="1.5" fill="none"/>
+    <!-- wine stream from rhyton -->
+    <path d="M-48 80 Q-50 90 -45 100 Q-42 105 -38 102" stroke="#8b1010" stroke-width="2" fill="none" opacity="0.7"/>
+  </g>
+  <!-- winged figure / Cupid (left side) -->
+  <g transform="translate(150, 100)">
+    <ellipse cx="0" cy="15" rx="10" ry="12" fill="#e8c080"/>
+    <!-- wings -->
+    <path d="M-8 10 Q-25 0 -35 15 Q-20 12 -10 18 Z" fill="#e8c080" opacity="0.7"/>
+    <path d="M8 10 Q25 0 35 15 Q20 12 10 18 Z" fill="#e8c080" opacity="0.7"/>
+    <!-- body -->
+    <path d="M-8 25 L-10 60 L-5 90 L5 90 L10 60 L8 25 Z" fill="#e8c080" opacity="0.8"/>
+    <!-- arm with whip/flagellum -->
+    <path d="M-8 35 L-25 30 L-28 50 L-20 48 Z" fill="#e8c080" opacity="0.8"/>
+    <path d="M-28 50 Q-35 60 -30 75 Q-25 80 -20 70" stroke="#8b2030" stroke-width="1" fill="none" opacity="0.6"/>
+  </g>
+  <!-- Bacchus figure at top center -->
+  <g transform="translate(400, 0)" opacity="0.4">
+    <!-- silhouette of Bacchus lounging -->
+    <ellipse cx="0" cy="15" rx="20" ry="14" fill="#3a1a0a"/>
+    <path d="M-20 25 L-30 35 L-25 50 L20 50 L30 35 L20 25 Z" fill="#3a1a0a"/>
+    <!-- vine wreath -->
+    <g fill="#2a5a20" opacity="0.6">
+      <ellipse cx="-18" cy="8" rx="5" ry="3" transform="rotate(-30 -18 8)"/>
+      <ellipse cx="0" cy="5" rx="5" ry="3"/>
+      <ellipse cx="18" cy="8" rx="5" ry="3" transform="rotate(30 18 8)"/>
+    </g>
+  </g>
+  <!-- wine amphorae at bottom -->
+  <g transform="translate(100, 320)" opacity="0.7">
+    <ellipse cx="0" cy="0" rx="18" ry="35" fill="#5a2a10"/>
+    <path d="M-8 -35 Q0 -42 8 -35 L6 -48 Q0 -50 -6 -48 Z" fill="#5a2a10"/>
+    <rect x="-4" y="-52" width="8" height="10" fill="#3a1a0a"/>
+    <!-- handles -->
+    <path d="M-18 -25 Q-25 -15 -18 -5" stroke="#5a2a10" stroke-width="3" fill="none"/>
+    <path d="M18 -25 Q25 -15 18 -5" stroke="#5a2a10" stroke-width="3" fill="none"/>
+  </g>
+  <g transform="translate(720, 320)" opacity="0.7">
+    <ellipse cx="0" cy="0" rx="18" ry="35" fill="#5a2a10"/>
+    <path d="M-8 -35 Q0 -42 8 -35 L6 -48 Q0 -50 -6 -48 Z" fill="#5a2a10"/>
+    <rect x="-4" y="-52" width="8" height="10" fill="#3a1a0a"/>
+    <path d="M-18 -25 Q-25 -15 -18 -5" stroke="#5a2a10" stroke-width="3" fill="none"/>
+    <path d="M18 -25 Q25 -15 18 -5" stroke="#5a2a10" stroke-width="3" fill="none"/>
+  </g>
+  <!-- floor pattern -->
+  <rect x="0" y="380" width="800" height="40" fill="#3a1a0a"/>
+  <g fill="#5a2a10" opacity="0.5">
+    <rect x="0" y="380" width="40" height="40"/>
+    <rect x="80" y="380" width="40" height="40"/>
+    <rect x="160" y="380" width="40" height="40"/>
+    <rect x="240" y="380" width="40" height="40"/>
+    <rect x="320" y="380" width="40" height="40"/>
+    <rect x="400" y="380" width="40" height="40"/>
+    <rect x="480" y="380" width="40" height="40"/>
+    <rect x="560" y="380" width="40" height="40"/>
+    <rect x="640" y="380" width="40" height="40"/>
+    <rect x="720" y="380" width="40" height="40"/>
+  </g>
+  `;
+}
+
+function medievalSVG() {
+  return `
+  <defs>
+    <linearGradient id="med-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a0a08"/>
+      <stop offset="100%" stop-color="#3a1a0a"/>
+    </linearGradient>
+    <linearGradient id="med-gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#8b8030"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#med-bg)"/>
+  <!-- ornate border frame -->
+  <rect x="10" y="10" width="780" height="400" fill="none" stroke="url(#med-gold)" stroke-width="3" rx="4"/>
+  <rect x="18" y="18" width="764" height="384" fill="none" stroke="url(#med-gold)" stroke-width="1" rx="2"/>
+  <!-- corner decorations -->
+  <g fill="url(#med-gold)" opacity="0.6">
+    <path d="M10 10 L40 10 L40 15 L15 15 L15 40 L10 40 Z"/>
+    <path d="M790 10 L760 10 L760 15 L785 15 L785 40 L790 40 Z"/>
+    <path d="M10 410 L40 410 L40 405 L15 405 L15 380 L10 380 Z"/>
+    <path d="M790 410 L760 410 L760 405 L785 405 L785 380 L790 380 Z"/>
+  </g>
+  <!-- manuscript page area -->
+  <rect x="40" y="40" width="720" height="340" fill="#e8d080" opacity="0.15"/>
+  <!-- initial capital "V" decorated -->
+  <g transform="translate(60, 60)">
+    <rect x="0" y="0" width="60" height="80" fill="url(#med-gold)" rx="4" opacity="0.8"/>
+    <text x="30" y="58" text-anchor="middle" font-size="48" fill="#1a0a08" font-family="Georgia, serif" font-weight="bold">V</text>
+    <!-- vine decoration in initial -->
+    <g stroke="#1a0a08" stroke-width="1" fill="none" opacity="0.5">
+      <path d="M5 65 Q20 70 30 65 Q40 60 55 65"/>
+      <circle cx="15" cy="68" r="2" fill="#8b1010"/>
+      <circle cx="40" cy="63" r="2" fill="#8b1010"/>
+    </g>
+  </g>
+  <!-- Latin text lines (decorative) -->
+  <g fill="#e8d080" opacity="0.25" font-family="Georgia, serif">
+    <rect x="130" y="70" width="620" height="3" rx="1"/>
+    <rect x="130" y="80" width="600" height="3" rx="1"/>
+    <rect x="130" y="90" width="580" height="3" rx="1"/>
+    <rect x="130" y="100" width="610" height="3" rx="1"/>
+    <rect x="130" y="110" width="560" height="3" rx="1"/>
+    <rect x="60" y="165" width="790" height="3" rx="1"/>
+    <rect x="60" y="175" width="750" height="3" rx="1"/>
+    <rect x="60" y="185" width="770" height="3" rx="1"/>
+    <rect x="60" y="195" width="720" height="3" rx="1"/>
+    <rect x="60" y="205" width="760" height="3" rx="1"/>
+    <rect x="60" y="215" width="740" height="3" rx="1"/>
+    <rect x="60" y="225" width="780" height="3" rx="1"/>
+    <rect x="60" y="235" width="700" height="3" rx="1"/>
+  </g>
+  <!-- illumination: monk offering wine to sick person -->
+  <g transform="translate(400, 260)">
+    <!-- arch frame for illumination -->
+    <path d="M-140 -40 Q-140 -70 0 -70 Q140 -70 140 -40 L140 100 L-140 100 Z" fill="#3a1a0a" stroke="url(#med-gold)" stroke-width="2"/>
+    <!-- monk figure -->
+    <g transform="translate(-60, -30)">
+      <!-- monk habit (brown robe) -->
+      <path d="M-25 0 L-30 50 L-20 90 L20 90 L30 50 L25 0 Z" fill="#5a2a10"/>
+      <!-- hood -->
+      <path d="M-18 -10 Q-20 0 -18 10 L18 10 Q20 0 18 -10 Q0 -18 -18 -10 Z" fill="#5a2a10"/>
+      <!-- face -->
+      <ellipse cx="0" cy="0" rx="8" ry="10" fill="#d4a060" opacity="0.7"/>
+      <!-- tonsure -->
+      <path d="M-6 -6 Q0 -10 6 -6" stroke="#1a0a08" stroke-width="1" fill="none"/>
+      <!-- hands holding wine cup -->
+      <ellipse cx="-5" cy="30" rx="5" ry="4" fill="#d4a060" opacity="0.7"/>
+      <ellipse cx="5" cy="30" rx="5" ry="4" fill="#d4a060" opacity="0.7"/>
+      <!-- chalice -->
+      <path d="M-8 33 L-12 45 L12 45 L8 33 Z" fill="url(#med-gold)"/>
+      <ellipse cx="0" cy="33" rx="8" ry="3" fill="#8b1010"/>
+      <rect x="-2" y="45" width="4" height="8" fill="url(#med-gold)"/>
+      <ellipse cx="0" cy="53" rx="8" ry="3" fill="url(#med-gold)"/>
+    </g>
+    <!-- sick patient in bed -->
+    <g transform="translate(60, 0)">
+      <!-- bed -->
+      <rect x="-35" y="30" width="70" height="8" fill="#8b4020"/>
+      <rect x="-35" y="38" width="70" height="5" fill="#5a2a10"/>
+      <rect x="-30" y="43" width="4" height="30" fill="#5a2a10"/>
+      <rect x="26" y="43" width="4" height="30" fill="#5a2a10"/>
+      <!-- blanket -->
+      <path d="M-30 20 Q-32 35 -28 38 L28 38 Q32 35 30 20 Z" fill="#8b1010"/>
+      <!-- patient head on pillow -->
+      <ellipse cx="0" cy="18" rx="10" ry="8" fill="#d4a060" opacity="0.5"/>
+      <path d="M-12 15 Q-15 20 -10 22 L10 22 Q15 20 12 15 Z" fill="#e8d080" opacity="0.6"/>
+      <!-- patient hand reaching for cup -->
+      <ellipse cx="-15" cy="30" rx="4" ry="3" fill="#d4a060" opacity="0.5"/>
+    </g>
+  </g>
+  <!-- decorative grapevine border at bottom -->
+  <g transform="translate(50, 370)" opacity="0.5">
+    <path d="M0 0 Q40 -15 80 0 Q120 -15 160 0 Q200 -15 240 0 Q280 -15 320 0 Q360 -15 400 0 Q440 -15 480 0 Q520 -15 560 0 Q600 -15 640 0 Q680 -15 700 0" stroke="#2a5a20" stroke-width="2" fill="none"/>
+    <g fill="#8b1010">
+      <circle cx="40" cy="-10" r="3"/>
+      <circle cx="44" cy="-8" r="3"/>
+      <circle cx="38" cy="-7" r="2.5"/>
+      <circle cx="120" cy="-10" r="3"/>
+      <circle cx="124" cy="-8" r="3"/>
+      <circle cx="118" cy="-7" r="2.5"/>
+      <circle cx="200" cy="-10" r="3"/>
+      <circle cx="204" cy="-8" r="3"/>
+      <circle cx="198" cy="-7" r="2.5"/>
+      <circle cx="280" cy="-10" r="3"/>
+      <circle cx="284" cy="-8" r="3"/>
+      <circle cx="278" cy="-7" r="2.5"/>
+      <circle cx="360" cy="-10" r="3"/>
+      <circle cx="364" cy="-8" r="3"/>
+      <circle cx="358" cy="-7" r="2.5"/>
+      <circle cx="440" cy="-10" r="3"/>
+      <circle cx="444" cy="-8" r="3"/>
+      <circle cx="438" cy="-7" r="2.5"/>
+      <circle cx="520" cy="-10" r="3"/>
+      <circle cx="524" cy="-8" r="3"/>
+      <circle cx="518" cy="-7" r="2.5"/>
+      <circle cx="600" cy="-10" r="3"/>
+      <circle cx="604" cy="-8" r="3"/>
+      <circle cx="598" cy="-7" r="2.5"/>
+    </g>
+  </g>
+  `;
+}
+
+function caravaggioSVG() {
+  return `
+  <defs>
+    <radialGradient id="cara-bg" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0%" stop-color="#3a1a0a"/>
+      <stop offset="100%" stop-color="#0a0504"/>
+    </radialGradient>
+    <radialGradient id="cara-skin" cx="0.5" cy="0.3">
+      <stop offset="0%" stop-color="#e8a060"/>
+      <stop offset="100%" stop-color="#8b4020"/>
+    </radialGradient>
+    <radialGradient id="cara-wine" cx="0.5" cy="0.4">
+      <stop offset="0%" stop-color="#c92010"/>
+      <stop offset="60%" stop-color="#8b1010"/>
+      <stop offset="100%" stop-color="#3a0808"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#cara-bg)"/>
+  <!-- dramatic spotlight -->
+  <ellipse cx="400" cy="160" rx="250" ry="180" fill="#d4a060" opacity="0.08"/>
+  <!-- Bacchus reclining figure -->
+  <g transform="translate(400, 170)">
+    <!-- white draped robe -->
+    <path d="M-120 80 Q-130 100 -100 120 L100 120 Q130 100 120 80 Q80 50 -80 50 Z" fill="#e8d0a0" opacity="0.85"/>
+    <path d="M-100 50 Q-80 40 -50 45 L-50 55 Q-80 50 -100 55 Z" fill="#c98040" opacity="0.5"/>
+    <!-- body/torso (semi-reclined) -->
+    <ellipse cx="0" cy="20" rx="70" ry="50" fill="url(#cara-skin)" opacity="0.8"/>
+    <!-- head -->
+    <ellipse cx="-50" cy="-10" rx="25" ry="30" fill="url(#cara-skin)"/>
+    <!-- dark curly hair -->
+    <path d="M-70 -25 Q-72 -38 -60 -42 Q-50 -45 -40 -42 Q-30 -38 -28 -25 Q-30 -18 -35 -15 Q-50 -12 -65 -15 Q-72 -18 -70 -25 Z" fill="#3a1a08"/>
+    <path d="M-55 -35 Q-52 -38 -48 -34" stroke="#3a1a08" stroke-width="2" fill="none"/>
+    <path d="M-62 -32 Q-58 -36 -54 -32" stroke="#3a1a08" stroke-width="2" fill="none"/>
+    <!-- ivy wreath in hair -->
+    <g fill="#2a5a20" opacity="0.7">
+      <ellipse cx="-60" cy="-35" rx="6" ry="3" transform="rotate(-20 -60 -35)"/>
+      <ellipse cx="-45" cy="-38" rx="6" ry="3" transform="rotate(20 -45 -38)"/>
+      <ellipse cx="-68" cy="-28" rx="5" ry="2" transform="rotate(-40 -68 -28)"/>
+    </g>
+    <!-- face features -->
+    <ellipse cx="-58" cy="-8" rx="2" ry="3" fill="#3a1a0a"/>
+    <path d="M-58 -5 Q-55 0 -52 -2" stroke="#3a1a0a" stroke-width="0.5" fill="none"/>
+    <path d="M-60 8 Q-55 10 -50 8" stroke="#8b3010" stroke-width="1" fill="none"/>
+    <!-- rose-tinted cheek -->
+    <ellipse cx="-53" cy="3" rx="6" ry="4" fill="#d46060" opacity="0.3"/>
+    <!-- right arm extended toward viewer with goblet -->
+    <path d="M30 10 Q60 15 80 25 L85 40 Q60 35 35 30 Z" fill="url(#cara-skin)"/>
+    <!-- hand holding goblet -->
+    <ellipse cx="82" cy="30" rx="12" ry="8" fill="url(#cara-skin)"/>
+    <!-- wine goblet (kantharos style) -->
+    <g transform="translate(85, 25)">
+      <path d="M-15 0 Q-18 10 -12 25 Q0 32 12 25 Q18 10 15 0 Z" fill="url(#cara-wine)" opacity="0.9"/>
+      <!-- wine surface with reflection -->
+      <ellipse cx="0" cy="0" rx="15" ry="4" fill="#c92010"/>
+      <ellipse cx="0" cy="-1" rx="12" ry="2" fill="#e84020" opacity="0.4"/>
+      <!-- glass highlights -->
+      <path d="M-10 5 Q-12 15 -8 22" stroke="#e86040" stroke-width="1" fill="none" opacity="0.5"/>
+      <!-- stem and base -->
+      <rect x="-2" y="30" width="4" height="12" fill="#d4af37" opacity="0.6"/>
+      <ellipse cx="0" cy="43" rx="10" ry="3" fill="#d4af37" opacity="0.5"/>
+    </g>
+    <!-- left arm resting -->
+    <path d="M-70 30 Q-90 35 -95 55 L-85 58 Q-78 40 -60 38 Z" fill="url(#cara-skin)" opacity="0.8"/>
+    <!-- fruit bowl (still life at bottom) -->
+    <g transform="translate(-80, 100)">
+      <path d="M-30 0 Q-35 10 -20 15 L20 15 Q35 10 30 0 Z" fill="#8b4020"/>
+      <!-- grapes -->
+      <g fill="#8b2030">
+        <circle cx="-10" cy="-2" r="5"/>
+        <circle cx="-5" cy="-1" r="5"/>
+        <circle cx="0" cy="-2" r="5"/>
+        <circle cx="5" cy="-1" r="5"/>
+        <circle cx="-8" cy="-7" r="4.5"/>
+        <circle cx="-3" cy="-6" r="4.5"/>
+        <circle cx="2" cy="-7" r="4.5"/>
+        <circle cx="-1" cy="-11" r="4"/>
+      </g>
+      <!-- overripe pomegranate -->
+      <circle cx="15" cy="5" r="8" fill="#c94020" opacity="0.7"/>
+      <circle cx="20" cy="2" r="6" fill="#d45030" opacity="0.6"/>
+    </g>
+  </g>
+  <!-- chiaroscuro dark background -->
+  <rect x="0" y="0" width="800" height="420" fill="#0a0504" opacity="0.3"/>
+  <ellipse cx="400" cy="170" rx="220" ry="160" fill="#e8a060" opacity="0.05"/>
+  `;
+}
+
+function dutchSVG() {
+  return `
+  <defs>
+    <linearGradient id="dutch-room" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a1a0a"/>
+      <stop offset="100%" stop-color="#5a2a08"/>
+    </linearGradient>
+    <linearGradient id="dutch-light" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d4a060" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#8b3010" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#dutch-room)"/>
+  <!-- window with light -->
+  <rect x="500" y="30" width="120" height="140" fill="#d4a060" opacity="0.15" rx="4"/>
+  <path d="M500 30 L620 30 L620 170 L500 170 Z" fill="url(#dutch-light)" opacity="0.5"/>
+  <rect x="500" y="30" width="120" height="140" fill="none" stroke="#5a2a10" stroke-width="3" rx="4"/>
+  <line x1="560" y1="30" x2="560" y2="170" stroke="#5a2a10" stroke-width="2"/>
+  <line x1="500" y1="100" x2="620" y2="100" stroke="#5a2a10" stroke-width="2"/>
+  <!-- floor tiles -->
+  <g opacity="0.4">
+    <polygon points="0,380 200,380 240,420 -40,420" fill="#5a2a10"/>
+    <polygon points="200,380 400,380 420,420 180,420" fill="#8b4020"/>
+    <polygon points="400,380 600,380 620,420 380,420" fill="#5a2a10"/>
+    <polygon points="600,380 800,380 840,420 580,420" fill="#8b4020"/>
+  </g>
+  <!-- wooden table with wine -->
+  <g transform="translate(200, 220)">
+    <rect x="0" y="0" width="300" height="15" fill="#8b4020" rx="2"/>
+    <rect x="0" y="15" width="300" height="5" fill="#5a2a10"/>
+    <!-- wine bottle (Dutch dark glass) -->
+    <g transform="translate(40, -60)">
+      <path d="M-8 0 L-8 -10 L-5 -15 L-5 -25 L5 -25 L5 -15 L8 -10 L8 0 Q8 5 0 5 Q-8 5 -8 0 Z" fill="#1a0a08" stroke="#3a1a0a" stroke-width="0.5"/>
+      <!-- bottle highlight -->
+      <path d="M-5 -20 L-5 0" stroke="#5a2a10" stroke-width="1.5" opacity="0.5"/>
+      <!-- cork -->
+      <rect x="-4" y="-28" width="8" height="5" fill="#d4a060" opacity="0.6"/>
+    </g>
+    <!-- wine glass with red wine -->
+    <g transform="translate(120, -50)">
+      <!-- bowl -->
+      <path d="M-15 0 Q-15 20 -10 30 L10 30 Q15 20 15 0 Z" fill="#8b1010" opacity="0.75"/>
+      <!-- wine surface -->
+      <ellipse cx="0" cy="0" rx="15" ry="4" fill="#c92010"/>
+      <ellipse cx="0" cy="-1" rx="12" ry="2" fill="#e84020" opacity="0.4"/>
+      <!-- stem -->
+      <rect x="-1.5" y="30" width="3" height="15" fill="#e8d0a0" opacity="0.5"/>
+      <!-- base -->
+      <ellipse cx="0" cy="46" rx="10" ry="3" fill="#e8d0a0" opacity="0.4"/>
+    </g>
+    <!-- pewter plate with food -->
+    <ellipse cx="210" cy="-5" rx="35" ry="8" fill="#8b8070" opacity="0.7"/>
+    <ellipse cx="210" cy="-8" rx="30" ry="5" fill="#a09080" opacity="0.5"/>
+    <!-- bread loaf -->
+    <ellipse cx="210" cy="-12" rx="20" ry="6" fill="#d4a060" opacity="0.6"/>
+    <ellipse cx="205" cy="-14" rx="12" ry="4" fill="#e8c080" opacity="0.4"/>
+  </g>
+  <!-- father figure (merry, drinking) -->
+  <g transform="translate(250, 60)">
+    <!-- head -->
+    <ellipse cx="0" cy="30" rx="20" ry="25" fill="#d4a060" opacity="0.8"/>
+    <!-- ruddy cheeks -->
+    <ellipse cx="-12" cy="35" rx="6" ry="4" fill="#c94020" opacity="0.3"/>
+    <ellipse cx="12" cy="35" rx="6" ry="4" fill="#c94020" opacity="0.3"/>
+    <!-- eyes (merry) -->
+    <path d="M-10 28 Q-7 25 -4 28" stroke="#3a1a0a" stroke-width="1.5" fill="none"/>
+    <path d="M4 28 Q7 25 10 28" stroke="#3a1a0a" stroke-width="1.5" fill="none"/>
+    <!-- big smile -->
+    <path d="M-8 40 Q0 48 8 40" stroke="#3a1a0a" stroke-width="1.5" fill="none"/>
+    <!-- body -->
+    <path d="M-25 50 L-30 120 L-28 180 L28 180 L30 120 L25 50 Z" fill="#8b3010" opacity="0.7"/>
+    <!-- white collar -->
+    <path d="M-15 48 L0 55 L15 48 L15 62 L-15 62 Z" fill="#e8d0a0" opacity="0.6"/>
+    <!-- arm raising glass -->
+    <path d="M25 55 L50 40 L55 60 L30 70 Z" fill="#d4a060" opacity="0.7"/>
+    <!-- hand with glass -->
+    <ellipse cx="52" cy="38" rx="6" ry="5" fill="#d4a060" opacity="0.7"/>
+    <g transform="translate(55, 30)">
+      <path d="M-8 0 Q-8 12 -5 18 L5 18 Q8 12 8 0 Z" fill="#8b1010" opacity="0.7"/>
+      <ellipse cx="0" cy="0" rx="8" ry="2.5" fill="#c92010"/>
+    </g>
+  </g>
+  <!-- mother figure -->
+  <g transform="translate(450, 70)">
+    <ellipse cx="0" cy="25" rx="16" ry="20" fill="#d4a060" opacity="0.8"/>
+    <ellipse cx="-8" cy="30" rx="4" ry="3" fill="#c94020" opacity="0.2"/>
+    <ellipse cx="8" cy="30" rx="4" ry="3" fill="#c94020" opacity="0.2"/>
+    <path d="M-8 23 Q-5 21 -2 23" stroke="#3a1a0a" stroke-width="1" fill="none"/>
+    <path d="M2 23 Q5 21 8 23" stroke="#3a1a0a" stroke-width="1" fill="none"/>
+    <path d="M-5 37 Q0 42 5 37" stroke="#3a1a0a" stroke-width="1" fill="none"/>
+    <!-- white cap -->
+    <path d="M-16 12 Q-16 5 -5 0 Q5 0 16 5 Q16 12 14 18 L-14 18 Z" fill="#e8d0a0" opacity="0.7"/>
+    <!-- body -->
+    <path d="M-20 42 L-25 100 L-22 170 L22 170 L25 100 L20 42 Z" fill="#c98040" opacity="0.7"/>
+    <!-- arm holding child -->
+    <path d="M-20 50 L-35 70 L-30 85 L-15 65 Z" fill="#d4a060" opacity="0.7"/>
+  </g>
+  <!-- child figure -->
+  <g transform="translate(420, 120)">
+    <ellipse cx="0" cy="10" rx="10" ry="12" fill="#d4a060" opacity="0.8"/>
+    <ellipse cx="-4" cy="12" rx="3" ry="2" fill="#c94020" opacity="0.2"/>
+    <ellipse cx="4" cy="12" rx="3" ry="2" fill="#c94020" opacity="0.2"/>
+    <path d="M-4 9 Q-2 7 0 9" stroke="#3a1a0a" stroke-width="0.8" fill="none"/>
+    <path d="M0 9 Q2 7 4 9" stroke="#3a1a0a" stroke-width="0.8" fill="none"/>
+    <path d="M-3 16 Q0 19 3 16" stroke="#3a1a0a" stroke-width="0.8" fill="none"/>
+    <path d="M-10 22 L-12 60 L-10 90 L10 90 L12 60 L10 22 Z" fill="#2a5a20" opacity="0.7"/>
+  </g>
+  <!-- dog under table -->
+  <g transform="translate(180, 280)" opacity="0.7">
+    <ellipse cx="0" cy="0" rx="25" ry="12" fill="#5a2a10"/>
+    <ellipse cx="-20" cy="-5" rx="8" ry="7" fill="#5a2a10"/>
+    <path d="M-22 -8 L-28 -12" stroke="#5a2a10" stroke-width="2"/>
+    <path d="M-18 -8 L-22 -14" stroke="#5a2a10" stroke-width="2"/>
+    <ellipse cx="20" cy="5" rx="6" ry="3" fill="#5a2a10"/>
+    <line x1="-15" y1="10" x2="-18" y2="18" stroke="#5a2a10" stroke-width="3"/>
+    <line x1="-5" y1="10" x2="-8" y2="18" stroke="#5a2a10" stroke-width="3"/>
+    <line x1="10" y1="10" x2="7" y2="18" stroke="#5a2a10" stroke-width="3"/>
+  </g>
+  <!-- hanging laundry (chaotic detail) -->
+  <g transform="translate(540, 40)" opacity="0.4">
+    <line x1="0" y1="0" x2="180" y2="0" stroke="#5a2a10" stroke-width="1.5"/>
+    <path d="M20 0 L30 30 L10 30 Z" fill="#e8d0a0" opacity="0.5"/>
+    <path d="M60 0 Q65 20 55 35" stroke="#e8d0a0" stroke-width="1" fill="none" opacity="0.5"/>
+    <ellipse cx="65" cy="25" rx="8" ry="5" fill="#c98040" opacity="0.3"/>
+    <path d="M100 0 L105 25 L95 25 Z" fill="#d4a060" opacity="0.3"/>
+    <path d="M140 0 Q145 15 138 28" stroke="#e8d0a0" stroke-width="1" fill="none" opacity="0.4"/>
+  </g>
+  `;
+}
+
+function rococoSVG() {
+  return `
+  <defs>
+    <linearGradient id="roc-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d4a0a0" stop-opacity="0.4"/>
+      <stop offset="50%" stop-color="#e8c0c0" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#8b4060" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="roc-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8c0c0" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#d4a0a0" stop-opacity="0.2"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#roc-sky)"/>
+  <rect x="0" y="0" width="800" height="420" fill="url(#roc-bg)" opacity="0.3"/>
+  <!-- parkland trees -->
+  <g opacity="0.5">
+    <circle cx="80" cy="100" r="60" fill="#5a7a40" opacity="0.4"/>
+    <circle cx="50" cy="140" r="45" fill="#6a8a50" opacity="0.3"/>
+    <circle cx="120" cy="130" r="50" fill="#5a7a40" opacity="0.35"/>
+    <circle cx="720" cy="100" r="55" fill="#5a7a40" opacity="0.4"/>
+    <circle cx="690" cy="140" r="40" fill="#6a8a50" opacity="0.3"/>
+    <circle cx="760" cy="130" r="45" fill="#5a7a40" opacity="0.35"/>
+  </g>
+  <!-- stone garden urn -->
+  <g transform="translate(100, 250)" opacity="0.6">
+    <ellipse cx="0" cy="0" rx="20" ry="5" fill="#a09080"/>
+    <path d="M-18 0 Q-22 -15 -15 -25 L15 -25 Q22 -15 18 0 Z" fill="#c0b0a0"/>
+    <ellipse cx="0" cy="-25" rx="15" ry="4" fill="#a09080"/>
+    <!-- flowers -->
+    <circle cx="-5" cy="-30" r="4" fill="#d4a0a0" opacity="0.7"/>
+    <circle cx="5" cy="-32" r="4" fill="#e8c0c0" opacity="0.6"/>
+    <circle cx="0" cy="-38" r="3" fill="#d4a0a0" opacity="0.7"/>
+    <circle cx="-8" cy="-35" r="3" fill="#c98080" opacity="0.6"/>
+  </g>
+  <!-- elegant figures -->
+  <!-- couple center-left with wine -->
+  <g transform="translate(300, 150)">
+    <!-- gentleman -->
+    <g>
+      <!-- powdered wig -->
+      <ellipse cx="0" cy="15" rx="18" ry="14" fill="#e8e0d0" opacity="0.8"/>
+      <!-- face -->
+      <ellipse cx="0" cy="25" rx="12" ry="14" fill="#e8c0a0" opacity="0.8"/>
+      <ellipse cx="-4" cy="25" rx="2" ry="1.5" fill="#3a2a1a"/>
+      <ellipse cx="4" cy="25" rx="2" ry="1.5" fill="#3a2a1a"/>
+      <path d="M-3 32 Q0 34 3 32" stroke="#8b4060" stroke-width="0.8" fill="none"/>
+      <!-- rosy cheeks -->
+      <ellipse cx="-7" cy="28" rx="3" ry="2" fill="#d4a0a0" opacity="0.3"/>
+      <ellipse cx="7" cy="28" rx="3" ry="2" fill="#d4a0a0" opacity="0.3"/>
+      <!-- elegant coat -->
+      <path d="M-22 38 L-28 100 L-25 180 L25 180 L28 100 L22 38 Z" fill="#8b4060" opacity="0.8"/>
+      <!-- lace collar -->
+      <path d="M-12 38 L0 42 L12 38 L14 48 L-14 48 Z" fill="#e8e0d0" opacity="0.7"/>
+      <!-- arm offering wine glass -->
+      <path d="M22 45 L45 50 L48 65 L28 58 Z" fill="#e8c0a0" opacity="0.7"/>
+      <!-- hand with delicate glass -->
+      <ellipse cx="48" cy="50" rx="5" ry="4" fill="#e8c0a0" opacity="0.7"/>
+      <g transform="translate(52, 42)">
+        <!-- flûte glass -->
+        <path d="M-4 0 L-4 20 L4 20 L4 0 Z" fill="#e8d0a0" opacity="0.15" stroke="#e8e0d0" stroke-width="0.5"/>
+        <!-- champagne -->
+        <path d="M-3 2 L-3 18 L3 18 L3 2 Z" fill="#d4a060" opacity="0.4"/>
+        <ellipse cx="0" cy="2" rx="3" ry="1" fill="#e8c0a0" opacity="0.5"/>
+        <!-- bubbles -->
+        <circle cx="-1" cy="8" r="0.8" fill="#fff" opacity="0.6"/>
+        <circle cx="1" cy="12" r="0.6" fill="#fff" opacity="0.5"/>
+        <circle cx="0" cy="15" r="0.5" fill="#fff" opacity="0.4"/>
+        <!-- stem and base -->
+        <rect x="-0.5" y="20" width="1" height="5" fill="#e8e0d0" opacity="0.5"/>
+        <ellipse cx="0" cy="26" rx="4" ry="1.5" fill="#e8e0d0" opacity="0.4"/>
+      </g>
+    </g>
+  </g>
+  <!-- lady to the right -->
+  <g transform="translate(380, 140)">
+    <!-- elaborate hair with flowers -->
+    <ellipse cx="0" cy="15" rx="16" ry="12" fill="#d4a060" opacity="0.7"/>
+    <circle cx="-8" cy="8" r="3" fill="#d4a0a0" opacity="0.6"/>
+    <circle cx="8" cy="8" r="3" fill="#e8c0c0" opacity="0.5"/>
+    <!-- face -->
+    <ellipse cx="0" cy="25" rx="11" ry="13" fill="#e8c0a0" opacity="0.8"/>
+    <ellipse cx="-4" cy="25" rx="2" ry="1.5" fill="#3a2a1a"/>
+    <ellipse cx="4" cy="25" rx="2" ry="1.5" fill="#3a2a1a"/>
+    <path d="M-3 32 Q0 35 3 32" stroke="#c94020" stroke-width="0.8" fill="none"/>
+    <ellipse cx="-6" cy="28" rx="3" ry="2" fill="#d4a0a0" opacity="0.3"/>
+    <ellipse cx="6" cy="28" rx="3" ry="2" fill="#d4a0a0" opacity="0.3"/>
+    <!-- flowing pink dress -->
+    <path d="M-18 38 Q-30 80 -25 120 L-30 180 L30 180 L25 120 Q30 80 18 38 Z" fill="#d4a0a0" opacity="0.7"/>
+    <!-- lace bodice -->
+    <path d="M-14 38 L0 42 L14 38 L16 55 L-16 55 Z" fill="#e8e0d0" opacity="0.6"/>
+    <!-- ribbon sash -->
+    <rect x="-16" y="55" width="32" height="4" fill="#c98080" opacity="0.6"/>
+    <!-- fan in hand -->
+    <g transform="translate(20, 50)">
+      <path d="M0 0 L-15 -15 L-20 0 Z" fill="#e8c0c0" opacity="0.5"/>
+      <path d="M0 0 L-10 -18 L-15 -12 Z" fill="#d4a0a0" opacity="0.4"/>
+      <path d="M0 0 L-5 -20 L0 -18 Z" fill="#e8c0c0" opacity="0.3"/>
+    </g>
+  </g>
+  <!-- musician with guitar -->
+  <g transform="translate(560, 150)" opacity="0.7">
+    <ellipse cx="0" cy="15" rx="14" ry="12" fill="#c98080" opacity="0.7"/>
+    <ellipse cx="0" cy="25" rx="10" ry="12" fill="#e8c0a0" opacity="0.8"/>
+    <ellipse cx="-3" cy="25" rx="1.5" ry="1" fill="#3a2a1a"/>
+    <ellipse cx="3" cy="25" rx="1.5" ry="1" fill="#3a2a1a"/>
+    <path d="M-16 38 L-20 90 L-18 170 L18 170 L20 90 L16 38 Z" fill="#8b4060" opacity="0.7"/>
+    <!-- guitar -->
+    <g transform="translate(15, 60) rotate(20)">
+      <ellipse cx="10" cy="20" rx="15" ry="20" fill="#d4a060" opacity="0.6"/>
+      <ellipse cx="10" cy="0" rx="8" ry="12" fill="#8b4020" opacity="0.6"/>
+      <rect x="-2" y="-15" width="4" height="20" fill="#5a2a10"/>
+    </g>
+  </g>
+  <!-- ground -->
+  <rect x="0" y="340" width="800" height="80" fill="#5a7a40" opacity="0.3"/>
+  <rect x="0" y="340" width="800" height="3" fill="#8b4060" opacity="0.2"/>
+  <!-- scattered petals on ground -->
+  <g opacity="0.4" fill="#d4a0a0">
+    <circle cx="100" cy="360" r="2"/>
+    <circle cx="200" cy="370" r="2"/>
+    <circle cx="350" cy="365" r="2"/>
+    <circle cx="500" cy="375" r="2"/>
+    <circle cx="650" cy="370" r="2"/>
+    <circle cx="150" cy="380" r="1.5"/>
+    <circle cx="300" cy="385" r="1.5"/>
+    <circle cx="450" cy="380" r="1.5"/>
+    <circle cx="600" cy="385" r="1.5"/>
+  </g>
+  <!-- wine bottle on garden table -->
+  <g transform="translate(200, 310)" opacity="0.6">
+    <rect x="-20" y="0" width="40" height="5" fill="#8b4060" opacity="0.5"/>
+    <path d="M-5 -20 L-5 -10 L-3 -5 L-3 0 L3 0 L3 -5 L5 -10 L5 -20 Z" fill="#2a5a20" opacity="0.6"/>
+    <rect x="-3" y="-25" width="6" height="5" fill="#d4a060" opacity="0.5"/>
+  </g>
+  `;
+}
+
+function romanticSVG() {
+  return `
+  <defs>
+    <radialGradient id="rom-bg" cx="0.5" cy="0.5" r="0.8">
+      <stop offset="0%" stop-color="#8b1010" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#3a0808"/>
+    </radialGradient>
+    <linearGradient id="rom-red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c92010"/>
+      <stop offset="100%" stop-color="#5a1008"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="#3a0808"/>
+  <rect x="0" y="0" width="800" height="420" fill="url(#rom-bg)"/>
+  <!-- ornate bed/couch at center -->
+  <g transform="translate(400, 280)">
+    <!-- bed frame -->
+    <rect x="-200" y="0" width="400" height="20" fill="#5a1008" rx="2"/>
+    <rect x="-200" y="20" width="400" height="10" fill="#3a0808"/>
+    <!-- red and gold bedspread -->
+    <path d="M-190 -10 Q-195 30 -180 40 L180 40 Q195 30 190 -10 Z" fill="url(#rom-red)" opacity="0.8"/>
+    <!-- gold trim on bedspread -->
+    <path d="M-180 38 L180 38" stroke="#d4af37" stroke-width="1.5" opacity="0.4"/>
+  </g>
+  <!-- Sardanapalus reclining -->
+  <g transform="translate(400, 200)">
+    <!-- head reclining -->
+    <ellipse cx="-60" cy="-10" rx="22" ry="18" fill="#d4a060" opacity="0.7"/>
+    <!-- dark beard and hair -->
+    <path d="M-78 -20 Q-82 -10 -75 0 L-65 5 Q-60 0 -58 -10 Z" fill="#3a1a0a"/>
+    <path d="M-50 -15 Q-48 -8 -52 -5" stroke="#3a1a0a" stroke-width="2" fill="none"/>
+    <!-- eye -->
+    <ellipse cx="-55" cy="-8" rx="2" ry="1.5" fill="#3a1a0a"/>
+    <!-- body draped in red and gold -->
+    <path d="M-70 10 Q-90 40 -80 80 L20 80 Q30 40 10 10 Z" fill="url(#rom-red)" opacity="0.85"/>
+    <!-- gold ornamental belt -->
+    <rect x="-60" y="40" width="60" height="6" fill="#d4af37" opacity="0.4"/>
+    <!-- arm draped -->
+    <path d="M-70 30 Q-100 50 -95 80 L-80 80 Q-82 55 -60 35 Z" fill="#d4a060" opacity="0.6"/>
+  </g>
+  <!-- concubine being slain (left side) -->
+  <g transform="translate(180, 200)" opacity="0.7">
+    <!-- figure falling -->
+    <ellipse cx="0" cy="-20" rx="14" ry="16" fill="#d4a060" opacity="0.6"/>
+    <path d="M-3 -22 Q0 -20 3 -22" stroke="#3a1a0a" stroke-width="0.5" fill="none"/>
+    <path d="M-2 -15 Q0 -12 2 -15" stroke="#8b1010" stroke-width="0.8" fill="none"/>
+    <!-- flowing white and red drapery -->
+    <path d="M-15 0 Q-25 30 -10 60 L10 60 Q5 30 15 0 Z" fill="#e8d0a0" opacity="0.6"/>
+    <path d="M-8 10 Q-15 40 0 55" stroke="#8b1010" stroke-width="1" fill="none" opacity="0.5"/>
+    <!-- arm raised in protest -->
+    <path d="M-10 5 L-30 -10 L-25 -20 L-5 0 Z" fill="#d4a060" opacity="0.6"/>
+  </g>
+  <!-- wine goblet spilling -->
+  <g transform="translate(320, 260)">
+    <path d="M-10 0 Q-12 8 -8 18 L8 18 Q12 8 10 0 Z" fill="#d4af37" opacity="0.5"/>
+    <rect x="-1.5" y="18" width="3" height="6" fill="#d4af37" opacity="0.4"/>
+    <ellipse cx="0" cy="25" rx="8" ry="2" fill="#d4af37" opacity="0.3"/>
+    <!-- spilled wine -->
+    <path d="M8 5 Q15 10 20 18 Q22 25 15 30 Q10 25 5 15 Z" fill="#8b1010" opacity="0.7"/>
+    <path d="M10 2 Q20 0 25 5 Q20 8 12 8 Z" fill="#c92010" opacity="0.5"/>
+    <ellipse cx="0" cy="0" rx="8" ry="2" fill="#c92010" opacity="0.4"/>
+  </g>
+  <!-- scattered treasure (gold coins, jewels) -->
+  <g transform="translate(150, 320)" opacity="0.6">
+    <ellipse cx="0" cy="0" rx="4" ry="2" fill="#d4af37"/>
+    <ellipse cx="10" cy="3" rx="4" ry="2" fill="#d4af37"/>
+    <ellipse cx="20" cy="-2" rx="4" ry="2" fill="#d4af37"/>
+    <circle cx="5" cy="8" r="3" fill="#8b2030" opacity="0.7"/>
+    <circle cx="15" cy="6" r="2" fill="#2a5a20" opacity="0.6"/>
+    <circle cx="25" cy="4" r="3" fill="#8b4060" opacity="0.6"/>
+  </g>
+  <g transform="translate(550, 320)" opacity="0.6">
+    <ellipse cx="0" cy="0" rx="4" ry="2" fill="#d4af37"/>
+    <ellipse cx="10" cy="3" rx="4" ry="2" fill="#d4af37"/>
+    <ellipse cx="20" cy="-2" rx="4" ry="2" fill="#d4af37"/>
+    <circle cx="5" cy="8" r="3" fill="#c94020" opacity="0.6"/>
+    <circle cx="15" cy="6" r="2" fill="#d4a020" opacity="0.5"/>
+  </g>
+  <!-- horse rearing in background -->
+  <g transform="translate(680, 160)" opacity="0.4" fill="#3a0808">
+    <path d="M0 0 L-5 -10 L-15 -8 L-12 5 Z"/>
+    <path d="M-5 -10 Q10 -15 20 -5 L25 10 Q20 15 15 10 Z"/>
+    <path d="M20 10 L30 40 L25 42 L15 12 Z"/>
+    <path d="M-5 5 L-10 30 L-5 32 L0 8 Z"/>
+  </g>
+  <!-- chaotic smoke/atmosphere -->
+  <g opacity="0.15" fill="#8b1010">
+    <ellipse cx="200" cy="100" rx="80" ry="30"/>
+    <ellipse cx="500" cy="80" rx="100" ry="35"/>
+    <ellipse cx="650" cy="120" rx="70" ry="25"/>
+  </g>
+  <!-- dramatic diagonal composition lines -->
+  <g stroke="#d4af37" stroke-width="0.5" opacity="0.1" fill="none">
+    <line x1="100" y1="50" x2="700" y2="380"/>
+    <line x1="50" y1="200" x2="750" y2="300"/>
+  </g>
+  `;
+}
+
+function impressionistSVG() {
+  return `
+  <defs>
+    <linearGradient id="imp-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d4b080" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#e8d0a0" stop-opacity="0.4"/>
+    </linearGradient>
+    <filter id="imp-dap" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur stdDeviation="0.3"/>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#imp-sky)"/>
+  <!-- dappled sunlight patches -->
+  <g opacity="0.3">
+    <ellipse cx="150" cy="80" rx="80" ry="40" fill="#e8d0a0" opacity="0.3"/>
+    <ellipse cx="400" cy="100" rx="100" ry="50" fill="#d4b080" opacity="0.2"/>
+    <ellipse cx="650" cy="60" rx="70" ry="30" fill="#e8d0a0" opacity="0.3"/>
+    <ellipse cx="200" cy="200" rx="60" ry="40" fill="#c9a060" opacity="0.15"/>
+    <ellipse cx="550" cy="180" rx="80" ry="35" fill="#d4b080" opacity="0.2"/>
+  </g>
+  <!-- tree canopy -->
+  <g opacity="0.5">
+    <circle cx="50" cy="80" r="40" fill="#5a7a40" opacity="0.3"/>
+    <circle cx="90" cy="60" r="35" fill="#6a8a50" opacity="0.25"/>
+    <circle cx="30" cy="100" r="30" fill="#5a7a40" opacity="0.3"/>
+    <circle cx="750" cy="80" r="40" fill="#5a7a40" opacity="0.3"/>
+    <circle cx="720" cy="60" r="35" fill="#6a8a50" opacity="0.25"/>
+    <circle cx="770" cy="100" r="30" fill="#5a7a40" opacity="0.3"/>
+    <!-- tree trunks -->
+    <rect x="55" y="120" width="8" height="120" fill="#5a3a20" opacity="0.3"/>
+    <rect x="735" y="120" width="8" height="120" fill="#5a3a20" opacity="0.3"/>
+  </g>
+  <!-- dance floor -->
+  <rect x="0" y="280" width="800" height="140" fill="#8ba060" opacity="0.3"/>
+  <rect x="0" y="280" width="800" height="3" fill="#c96040" opacity="0.15"/>
+  <!-- scattered dancing figures (impressionist brush stroke style) -->
+  <!-- couple dancing 1 -->
+  <g transform="translate(200, 200)">
+    <!-- man -->
+    <ellipse cx="0" cy="15" rx="10" ry="12" fill="#d4b080" opacity="0.7"/>
+    <path d="M-12 25 L-15 60 L-12 100 L12 100 L15 60 L12 25 Z" fill="#3a2a10" opacity="0.6"/>
+    <path d="M-8 28 L0 33 L8 28 L10 40 L-10 40 Z" fill="#e8d0a0" opacity="0.5"/>
+    <!-- woman -->
+    <ellipse cx="25" cy="10" rx="9" ry="11" fill="#d4b080" opacity="0.7"/>
+    <path d="M18 20 Q15 50 12 80 L40 80 Q38 50 32 20 Z" fill="#c96040" opacity="0.5"/>
+    <!-- hat -->
+    <ellipse cx="-2" cy="5" rx="14" ry="4" fill="#3a2a10" opacity="0.5"/>
+    <rect x="-10" y="0" width="16" height="6" fill="#3a2a10" opacity="0.4" rx="2"/>
+  </g>
+  <!-- couple dancing 2 -->
+  <g transform="translate(500, 190)">
+    <ellipse cx="0" cy="15" rx="10" ry="12" fill="#d4b080" opacity="0.7"/>
+    <path d="M-12 25 L-15 60 L-12 100 L12 100 L15 60 L12 25 Z" fill="#2a5a20" opacity="0.6"/>
+    <ellipse cx="25" cy="10" rx="9" ry="11" fill="#e8c0a0" opacity="0.7"/>
+    <path d="M18 20 Q15 50 12 80 L40 80 Q38 50 32 20 Z" fill="#d4a060" opacity="0.5"/>
+  </g>
+  <!-- standing figures with wine glasses -->
+  <g transform="translate(100, 210)">
+    <ellipse cx="0" cy="10" rx="8" ry="10" fill="#d4b080" opacity="0.6"/>
+    <path d="M-10 18 L-12 55 L-10 90 L10 90 L12 55 L10 18 Z" fill="#8b4020" opacity="0.5"/>
+    <!-- wine glass in hand -->
+    <g transform="translate(12, 30)">
+      <path d="M-4 0 Q-4 8 -3 12 L3 12 Q4 8 4 0 Z" fill="#8b1010" opacity="0.4"/>
+      <ellipse cx="0" cy="0" rx="4" ry="1.5" fill="#c92010" opacity="0.4"/>
+      <rect x="-0.5" y="12" width="1" height="3" fill="#e8d0a0" opacity="0.3"/>
+    </g>
+  </g>
+  <g transform="translate(680, 210)">
+    <ellipse cx="0" cy="10" rx="8" ry="10" fill="#d4b080" opacity="0.6"/>
+    <path d="M-10 18 L-12 55 L-10 90 L10 90 L12 55 L10 18 Z" fill="#5a7a40" opacity="0.5"/>
+    <g transform="translate(-12, 30)">
+      <path d="M-4 0 Q-4 8 -3 12 L3 12 Q4 8 4 0 Z" fill="#8b1010" opacity="0.4"/>
+      <ellipse cx="0" cy="0" rx="4" ry="1.5" fill="#c92010" opacity="0.4"/>
+    </g>
+  </g>
+  <!-- table with wine bottles and glasses (foreground) -->
+  <g transform="translate(350, 260)">
+    <rect x="-40" y="0" width="120" height="10" fill="#5a3a20" opacity="0.4"/>
+    <rect x="-40" y="10" width="120" height="3" fill="#3a2a10" opacity="0.3"/>
+    <!-- wine bottle -->
+    <path d="M-20 -35 L-20 -20 L-17 -15 L-17 -5 L-10 -5 L-10 -15 L-7 -20 L-7 -35 Z" fill="#2a5a20" opacity="0.4"/>
+    <rect x="-14" y="-38" width="5" height="4" fill="#3a2a10" opacity="0.4"/>
+    <!-- wine glasses (impressionist dabs) -->
+    <g transform="translate(10, -20)">
+      <path d="M-5 0 Q-5 8 -3 12 L3 12 Q5 8 5 0 Z" fill="#8b1010" opacity="0.3"/>
+      <ellipse cx="0" cy="0" rx="5" ry="1.5" fill="#c92010" opacity="0.3"/>
+      <rect x="-0.5" y="12" width="1" height="4" fill="#e8d0a0" opacity="0.2"/>
+      <ellipse cx="0" cy="17" rx="3" ry="1" fill="#e8d0a0" opacity="0.2"/>
+    </g>
+    <g transform="translate(35, -15)">
+      <path d="M-4 0 Q-4 6 -2 10 L2 10 Q4 6 4 0 Z" fill="#8b1010" opacity="0.25"/>
+      <ellipse cx="0" cy="0" rx="4" ry="1" fill="#c92010" opacity="0.25"/>
+      <rect x="-0.5" y="10" width="1" height="3" fill="#e8d0a0" opacity="0.2"/>
+    </g>
+  </g>
+  <!-- impressionist brush stroke decorations -->
+  <g opacity="0.2">
+    <ellipse cx="300" cy="300" rx="15" ry="3" fill="#c96040" transform="rotate(10 300 300)"/>
+    <ellipse cx="320" cy="310" rx="12" ry="2.5" fill="#d4a060" transform="rotate(-5 320 310)"/>
+    <ellipse cx="450" cy="320" rx="15" ry="3" fill="#c96040" transform="rotate(-10 450 320)"/>
+    <ellipse cx="480" cy="330" rx="12" ry="2.5" fill="#8ba060" transform="rotate(5 480 330)"/>
+    <ellipse cx="150" cy="340" rx="10" ry="2" fill="#d4b080" transform="rotate(15 150 340)"/>
+    <ellipse cx="600" cy="340" rx="10" ry="2" fill="#d4b080" transform="rotate(-15 600 340)"/>
+  </g>
+  <!-- light particles / dappling effect -->
+  <g opacity="0.3">
+    <circle cx="250" cy="150" r="3" fill="#e8d0a0" opacity="0.4"/>
+    <circle cx="270" cy="160" r="2" fill="#d4b080" opacity="0.3"/>
+    <circle cx="380" cy="140" r="3" fill="#e8d0a0" opacity="0.4"/>
+    <circle cx="420" cy="150" r="2" fill="#d4b080" opacity="0.3"/>
+    <circle cx="530" cy="130" r="3" fill="#e8d0a0" opacity="0.4"/>
+    <circle cx="560" cy="145" r="2" fill="#d4b080" opacity="0.3"/>
+    <circle cx="180" cy="180" r="2" fill="#e8d0a0" opacity="0.3"/>
+    <circle cx="620" cy="170" r="2" fill="#e8d0a0" opacity="0.3"/>
+  </g>
+  `;
+}
+
+function postimpSVG() {
+  return `
+  <defs>
+    <linearGradient id="pi-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8b1010"/>
+      <stop offset="100%" stop-color="#5a1008"/>
+    </linearGradient>
+    <radialGradient id="pi-lamp" cx="0.5" cy="0.2">
+      <stop offset="0%" stop-color="#d4a020" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#8b1010" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#pi-bg)"/>
+  <!-- ceiling (green) -->
+  <path d="M0 0 L800 0 L800 80 Q400 40 0 80 Z" fill="#2a5a20" opacity="0.7"/>
+  <!-- wall perspective lines (receding) -->
+  <g stroke="#3a0808" stroke-width="2" fill="none" opacity="0.4">
+    <line x1="0" y1="80" x2="250" y2="150"/>
+    <line x1="800" y1="80" x2="550" y2="150"/>
+    <line x1="250" y1="150" x2="250" y2="380"/>
+    <line x1="550" y1="150" x2="550" y2="380"/>
+  </g>
+  <!-- hanging lamps -->
+  <g transform="translate(200, 0)">
+    <line x1="0" y1="0" x2="0" y2="30" stroke="#d4a020" stroke-width="1" opacity="0.4"/>
+    <ellipse cx="0" cy="35" rx="15" ry="8" fill="#d4a020" opacity="0.3"/>
+    <ellipse cx="0" cy="35" rx="8" ry="5" fill="#e8a030" opacity="0.4"/>
+  </g>
+  <g transform="translate(600, 0)">
+    <line x1="0" y1="0" x2="0" y2="30" stroke="#d4a020" stroke-width="1" opacity="0.4"/>
+    <ellipse cx="0" cy="35" rx="15" ry="8" fill="#d4a020" opacity="0.3"/>
+    <ellipse cx="0" cy="35" rx="8" ry="5" fill="#e8a030" opacity="0.4"/>
+  </g>
+  <rect x="0" y="0" width="800" height="420" fill="url(#pi-lamp)" opacity="0.5"/>
+  <!-- floor (red with perspective) -->
+  <polygon points="0,380 800,380 800,420 0,420" fill="#c92010" opacity="0.5"/>
+  <polygon points="250,380 550,380 500,420 300,420" fill="#8b1010" opacity="0.6"/>
+  <!-- billiard table (center) -->
+  <g transform="translate(400, 250)">
+    <polygon points="-120,-30 120,-30 100,20 -100,20" fill="#2a5a20" opacity="0.7"/>
+    <rect x="-130" y="-35" width="260" height="10" fill="#3a1a0a" opacity="0.6"/>
+    <!-- table legs -->
+    <rect x="-120" y="20" width="8" height="40" fill="#3a1a0a" opacity="0.5"/>
+    <rect x="112" y="20" width="8" height="40" fill="#3a1a0a" opacity="0.5"/>
+    <!-- billiard balls -->
+    <circle cx="-30" cy="-10" r="6" fill="#e8d0a0" opacity="0.5"/>
+    <circle cx="-28" cy="-8" r="2" fill="#d4a060" opacity="0.4"/>
+    <circle cx="10" cy="-5" r="6" fill="#c92010" opacity="0.4"/>
+    <circle cx="30" cy="-15" r="5" fill="#d4a020" opacity="0.4"/>
+  </g>
+  <!-- empty tables with glasses -->
+  <g transform="translate(150, 200)">
+    <rect x="-30" y="0" width="60" height="8" fill="#5a1008" opacity="0.5"/>
+    <rect x="-30" y="8" width="60" height="3" fill="#3a0808" opacity="0.4"/>
+    <!-- empty wine glass -->
+    <g transform="translate(-10, -15)">
+      <path d="M-5 0 Q-5 8 -3 12 L3 12 Q5 8 5 0 Z" fill="none" stroke="#e8d0a0" stroke-width="0.8" opacity="0.3"/>
+      <rect x="-0.5" y="12" width="1" height="4" fill="#e8d0a0" opacity="0.2"/>
+      <ellipse cx="0" cy="17" rx="3" ry="1" fill="#e8d0a0" opacity="0.2"/>
+    </g>
+    <g transform="translate(10, -12)">
+      <path d="M-4 0 Q-4 6 -2 10 L2 10 Q4 6 4 0 Z" fill="none" stroke="#e8d0a0" stroke-width="0.8" opacity="0.3"/>
+      <rect x="-0.5" y="10" width="1" height="3" fill="#e8d0a0" opacity="0.2"/>
+    </g>
+  </g>
+  <g transform="translate(650, 200)">
+    <rect x="-30" y="0" width="60" height="8" fill="#5a1008" opacity="0.5"/>
+    <rect x="-30" y="8" width="60" height="3" fill="#3a0808" opacity="0.4"/>
+    <!-- wine bottle lying down -->
+    <g transform="translate(0, -10) rotate(90)">
+      <path d="M-8 0 L-8 -10 L-5 -15 L-5 -25 L5 -25 L5 -15 L8 -10 L8 0 Q8 5 0 5 Q-8 5 -8 0 Z" fill="#1a3a10" opacity="0.4"/>
+    </g>
+    <!-- glass -->
+    <g transform="translate(15, -15)">
+      <path d="M-5 0 Q-5 8 -3 12 L3 12 Q5 8 5 0 Z" fill="none" stroke="#e8d0a0" stroke-width="0.8" opacity="0.3"/>
+      <rect x="-0.5" y="12" width="1" height="4" fill="#e8d0a0" opacity="0.2"/>
+      <ellipse cx="0" cy="17" rx="3" ry="1" fill="#e8d0a0" opacity="0.2"/>
+    </g>
+  </g>
+  <!-- lonely figure at left (the night cafe patron) -->
+  <g transform="translate(80, 130)" opacity="0.5">
+    <ellipse cx="0" cy="15" rx="10" ry="12" fill="#d4a060" opacity="0.4"/>
+    <path d="M-12 25 L-15 60 L-12 120 L12 120 L15 60 L12 25 Z" fill="#3a0808" opacity="0.5"/>
+    <!-- slumped posture -->
+    <path d="M-8 20 Q-5 28 0 28" stroke="#3a0808" stroke-width="0.5" fill="none" opacity="0.4"/>
+  </g>
+  <!-- standing figure at counter -->
+  <g transform="translate(720, 130)" opacity="0.5">
+    <ellipse cx="0" cy="15" rx="10" ry="12" fill="#d4a060" opacity="0.4"/>
+    <path d="M-12 25 L-15 60 L-12 120 L12 120 L15 60 L12 25 Z" fill="#1a3a10" opacity="0.5"/>
+    <!-- arm on counter with glass -->
+    <path d="M-12 30 L-25 35 L-25 42 L-12 38 Z" fill="#d4a060" opacity="0.4"/>
+    <g transform="translate(-25, 30)">
+      <path d="M-4 0 Q-4 6 -2 10 L2 10 Q4 6 4 0 Z" fill="#8b1010" opacity="0.3"/>
+    </g>
+  </g>
+  <!-- aggressive color blocks (van Gogh style) -->
+  <g opacity="0.15">
+    <rect x="250" y="150" width="300" height="230" fill="#c92010" opacity="0.1"/>
+    <rect x="250" y="150" width="300" height="3" fill="#e84020" opacity="0.3"/>
+  </g>
+  <!-- swirling brush strokes in the air -->
+  <g opacity="0.2" fill="none" stroke="#d4a020" stroke-width="1.5">
+    <path d="M300 100 Q350 90 400 100 Q450 110 500 95"/>
+    <path d="M200 120 Q250 110 300 120 Q350 130 400 115"/>
+    <path d="M450 130 Q500 120 550 130 Q600 140 650 125"/>
+  </g>
+  <g opacity="0.15" fill="none" stroke="#2a5a20" stroke-width="1">
+    <path d="M100 60 Q200 50 400 60 Q600 70 800 55"/>
+    <path d="M150 90 Q300 80 500 90 Q700 100 750 85"/>
+  </g>
+  `;
+}
+
+function cubistSVG() {
+  return `
+  <defs>
+    <linearGradient id="cub-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3a2a10"/>
+      <stop offset="100%" stop-color="#5a4020"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#cub-bg)"/>
+  <!-- newspaper collage texture -->
+  <g opacity="0.12" fill="#d4b080" font-family="serif" font-size="6">
+    <text x="50" y="50">LE JOURNAL</text>
+    <text x="50" y="58">VENDREDI</text>
+    <text x="50" y="66">PARIS 1912</text>
+    <text x="200" y="60">CAFE</text>
+    <text x="200" y="68">BISTROT</text>
+    <text x="500" y="55">VINS</text>
+    <text x="500" y="63">BORDEAUX</text>
+    <text x="600" y="70">JOUR</text>
+    <text x="100" y="300">ART</text>
+    <text x="350" y="320">CUBISME</text>
+    <text x="550" y="310">TABLE</text>
+  </g>
+  <!-- fragmented bottle of wine (center, geometric) -->
+  <g transform="translate(400, 210)">
+    <!-- bottle facet 1 (dark) -->
+    <polygon points="-30,-80 -10,-85 0,-60 -25,-55" fill="#2a1a08" opacity="0.8"/>
+    <!-- bottle facet 2 (lighter) -->
+    <polygon points="-10,-85 15,-80 10,-55 0,-60" fill="#5a4020" opacity="0.7"/>
+    <!-- bottle neck facet -->
+    <polygon points="-20,-100 -5,-105 0,-85 -15,-80" fill="#3a2a10" opacity="0.8"/>
+    <!-- bottle body facet 1 (left) -->
+    <polygon points="-40,-55 -20,-55 -15,20 -50,10" fill="#8b6030" opacity="0.6"/>
+    <!-- bottle body facet 2 (center) -->
+    <polygon points="-20,-55 0,-60 5,15 -15,20" fill="#d4b080" opacity="0.5"/>
+    <!-- bottle body facet 3 (right) -->
+    <polygon points="0,-60 20,-55 30,10 5,15" fill="#c98050" opacity="0.6"/>
+    <!-- bottle body facet 4 (bottom) -->
+    <polygon points="-50,10 -15,20 5,15 30,10 20,40 -40,35" fill="#5a4020" opacity="0.6"/>
+    <!-- label fragment -->
+    <polygon points="-15,-20 0,-25 5,5 -10,10" fill="#d4b080" opacity="0.4"/>
+    <text x="-8" y="-5" font-size="5" fill="#3a2a10" opacity="0.5" font-family="serif">VIN</text>
+  </g>
+  <!-- wineglass (fragmented, to the right) -->
+  <g transform="translate(530, 200)">
+    <!-- glass bowl facet 1 -->
+    <polygon points="-20,-10 0,-15 5,25 -15,20" fill="#d4b080" opacity="0.3"/>
+    <!-- glass bowl facet 2 -->
+    <polygon points="0,-15 15,-10 15,20 5,25" fill="#c98050" opacity="0.3"/>
+    <!-- wine inside (red) -->
+    <polygon points="-15,0 0,-5 5,20 -10,15" fill="#8b1010" opacity="0.5"/>
+    <polygon points="0,-5 10,0 12,15 5,20" fill="#c92010" opacity="0.4"/>
+    <!-- stem fragments -->
+    <polygon points="-3,25 3,25 2,50 -2,50" fill="#d4b080" opacity="0.2"/>
+    <polygon points="0,25 5,25 5,50 0,50" fill="#c98050" opacity="0.2"/>
+    <!-- base -->
+    <polygon points="-10,50 5,50 10,58 -5,58" fill="#8b6030" opacity="0.3"/>
+  </g>
+  <!-- newspaper fragments (collage) -->
+  <g opacity="0.25">
+    <polygon points="100,100 200,90 210,130 110,140" fill="#e8c890" opacity="0.15"/>
+    <text x="115" y="115" font-size="5" fill="#3a2a10" opacity="0.5" font-family="serif">JOURNAL</text>
+    <text x="115" y="125" font-size="4" fill="#3a2a10" opacity="0.4" font-family="serif">PARIS 1912</text>
+    <polygon points="600,250 720,240 730,290 610,300" fill="#e8c890" opacity="0.12"/>
+    <text x="615" y="270" font-size="5" fill="#3a2a10" opacity="0.5" font-family="serif">LE FIGARO</text>
+    <text x="615" y="280" font-size="4" fill="#3a2a10" opacity="0.4" font-family="serif">ART ET LETTRES</text>
+  </g>
+  <!-- table surface (faceted) -->
+  <g opacity="0.5">
+    <polygon points="200,280 600,280 650,320 150,320" fill="#8b6030" opacity="0.3"/>
+    <polygon points="200,280 350,275 340,310 180,315" fill="#5a4020" opacity="0.4"/>
+    <polygon points="350,275 500,280 490,315 340,310" fill="#c98050" opacity="0.3"/>
+    <polygon points="500,280 600,280 620,315 490,315" fill="#8b6030" opacity="0.4"/>
+  </g>
+  <!-- geometric background shapes -->
+  <g opacity="0.2">
+    <polygon points="50,50 150,30 180,120 80,140" fill="#d4b080" opacity="0.15"/>
+    <polygon points="650,50 750,70 730,150 640,130" fill="#c98050" opacity="0.15"/>
+    <polygon points="50,350 180,330 200,400 60,410" fill="#5a4020" opacity="0.2"/>
+    <polygon points="650,350 780,340 770,410 640,400" fill="#3a2a10" opacity="0.2"/>
+  </g>
+  <!-- pipe (another cubist still-life element) -->
+  <g transform="translate(250, 180) rotate(-20)" opacity="0.6">
+    <rect x="-15" y="-4" width="30" height="8" rx="2" fill="#5a4020" opacity="0.5"/>
+    <ellipse cx="20" cy="0" rx="8" ry="6" fill="#8b6030" opacity="0.4"/>
+    <ellipse cx="20" cy="-2" rx="6" ry="3" fill="#3a2a10" opacity="0.3"/>
+  </g>
+  <!-- analytical cubism lines -->
+  <g stroke="#5a4020" stroke-width="0.5" opacity="0.2" fill="none">
+    <line x1="100" y1="100" x2="700" y2="300"/>
+    <line x1="200" y1="50" x2="600" y2="350"/>
+    <line x1="50" y1="200" x2="750" y2="200"/>
+    <line x1="400" y1="20" x2="400" y2="400"/>
+    <line x1="300" y1="30" x2="500" y2="390"/>
+    <line x1="150" y1="300" x2="650" y2="100"/>
+  </g>
+  `;
+}
+
+function popartSVG() {
+  return `
+  <defs>
+    <linearGradient id="pop-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f0e0c0"/>
+      <stop offset="100%" stop-color="#d4c0a0"/>
+    </linearGradient>
+    <linearGradient id="pop-wine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8b2030"/>
+      <stop offset="100%" stop-color="#c94020"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="420" fill="url(#pop-bg)"/>
+  <!-- rows of wine glasses (Thiebaud style with thick paint ridges) -->
+  <!-- Row 1 -->
+  <g transform="translate(100, 80)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(220, 80)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(340, 80)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(460, 80)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(580, 80)">
+    ${popGlass(0, 0)}
+  </g>
+  <!-- Row 2 -->
+  <g transform="translate(100, 200)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(220, 200)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(340, 200)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(460, 200)">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(580, 200)">
+    ${popGlass(0, 0)}
+  </g>
+  <!-- Row 3 (partial, receding) -->
+  <g transform="translate(160, 320) scale(0.75)" opacity="0.6">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(280, 320) scale(0.75)" opacity="0.6">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(400, 320) scale(0.75)" opacity="0.6">
+    ${popGlass(0, 0)}
+  </g>
+  <g transform="translate(520, 320) scale(0.75)" opacity="0.6">
+    ${popGlass(0, 0)}
+  </g>
+  <!-- display shelf line behind glasses -->
+  <g stroke="#8b6030" stroke-width="2" opacity="0.3">
+    <line x1="50" y1="145" x2="700" y2="145"/>
+    <line x1="50" y1="265" x2="700" y2="265"/>
+    <line x1="80" y1="380" x2="680" y2="380"/>
+  </g>
+  <!-- paint ridge shadows (Thiebaud signature) -->
+  <g opacity="0.15" fill="#5a1020">
+    <ellipse cx="100" cy="55" rx="20" ry="2"/>
+    <ellipse cx="220" cy="55" rx="20" ry="2"/>
+    <ellipse cx="340" cy="55" rx="20" ry="2"/>
+    <ellipse cx="460" cy="55" rx="20" ry="2"/>
+    <ellipse cx="580" cy="55" rx="20" ry="2"/>
+    <ellipse cx="100" cy="175" rx="20" ry="2"/>
+    <ellipse cx="220" cy="175" rx="20" ry="2"/>
+    <ellipse cx="340" cy="175" rx="20" ry="2"/>
+    <ellipse cx="460" cy="175" rx="20" ry="2"/>
+    <ellipse cx="580" cy="175" rx="20" ry="2"/>
+  </g>
+  `
+}
+
+function popGlass(x, y) {
+  return `
+  <g transform="translate(${x}, ${y})">
+    <!-- glass bowl with wine -->
+    <path d="M-15 0 Q-15 20 -10 30 L10 30 Q15 20 15 0 Z" fill="url(#pop-wine)" opacity="0.8"/>
+    <!-- wine surface -->
+    <ellipse cx="0" cy="0" rx="15" ry="4" fill="#8b2030" opacity="0.9"/>
+    <ellipse cx="0" cy="-2" rx="12" ry="2.5" fill="#c94020" opacity="0.5"/>
+    <!-- thick paint rim (Thiebaud style) -->
+    <ellipse cx="0" cy="0" rx="15" ry="4" fill="none" stroke="#e8a080" stroke-width="2" opacity="0.6"/>
+    <ellipse cx="0" cy="-4" rx="13" ry="3" fill="none" stroke="#f0c0a0" stroke-width="1.5" opacity="0.5"/>
+    <!-- highlight on glass -->
+    <path d="M-10 5 Q-12 15 -8 25" stroke="#e8a080" stroke-width="1.5" fill="none" opacity="0.4"/>
+    <!-- stem -->
+    <rect x="-1.5" y="30" width="3" height="15" fill="#d46040" opacity="0.6"/>
+    <!-- thick paint on stem -->
+    <rect x="-2" y="30" width="1" height="15" fill="#e8a080" opacity="0.5"/>
+    <!-- base -->
+    <ellipse cx="0" cy="46" rx="12" ry="3" fill="#8b2030" opacity="0.7"/>
+    <ellipse cx="0" cy="44" rx="10" ry="2" fill="#c94020" opacity="0.5"/>
+    <!-- paint shadow under glass -->
+    <ellipse cx="0" cy="50" rx="14" ry="2" fill="#5a1020" opacity="0.15"/>
+  </g>
+  `;
+}
+
+// ============================================================
+// APP STATE & LOGIC
+// ============================================================
+
+let currentIndex = 0;
+let isPlaying = false;
+let playTimer = null;
+let playSpeed = 6000;
+
+function renderArtwork(index) {
+  const art = ARTWORKS[index];
+  const svgEl = document.getElementById('artwork-svg');
+  // Fade out, swap, fade in
+  gsap.to(svgEl, { opacity: 0, duration: 0.3, ease: 'power2.in', onComplete: () => {
+    svgEl.innerHTML = art.svg();
+    gsap.to(svgEl, { opacity: 1, duration: 0.5, ease: 'power2.out' });
+    // Animate SVG paths with draw effect
+    const paths = svgEl.querySelectorAll('path, polygon, ellipse, circle, rect');
+    gsap.fromTo(paths, { opacity: 0 }, { opacity: 1, duration: 0.6, stagger: 0.005, ease: 'power2.out' });
+  }});
+
+  // Update info panel
+  gsap.to('#info-panel', { opacity: 0, duration: 0.3, ease: 'power2.in', onComplete: () => {
+    document.getElementById('info-era').textContent = art.era + ' · ' + art.period;
+    document.getElementById('info-title').textContent = art.title;
+    document.getElementById('info-artist').textContent = art.artist;
+    document.getElementById('info-desc').textContent = art.desc;
+    document.getElementById('info-context').innerHTML = '<strong>Wine context:</strong> ' + art.context;
+    gsap.to('#info-panel', { opacity: 1, duration: 0.5, ease: 'power2.out' });
+  }});
+
+  // Update technique bar
+  document.getElementById('tb-period').textContent = art.period;
+  document.getElementById('tb-technique').textContent = art.technique;
+  document.getElementById('tb-role').textContent = art.role;
+
+  // Update timeline progress
+  const progress = ((index + 1) / ARTWORKS.length) * 100;
+  document.getElementById('timeline-progress').style.width = progress + '%';
+
+  // Update palette
+  const paletteBar = document.getElementById('palette-bar');
+  paletteBar.innerHTML = '';
+  art.palette.forEach((color, i) => {
+    const sw = document.createElement('div');
+    sw.className = 'palette-swatch';
+    sw.style.background = color;
+    sw.title = color;
+    if (i === 0) sw.classList.add('active');
+    sw.addEventListener('click', () => {
+      document.querySelectorAll('.palette-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+    });
+    paletteBar.appendChild(sw);
+  });
+
+  // Update active states
+  document.querySelectorAll('.era-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === index);
+  });
+  document.querySelectorAll('.thumb').forEach((t, i) => {
+    t.classList.toggle('active', i === index);
+  });
+
+  // Update nav buttons
+  document.getElementById('prev-btn').disabled = (index === 0);
+  document.getElementById('next-btn').disabled = (index === ARTWORKS.length - 1);
+
+  currentIndex = index;
+}
+
+function buildEraNav() {
+  const nav = document.getElementById('era-nav');
+  nav.innerHTML = '';
+  ARTWORKS.forEach((art, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'era-btn';
+    btn.textContent = art.era;
+    btn.addEventListener('click', () => {
+      stopPlay();
+      renderArtwork(i);
+    });
+    nav.appendChild(btn);
+  });
+}
+
+function buildGalleryGrid() {
+  const grid = document.getElementById('gallery-grid');
+  grid.innerHTML = '';
+  ARTWORKS.forEach((art, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.innerHTML = '<svg viewBox="0 0 800 420">' + art.svg() + '</svg><div class="thumb-title">' + art.title.replace(/—.*/, '') + '</div>';
+    thumb.addEventListener('click', () => {
+      stopPlay();
+      renderArtwork(i);
+    });
+    grid.appendChild(thumb);
+  });
+}
+
+function startPlay() {
+  if (isPlaying) return;
+  isPlaying = true;
+  document.getElementById('play-label').textContent = 'Pause';
+  document.getElementById('play-btn').querySelector('.icon').textContent = '⏸';
+  playTimer = setInterval(() => {
+    let next = currentIndex + 1;
+    if (next >= ARTWORKS.length) next = 0;
+    renderArtwork(next);
+  }, playSpeed);
+}
+
+function stopPlay() {
+  if (!isPlaying) return;
+  isPlaying = false;
+  document.getElementById('play-label').textContent = 'Auto-Play';
+  document.getElementById('play-btn').querySelector('.icon').textContent = '▶';
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+}
+
+function togglePlay() {
+  if (isPlaying) stopPlay(); else startPlay();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+function init() {
+  buildEraNav();
+  buildGalleryGrid();
+
+  // Wire controls
+  document.getElementById('prev-btn').addEventListener('click', () => {
+    stopPlay();
+    if (currentIndex > 0) renderArtwork(currentIndex - 1);
+  });
+  document.getElementById('next-btn').addEventListener('click', () => {
+    stopPlay();
+    if (currentIndex < ARTWORKS.length - 1) renderArtwork(currentIndex + 1);
+  });
+  document.getElementById('play-btn').addEventListener('click', togglePlay);
+  document.getElementById('speed-select').addEventListener('change', (e) => {
+    playSpeed = parseInt(e.target.value);
+    if (isPlaying) { stopPlay(); startPlay(); }
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') { stopPlay(); if (currentIndex > 0) renderArtwork(currentIndex - 1); }
+    if (e.key === 'ArrowRight') { stopPlay(); if (currentIndex < ARTWORKS.length - 1) renderArtwork(currentIndex + 1); }
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  });
+
+  // Render first artwork
+  renderArtwork(0);
+}
+
+// Wait for GSAP
+if (typeof gsap !== 'undefined') {
+  init();
+} else {
+  window.addEventListener('load', init);
+}
+</script>
+</body>
+</html>
