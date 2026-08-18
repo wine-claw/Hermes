@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0">
+<title>Wine Tasting Note Builder & Aroma Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0808;
+    --surface: rgba(20, 15, 18, 0.88);
+    --border: #2a1f24;
+    --text: #d4c4c8;
+    --muted: #8a7a80;
+    --accent: #9b1a3a;
+    --gold: #c9a060;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 15px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
+  }
+  .disclaimer {
+    background: #1a1610;
+    border-bottom: 1px solid #3a3020;
+    color: #c9a060;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    font-family: system-ui, sans-serif;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .disclaimer strong { font-weight: 600; }
+
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+  canvas { display: block; }
+
+  #ui-layer {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .panel {
+    pointer-events: auto;
+    background: var(--surface);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .panel::-webkit-scrollbar { width: 5px; }
+  .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .panel h2 {
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gold);
+    margin: 14px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel h2:first-child { margin-top: 0; }
+  .panel .hint {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  #controls {
+    position: absolute;
+    top: 50px;
+    left: 12px;
+    width: 270px;
+    max-height: calc(100vh - 70px);
+  }
+  #aromas {
+    position: absolute;
+    top: 50px;
+    right: 12px;
+    width: 330px;
+    max-height: calc(100vh - 70px);
+  }
+
+  .type-buttons, .preset-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .type-buttons button, .preset-buttons button {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(30, 20, 25, 0.6);
+    color: var(--muted);
+    font-size: 0.76rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .type-buttons button.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .preset-buttons button:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+
+  .slider-group {
+    margin-bottom: 10px;
+  }
+  .slider-group label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .slider-group label span {
+    color: var(--gold);
+    font-weight: 600;
+  }
+  input[type="range"] {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid #c9a060;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid #c9a060;
+  }
+
+  .aroma-family {
+    margin-bottom: 6px;
+  }
+  .family-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: var(--text);
+  }
+  .family-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .family-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-bottom: 4px;
+  }
+  .aroma-chip {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: rgba(30, 20, 25, 0.5);
+    color: var(--muted);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .aroma-chip.selected {
+    color: #fff;
+    font-weight: 600;
+  }
+
+  #note-output {
+    background: rgba(8, 6, 8, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    line-height: 1.65;
+    color: var(--text);
+    margin-bottom: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  #note-output::-webkit-scrollbar { width: 4px; }
+  #note-output::-webkit-scrollbar-thumb { background: var(--border); }
+  #note-output .section-header {
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 8px;
+    margin-bottom: 2px;
+  }
+  #note-output .section-header:first-child { margin-top: 0; }
+
+  #copy-btn {
+    width: 100%;
+    padding: 7px;
+    border-radius: 8px;
+    border: 1px solid var(--gold);
+    background: transparent;
+    color: var(--gold);
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  #copy-btn:hover {
+    background: rgba(201, 160, 96, 0.15);
+  }
+  #copy-btn.copied {
+    background: #2d5a2d;
+    border-color: #4a8a4a;
+    color: #8ac88a;
+  }
+
+  #selected-count {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  #selected-count strong { color: var(--accent); }
+
+  #swirl-hint {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    font-size: 0.75rem;
+    color: var(--muted);
+    background: rgba(10, 8, 8, 0.7);
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    z-index: 11;
+    opacity: 0.8;
+    transition: opacity 0.5s;
+  }
+
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 42vh !important;
+      min-height: 280px;
+      max-height: 400px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #ui-layer {
+      position: relative !important;
+      inset: auto !important;
+      pointer-events: auto;
+    }
+    #controls {
+      position: relative !important;
+      top: auto !important;
+      left: auto !important;
+      width: auto !important;
+      max-height: none !important;
+      margin: 0;
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+    }
+    #aromas {
+      position: relative !important;
+      top: auto !important;
+      right: auto !important;
+      width: auto !important;
+      max-height: none !important;
+      margin: 0;
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+    }
+    #swirl-hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container"></div>
+
+<div id="swirl-hint">Click the glass to swirl and release aromas</div>
+
+<div id="ui-layer">
+  <div id="controls" class="panel">
+    <h2>Wine Type</h2>
+    <div class="type-buttons">
+      <button data-type="red" class="active">Red</button>
+      <button data-type="white">White</button>
+      <button data-type="rose">Rosé</button>
+      <button data-type="sparkling">Sparkling</button>
+      <button data-type="fortified">Fortified</button>
+    </div>
+
+    <h2>Appearance</h2>
+    <div class="slider-group">
+      <label>Color Depth <span id="val-depth">5</span></label>
+      <input type="range" id="slider-depth" min="1" max="10" value="5">
+    </div>
+    <div class="slider-group">
+      <label>Clarity <span id="val-clarity">8</span></label>
+      <input type="range" id="slider-clarity" min="1" max="10" value="8">
+    </div>
+    <div class="slider-group">
+      <label>Wine Age (years) <span id="val-age">3</span></label>
+      <input type="range" id="slider-age" min="1" max="20" value="3">
+    </div>
+
+    <h2>Palate</h2>
+    <div class="slider-group">
+      <label>Body <span id="val-body">3</span></label>
+      <input type="range" id="slider-body" min="1" max="5" value="3">
+    </div>
+    <div class="slider-group">
+      <label>Acidity <span id="val-acidity">3</span></label>
+      <input type="range" id="slider-acidity" min="1" max="5" value="3">
+    </div>
+    <div class="slider-group" id="tannin-group">
+      <label>Tannin <span id="val-tannin">3</span></label>
+      <input type="range" id="slider-tannin" min="0" max="5" value="3">
+    </div>
+    <div class="slider-group">
+      <label>Sweetness <span id="val-sweet">1</span></label>
+      <input type="range" id="slider-sweet" min="0" max="5" value="1">
+    </div>
+    <div class="slider-group">
+      <label>Alcohol (% ABV) <span id="val-abv">13.5</span></label>
+      <input type="range" id="slider-abv" min="8" max="20" value="13.5" step="0.5">
+    </div>
+    <div class="slider-group">
+      <label>Finish <span id="val-finish">3</span></label>
+      <input type="range" id="slider-finish" min="1" max="5" value="3">
+    </div>
+
+    <h2>Presets</h2>
+    <div class="preset-buttons">
+      <button data-preset="cab">Young Cabernet</button>
+      <button data-preset="pinot">Aged Pinot</button>
+      <button data-preset="riesling">Crisp Riesling</button>
+      <button data-preset="chard">Oaked Chard</button>
+      <button data-preset="port">Vintage Port</button>
+    </div>
+  </div>
+
+  <div id="aromas" class="panel">
+    <h2>Aroma Selection</h2>
+    <p class="hint">Tap aromas to add them. Each one releases coloured particles from the glass.</p>
+    <div id="selected-count"><strong id="count-num">0</strong> aromas selected</div>
+    <div id="aroma-families"></div>
+
+    <h2>Tasting Note</h2>
+    <div id="note-output"></div>
+    <button id="copy-btn">Copy Tasting Note</button>
+  </div>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+/* ========== AROMA DATA ========== */
+var AROMA_FAMILIES = [
+  { name: 'Red Fruit', color: 0xe63946, css: '#e63946', descs: ['Cherry','Raspberry','Strawberry','Cranberry','Red Plum','Pomegranate'] },
+  { name: 'Black Fruit', color: 0x6a3050, css: '#6a3050', descs: ['Blackberry','Black Cherry','Cassis','Blueberry','Black Plum'] },
+  { name: 'Tree Fruit', color: 0xf4a261, css: '#f4a261', descs: ['Apple','Pear','Peach','Apricot','Quince'] },
+  { name: 'Citrus', color: 0xe9c46a, css: '#e9c46a', descs: ['Lemon','Lime','Grapefruit','Orange','Tangerine'] },
+  { name: 'Tropical', color: 0xf1a208, css: '#f1a208', descs: ['Pineapple','Mango','Passionfruit','Lychee','Guava','Melon'] },
+  { name: 'Floral', color: 0xff6b9d, css: '#ff6b9d', descs: ['Rose','Violet','Honeysuckle','Jasmine','Orange Blossom','Lavender'] },
+  { name: 'Spice', color: 0xc1432e, css: '#c1432e', descs: ['Black Pepper','Cinnamon','Clove','Nutmeg','Licorice','Ginger'] },
+  { name: 'Earthy', color: 0x8b6b45, css: '#8b6b45', descs: ['Mushroom','Forest Floor','Mineral','Wet Stone','Bramble'] },
+  { name: 'Oak', color: 0xa0703b, css: '#a0703b', descs: ['Vanilla','Toast','Smoke','Coconut','Cedar','Chocolate'] },
+  { name: 'Herbal', color: 0x588157, css: '#588157', descs: ['Mint','Eucalyptus','Thyme','Grass','Bell Pepper','Blackcurrant Leaf'] },
+  { name: 'Other', color: 0xd4a373, css: '#d4a373', descs: ['Honey','Butter','Caramel','Coffee','Almond','Hazelnut','Leather','Barnyard'] }
+];
+var FAMILY_MAP = {};
+for (var i = 0; i < AROMA_FAMILIES.length; i++) {
+  for (var j = 0; j < AROMA_FAMILIES[i].descs.length; j++) {
+    FAMILY_MAP[AROMA_FAMILIES[i].descs[j]] = AROMA_FAMILIES[i];
+  }
+}
+
+/* ========== PRESETS ========== */
+var PRESETS = {
+  cab: { type:'red', depth:8, clarity:9, age:2, body:4, acidity:3, tannin:4, sweet:0, abv:14.5, finish:4,
+    aromas:['Black Cherry','Cassis','Blackberry','Vanilla','Cedar','Black Pepper'] },
+  pinot: { type:'red', depth:4, clarity:8, age:12, body:3, acidity:4, tannin:2, sweet:0, abv:13.5, finish:4,
+    aromas:['Cherry','Raspberry','Mushroom','Forest Floor','Rose'] },
+  riesling: { type:'white', depth:2, clarity:9, age:3, body:2, acidity:5, tannin:0, sweet:2, abv:11.5, finish:4,
+    aromas:['Lime','Green Apple','Rose','Mineral','Peach'] },
+  chard: { type:'white', depth:5, clarity:8, age:5, body:4, acidity:2, tannin:0, sweet:0, abv:14, finish:4,
+    aromas:['Peach','Apricot','Vanilla','Toast','Butter','Caramel'] },
+  port: { type:'fortified', depth:10, clarity:7, age:10, body:5, acidity:2, tannin:3, sweet:5, abv:20, finish:5,
+    aromas:['Black Cherry','Blackberry','Chocolate','Cinnamon','Clove','Caramel'] }
+};
+
+/* ========== STATE ========== */
+var state = {
+  type: 'red', depth: 5, clarity: 8, age: 3,
+  body: 3, acidity: 3, tannin: 3, sweet: 1, abv: 13.5, finish: 3,
+  aromas: {}
+};
+
+/* ========== COLOR HELPERS ========== */
+function lerpColor(c1, c2, t) {
+  var r1 = (c1 >> 16) & 0xff, g1 = (c1 >> 8) & 0xff, b1 = c1 & 0xff;
+  var r2 = (c2 >> 16) & 0xff, g2 = (c2 >> 8) & 0xff, b2 = c2 & 0xff;
+  var r = Math.round(r1 + (r2 - r1) * t);
+  var g = Math.round(g1 + (g2 - g1) * t);
+  var b = Math.round(b1 + (b2 - b1) * t);
+  return (r << 16) | (g << 8) | b;
+}
+function adjustBrightness(color, factor) {
+  var r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff;
+  r = Math.min(255, Math.max(0, Math.round(r * factor)));
+  g = Math.min(255, Math.max(0, Math.round(g * factor)));
+  b = Math.min(255, Math.max(0, Math.round(b * factor)));
+  return (r << 16) | (g << 8) | b;
+}
+
+var YOUNG_COLORS = { red: 0x5c0a20, white: 0xd4e870, rose: 0xf08080, sparkling: 0xf5e6c8, fortified: 0x7b1a1a };
+var AGED_COLORS  = { red: 0x9b4a30, white: 0xc49818, rose: 0xd2691e, sparkling: 0xe6c800, fortified: 0xa0682a };
+
+function getWineColor() {
+  var t = (state.age - 1) / 19;
+  var base = lerpColor(YOUNG_COLORS[state.type], AGED_COLORS[state.type], t);
+  var depthF = 1.45 - (state.depth - 1) / 9 * 0.85;
+  return adjustBrightness(base, depthF);
+}
+
+/* ========== PIXI SETUP ========== */
+var container = document.getElementById('canvas-container');
+var app, glassLayer, particleLayer, effectLayer;
+var glassInfo = null;
+var particleGfx, effectGfx;
+var particles = [];
+var bubbles = [];
+var swirlTimer = 0;
+var wavePhase = 0;
+var surfaceScreenY = 0, surfaceHalfW = 0, rimScreenY = 0, glassCx = 0;
+
+function initPixi() {
+  if (typeof PIXI === 'undefined') {
+    container.innerHTML = '<div style="color:#c9a060;text-align:center;padding:2rem;font-size:0.85rem;">Failed to load Pixi.js. Please check your connection.</div>';
+    return;
+  }
+  app = new PIXI.Application({
+    background: 0x0a0808,
+    antialias: true,
+    resizeTo: container,
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    autoDensity: true
+  });
+  container.appendChild(app.view);
+
+  glassLayer = new PIXI.Container();
+  particleLayer = new PIXI.Container();
+  effectLayer = new PIXI.Container();
+  app.stage.addChild(glassLayer, particleLayer, effectLayer);
+
+  particleGfx = new PIXI.Graphics();
+  particleLayer.addChild(particleGfx);
+
+  effectGfx = new PIXI.Graphics();
+  effectLayer.addChild(effectGfx);
+
+  app.stage.interactive = true;
+  app.stage.hitArea = app.screen;
+  app.stage.on('pointertap', function(e) {
+    var x = e.global.x, y = e.global.y;
+    if (glassInfo) {
+      var dx = x - glassCx;
+      var dy = y - (surfaceScreenY + glassInfo.container.y);
+      if (Math.abs(dx) < surfaceHalfW * 1.5 && dy > -100 && dy < 200) {
+        swirlTimer = 3.0;
+        var hint = document.getElementById('swirl-hint');
+        if (hint) hint.style.opacity = '0';
+      }
+    }
+  });
+
+  updateGlass();
+
+  app.ticker.add(function(dt) {
+    wavePhase += dt * 0.04;
+    spawnParticles(dt);
+    updateParticles(dt);
+    renderParticles();
+    spawnBubbles(dt);
+    updateBubbles(dt);
+    renderEffects();
+    if (swirlTimer > 0) swirlTimer -= dt / 60;
+  });
+
+  window.addEventListener('resize', function() {
+    setTimeout(function() {
+      if (app && app.stage) {
+        app.stage.hitArea = app.screen;
+        updateGlass();
+      }
+    }, 100);
+  });
+}
+
+/* ========== GLASS DRAWING ========== */
+function drawGlass() {
+  glassLayer.removeChildren();
+
+  var w = app.screen.width;
+  var h = app.screen.height;
+  var scale = Math.min(w / 380, h / 480) * 0.85;
+  if (scale < 0.4) scale = 0.4;
+
+  glassCx = w / 2;
+  var baseY = h * 0.82;
+
+  var rimW = 48 * scale;
+  var bowlH = 110 * scale;
+  var stemH = 65 * scale;
+  var stemW = 5 * scale;
+  var baseW = 42 * scale;
+  var baseH = 5 * scale;
+  var fillLevel = 0.68;
+
+  var rimY = -(bowlH + stemH + baseH);
+  var stemTopY = -(stemH + baseH);
+  var baseTopY = -baseH;
+  var surfaceY = rimY + bowlH * (1 - fillLevel);
+  var surfaceHalfW = rimW * (0.72 + 0.28 * fillLevel);
+
+  var wineColor = getWineColor();
+
+  var glass = new PIXI.Container();
+  glass.x = glassCx;
+  glass.y = baseY;
+
+  /* Wine fill */
+  var fillG = new PIXI.Graphics();
+  fillG.beginFill(wineColor, 0.85);
+  fillG.moveTo(-surfaceHalfW, surfaceY);
+  fillG.bezierCurveTo(
+    -rimW * 1.12, surfaceY + bowlH * 0.32,
+    -stemW * 1.8, stemTopY - bowlH * 0.12,
+    -stemW, stemTopY
+  );
+  fillG.lineTo(stemW, stemTopY);
+  fillG.bezierCurveTo(
+    stemW * 1.8, stemTopY - bowlH * 0.12,
+    rimW * 1.12, surfaceY + bowlH * 0.32,
+    surfaceHalfW, surfaceY
+  );
+  fillG.closePath();
+  fillG.endFill();
+  glass.addChild(fillG);
+
+  /* Liquid surface ellipse */
+  var surfG = new PIXI.Graphics();
+  surfG.lineStyle(1.5, adjustBrightness(wineColor, 1.3), 0.4);
+  surfG.drawEllipse(0, surfaceY, surfaceHalfW, surfaceHalfW * 0.12);
+  surfG.lineStyle(0.8, 0xffffff, 0.08);
+  surfG.drawEllipse(0, surfaceY, surfaceHalfW * 0.95, surfaceHalfW * 0.11);
+  glass.addChild(surfG);
+
+  /* Glass outline */
+  var outlineG = new PIXI.Graphics();
+  outlineG.lineStyle(2, 0x8899bb, 0.22);
+
+  /* Bowl left */
+  outlineG.moveTo(-rimW, rimY);
+  outlineG.bezierCurveTo(
+    -rimW * 1.15, rimY + bowlH * 0.35,
+    -stemW * 1.8, stemTopY - bowlH * 0.15,
+    -stemW, stemTopY
+  );
+  /* Bowl right */
+  outlineG.moveTo(stemW, stemTopY);
+  outlineG.bezierCurveTo(
+    stemW * 1.8, stemTopY - bowlH * 0.15,
+    rimW * 1.15, rimY + bowlH * 0.35,
+    rimW, rimY
+  );
+  /* Rim */
+  outlineG.lineStyle(1.5, 0x8899bb, 0.15);
+  outlineG.moveTo(-rimW, rimY);
+  outlineG.lineTo(rimW, rimY);
+
+  /* Stem */
+  outlineG.lineStyle(2, 0x8899bb, 0.2);
+  outlineG.moveTo(-stemW, stemTopY);
+  outlineG.lineTo(-stemW, baseTopY);
+  outlineG.moveTo(stemW, stemTopY);
+  outlineG.lineTo(stemW, baseTopY);
+
+  /* Base */
+  outlineG.moveTo(-baseW, 0);
+  outlineG.lineTo(baseW, 0);
+  outlineG.lineStyle(1.5, 0x8899bb, 0.15);
+  outlineG.drawEllipse(0, baseTopY, baseW, baseH);
+
+  glass.addChild(outlineG);
+
+  /* Reflection highlight */
+  var hlG = new PIXI.Graphics();
+  hlG.lineStyle(1.5, 0xffffff, 0.08);
+  hlG.moveTo(-rimW * 0.55, rimY + bowlH * 0.08);
+  hlG.bezierCurveTo(
+    -rimW * 0.85, rimY + bowlH * 0.3,
+    -stemW * 2.5, stemTopY - bowlH * 0.25,
+    -stemW * 1.8, stemTopY * 0.6
+  );
+  hlG.lineStyle(1, 0xffffff, 0.05);
+  hlG.moveTo(rimW * 0.35, rimY + bowlH * 0.12);
+  hlG.bezierCurveTo(
+    rimW * 0.6, rimY + bowlH * 0.35,
+    stemW * 1.5, stemTopY - bowlH * 0.3,
+    stemW * 1.2, stemTopY * 0.8
+  );
+  glass.addChild(hlG);
+
+  /* Subtle glow behind glass */
+  var glowG = new PIXI.Graphics();
+  glowG.beginFill(wineColor, 0.04);
+  glowG.drawCircle(0, rimY + bowlH * 0.4, bowlH * 0.75);
+  glowG.endFill();
+  glass.addChildAt(glowG, 0);
+
+  glassLayer.addChild(glass);
+
+  /* Update screen-space surface info */
+  surfaceScreenY = baseY + surfaceY;
+  rimScreenY = baseY + rimY;
+
+  glassInfo = {
+    container: glass,
+    surfaceY: surfaceY,
+    surfaceHalfW: surfaceHalfW,
+    rimY: rimY,
+    rimW: rimW,
+    bowlH: bowlH,
+    stemTopY: stemTopY,
+    scale: scale
+  };
+}
+
+function updateGlass() {
+  drawGlass();
+}
+
+/* ========== PARTICLE SYSTEM ========== */
+function getSelectedFamilies() {
+  var fams = {};
+  for (var desc in state.aromas) {
+    if (state.aromas[desc]) {
+      var fam = FAMILY_MAP[desc];
+      if (fam) fams[fam.name] = fam;
+    }
+  }
+  return fams;
+}
+
+function getSelectedAromaList() {
+  var list = [];
+  for (var desc in state.aromas) {
+    if (state.aromas[desc]) list.push(desc);
+  }
+  return list;
+}
+
+function spawnParticles(dt) {
+  if (!glassInfo) return;
+  var fams = getSelectedFamilies();
+  var familyList = [];
+  for (var name in fams) familyList.push(fams[name]);
+
+  var baseChance = 0.25 * dt;
+  var perFamily = 0.12 * dt;
+  var swirlMult = swirlTimer > 0 ? 3.0 : 1.0;
+  var spawnChance = (baseChance + familyList.length * perFamily) * swirlMult;
+
+  var maxParticles = 200;
+  while (spawnChance > 0 && particles.length < maxParticles) {
+    if (Math.random() < Math.min(spawnChance, 1)) {
+      var fam;
+      if (familyList.length > 0 && Math.random() > 0.2) {
+        fam = familyList[Math.floor(Math.random() * familyList.length)];
+      } else {
+        fam = { color: 0xffffff };
+      }
+      var px = glassCx + (Math.random() - 0.5) * surfaceHalfW * 1.6;
+      var py = surfaceScreenY + (Math.random() - 0.5) * 4;
+      particles.push({
+        x: px, y: py,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: -(0.5 + Math.random() * 0.8),
+        phase: Math.random() * Math.PI * 2,
+        freq: 0.03 + Math.random() * 0.04,
+        amp: 0.3 + Math.random() * 0.4,
+        size: 1.5 + Math.random() * 2.5,
+        color: fam.color,
+        life: 1.0,
+        decay: 0.006 + Math.random() * 0.004
+      });
+    }
+    spawnChance -= 1;
+  }
+}
+
+function updateParticles(dt) {
+  for (var i = particles.length - 1; i >= 0; i--) {
+    var p = particles[i];
+    p.phase += p.freq * dt;
+    p.x += (p.vx + Math.sin(p.phase) * p.amp) * dt;
+    p.y += p.vy * dt;
+    p.vy *= 0.998;
+    p.life -= p.decay * dt;
+    if (p.life <= 0 || p.y < rimScreenY - 20) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
+function renderParticles() {
+  particleGfx.clear();
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    var a = p.life * 0.7;
+    /* Glow */
+    particleGfx.beginFill(p.color, a * 0.25);
+    particleGfx.drawCircle(p.x, p.y, p.size * 2.2);
+    particleGfx.endFill();
+    /* Core */
+    particleGfx.beginFill(p.color, a);
+    particleGfx.drawCircle(p.x, p.y, p.size);
+    particleGfx.endFill();
+  }
+}
+
+/* ========== SPARKLING BUBBLES ========== */
+function spawnBubbles(dt) {
+  if (state.type !== 'sparkling' || !glassInfo) return;
+  var chance = 0.8 * dt;
+  while (chance > 0 && bubbles.length < 60) {
+    if (Math.random() < Math.min(chance, 1)) {
+      var ginfo = glassInfo;
+      var bx = glassCx + (Math.random() - 0.5) * surfaceHalfW * 1.2;
+      var by = surfaceScreenY + 20 + Math.random() * 40;
+      bubbles.push({
+        x: bx, y: by,
+        vy: -(0.4 + Math.random() * 0.6),
+        vx: (Math.random() - 0.5) * 0.1,
+        size: 0.8 + Math.random() * 1.5,
+        life: 1.0
+      });
+    }
+    chance -= 1;
+  }
+}
+
+function updateBubbles(dt) {
+  for (var i = bubbles.length - 1; i >= 0; i--) {
+    var b = bubbles[i];
+    b.y += b.vy * dt;
+    b.x += b.vx * dt;
+    if (b.y < surfaceScreenY - 5) {
+      bubbles.splice(i, 1);
+    }
+  }
+}
+
+function renderEffects() {
+  effectGfx.clear();
+  /* Bubbles inside sparkling wine */
+  for (var i = 0; i < bubbles.length; i++) {
+    var b = bubbles[i];
+    effectGfx.beginFill(0xffffff, 0.35 * b.life);
+    effectGfx.drawCircle(b.x, b.y, b.size);
+    effectGfx.endFill();
+    effectGfx.beginFill(0xffffff, 0.6 * b.life);
+    effectGfx.drawCircle(b.x - b.size * 0.25, b.y - b.size * 0.25, b.size * 0.35);
+    effectGfx.endFill();
+  }
+  /* Swirl effect — rotating arc on surface */
+  if (swirlTimer > 0 && glassInfo) {
+    var ginfo = glassInfo;
+    var cx = glassCx;
+    var cy = surfaceScreenY;
+    var r = surfaceHalfW * 0.7;
+    var angle = wavePhase * 8;
+    effectGfx.lineStyle(1.5, 0xffffff, 0.15 * Math.min(swirlTimer / 3, 1));
+    effectGfx.arc(cx, cy, r, angle, angle + Math.PI * 0.6);
+    effectGfx.arc(cx, cy, r * 0.6, angle + Math.PI, angle + Math.PI * 1.5);
+  }
+}
+
+/* ========== AROMA UI ========== */
+function buildAromaUI() {
+  var container = document.getElementById('aroma-families');
+  var html = '';
+  for (var i = 0; i < AROMA_FAMILIES.length; i++) {
+    var fam = AROMA_FAMILIES[i];
+    html += '<div class="aroma-family">';
+    html += '<div class="family-header"><div class="family-dot" style="background:' + fam.css + '"></div>' + fam.name + '</div>';
+    html += '<div class="family-chips">';
+    for (var j = 0; j < fam.descs.length; j++) {
+      var d = fam.descs[j];
+      html += '<span class="aroma-chip" data-aroma="' + d + '" style="--family-color:' + fam.css + '">' + d + '</span>';
+    }
+    html += '</div></div>';
+  }
+  container.innerHTML = html;
+
+  var chips = container.querySelectorAll('.aroma-chip');
+  for (var k = 0; k < chips.length; k++) {
+    (function(chip) {
+      chip.addEventListener('click', function() {
+        var desc = chip.getAttribute('data-aroma');
+        if (state.aromas[desc]) {
+          delete state.aromas[desc];
+          chip.classList.remove('selected');
+          chip.style.background = '';
+          chip.style.borderColor = '';
+        } else {
+          state.aromas[desc] = true;
+          chip.classList.add('selected');
+          var fam = FAMILY_MAP[desc];
+          chip.style.background = fam.css;
+          chip.style.borderColor = fam.css;
+        }
+        updateCount();
+        updateNote();
+      });
+    })(chips[k]);
+  }
+}
+
+function updateCount() {
+  var count = getSelectedAromaList().length;
+  document.getElementById('count-num').textContent = count;
+}
+
+function syncAromaChips() {
+  var chips = document.querySelectorAll('.aroma-chip');
+  for (var i = 0; i < chips.length; i++) {
+    var chip = chips[i];
+    var desc = chip.getAttribute('data-aroma');
+    if (state.aromas[desc]) {
+      chip.classList.add('selected');
+      var fam = FAMILY_MAP[desc];
+      chip.style.background = fam.css;
+      chip.style.borderColor = fam.css;
+    } else {
+      chip.classList.remove('selected');
+      chip.style.background = '';
+      chip.style.borderColor = '';
+    }
+  }
+  updateCount();
+}
+
+/* ========== TASTING NOTE GENERATION ========== */
+function getColorDescriptor(type, age) {
+  if (type === 'red') {
+    if (age <= 3) return 'ruby';
+    if (age <= 8) return 'garnet';
+    if (age <= 15) return 'brick';
+    return 'tawny';
+  }
+  if (type === 'white') {
+    if (age <= 3) return 'lemon-green';
+    if (age <= 8) return 'lemon';
+    if (age <= 15) return 'gold';
+    return 'amber';
+  }
+  if (type === 'rose') {
+    if (age <= 3) return 'pink';
+    if (age <= 8) return 'salmon';
+    return 'onion skin';
+  }
+  if (type === 'sparkling') {
+    if (age <= 3) return 'pale straw';
+    if (age <= 8) return 'straw';
+    return 'gold';
+  }
+  if (type === 'fortified') {
+    if (age <= 5) return 'ruby';
+    if (age <= 15) return 'tawny';
+    return 'amber';
+  }
+  return '';
+}
+
+function getLevelDesc(val, labels) {
+  if (val < labels.length) return labels[val];
+  return labels[labels.length - 1];
+}
+
+function updateNote() {
+  var type = state.type;
+  var age = state.age;
+  var depth = state.depth;
+  var clarity = state.clarity;
+  var aromas = getSelectedAromaList();
+  var typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+
+  var intensityDesc = depth <= 3 ? 'pale' : depth <= 6 ? 'medium' : 'deep';
+  var colorDesc = getColorDescriptor(type, age);
+  var clarityDesc = clarity <= 3 ? 'hazy' : clarity <= 7 ? 'clear' : 'brilliant';
+
+  var noseIntensity = aromas.length <= 3 ? 'light' : aromas.length <= 8 ? 'medium' : 'pronounced';
+  var development = age <= 3 ? 'youthful' : age <= 8 ? 'developing' : age <= 15 ? 'fully developed' : 'tired';
+
+  var bodyDesc = state.body <= 2 ? 'light' : state.body <= 3 ? 'medium' : state.body == 4 ? 'medium(+)' : 'full';
+  var acidLabels = ['very low','low','medium(-)','medium','medium(+)','high'];
+  var acidDesc = getLevelDesc(state.acidity, acidLabels);
+  var tanninLabels = ['none','very soft','soft','medium(-)','medium','medium(+)','firm'];
+  var tanninDesc = getLevelDesc(state.tannin, tanninLabels);
+  var sweetLabels = ['bone dry','dry','off-dry','medium-sweet','sweet','luscious'];
+  var sweetDesc = getLevelDesc(state.sweet, sweetLabels);
+  var finishLabels = ['very short','short','medium(-)','medium','medium(+)','long'];
+  var finishDesc = getLevelDesc(state.finish, finishLabels);
+
+  /* Quality assessment */
+  var complexity = Math.min(aromas.length / 12, 1);
+  var balanceScore = 1 - Math.abs(state.body - state.acidity) / 5 * 0.25 - Math.abs(state.abv - 13.5) / 10 * 0.15;
+  var finishScore = state.finish / 5;
+  var qScore = complexity * 0.35 + balanceScore * 0.35 + finishScore * 0.30;
+  var quality = qScore < 0.35 ? 'acceptable' : qScore < 0.55 ? 'good' : qScore < 0.72 ? 'very good' : 'outstanding';
+
+  /* Drinking window */
+  var window_;
+  if (age > 16) window_ = 'drink now — approaching its peak';
+  else if (age > 11) window_ = 'drink now or hold 1-2 years';
+  else if (state.tannin >= 4 && state.acidity >= 4 && age <= 4) window_ = 'hold 5-10 years for full development';
+  else if (state.tannin >= 3 && age <= 3) window_ = 'drink now or hold 2-4 years';
+  else if (state.sweet >= 4 && age <= 5) window_ = 'will age gracefully for 5+ years';
+  else window_ = 'drink now';
+
+  /* Group aromas by family */
+  var grouped = {};
+  for (var i = 0; i < aromas.length; i++) {
+    var fam = FAMILY_MAP[aromas[i]];
+    if (fam) {
+      if (!grouped[fam.name]) grouped[fam.name] = [];
+      grouped[fam.name].push(aromas[i]);
+    }
+  }
+  var hasOak = grouped['Oak'] && grouped['Oak'].length > 0;
+  var hasEarth = grouped['Earthy'] && grouped['Earthy'].length > 0;
+  var devNote = development;
+  if (hasEarth && age > 5) devNote = 'developing with tertiary complexity';
+  if (hasOak) devNote = development + ' with oak influence';
+
+  /* Build note HTML */
+  var html = '';
+  html += '<div class="section-header">Appearance</div>';
+  html += typeLabel + ' wine, ' + intensityDesc + ' ' + colorDesc + ' with ' + clarityDesc + ' clarity.';
+
+  html += '<div class="section-header">Nose</div>';
+  html += noseIntensity.charAt(0).toUpperCase() + noseIntensity.slice(1) + ' intensity, ' + devNote + '.';
+  if (aromas.length > 0) {
+    var parts = [];
+    for (var famName in grouped) parts.push(grouped[famName].join(', '));
+    html += '\nAromas: ' + parts.join('; ') + '.';
+  } else {
+    html += '\nNo specific aromas selected — tap aroma chips to build your note.';
+  }
+
+  html += '<div class="section-header">Palate</div>';
+  html += bodyDesc.charAt(0).toUpperCase() + bodyDesc.slice(1) + ' body, ' + acidDesc + ' acidity';
+  if (type === 'red' || type === 'fortified') html += ', ' + tanninDesc + ' tannins';
+  html += ', ' + sweetDesc + ', ' + state.abv + '% ABV.';
+  html += '\n' + finishDesc.charAt(0).toUpperCase() + finishDesc.slice(1) + ' finish.';
+
+  html += '<div class="section-header">Conclusion</div>';
+  html += quality.charAt(0).toUpperCase() + quality.slice(1) + ' quality, ' + development + '. ' + window_ + '.';
+
+  document.getElementById('note-output').innerHTML = html;
+}
+
+function getNotePlainText() {
+  var el = document.getElementById('note-output');
+  var text = '';
+  var sections = el.querySelectorAll('.section-header');
+  var fullText = el.innerText || el.textContent;
+  return fullText;
+}
+
+/* ========== UI WIRING ========== */
+function setupSliders() {
+  var sliders = [
+    { id: 'slider-depth', val: 'val-depth', key: 'depth', fmt: function(v) { return v; } },
+    { id: 'slider-clarity', val: 'val-clarity', key: 'clarity', fmt: function(v) { return v; } },
+    { id: 'slider-age', val: 'val-age', key: 'age', fmt: function(v) { return v; } },
+    { id: 'slider-body', val: 'val-body', key: 'body', fmt: function(v) { return v; } },
+    { id: 'slider-acidity', val: 'val-acidity', key: 'acidity', fmt: function(v) { return v; } },
+    { id: 'slider-tannin', val: 'val-tannin', key: 'tannin', fmt: function(v) { return v; } },
+    { id: 'slider-sweet', val: 'val-sweet', key: 'sweet', fmt: function(v) { return v; } },
+    { id: 'slider-abv', val: 'val-abv', key: 'abv', fmt: function(v) { return parseFloat(v).toFixed(1); } },
+    { id: 'slider-finish', val: 'val-finish', key: 'finish', fmt: function(v) { return v; } }
+  ];
+  for (var i = 0; i < sliders.length; i++) {
+    (function(s) {
+      var el = document.getElementById(s.id);
+      var valEl = document.getElementById(s.val);
+      el.addEventListener('input', function() {
+        var v = parseFloat(el.value);
+        state[s.key] = v;
+        valEl.textContent = s.fmt(v);
+        if (s.key === 'type' || s.key === 'depth' || s.key === 'age') {
+          updateGlass();
+        }
+        if (s.key === 'type') {
+          updateTanninVisibility();
+        }
+        updateNote();
+      });
+    })(sliders[i]);
+  }
+}
+
+function setupTypeButtons() {
+  var btns = document.querySelectorAll('.type-buttons button');
+  for (var i = 0; i < btns.length; i++) {
+    (function(btn) {
+      btn.addEventListener('click', function() {
+        for (var j = 0; j < btns.length; j++) btns[j].classList.remove('active');
+        btn.classList.add('active');
+        state.type = btn.getAttribute('data-type');
+        updateTanninVisibility();
+        updateGlass();
+        updateNote();
+      });
+    })(btns[i]);
+  }
+}
+
+function updateTanninVisibility() {
+  var tg = document.getElementById('tannin-group');
+  if (state.type === 'red' || state.type === 'fortified') {
+    tg.style.display = '';
+  } else {
+    tg.style.display = 'none';
+    state.tannin = 0;
+    document.getElementById('slider-tannin').value = 0;
+    document.getElementById('val-tannin').textContent = 0;
+  }
+}
+
+function setupPresets() {
+  var btns = document.querySelectorAll('.preset-buttons button');
+  for (var i = 0; i < btns.length; i++) {
+    (function(btn) {
+      btn.addEventListener('click', function() {
+        var preset = PRESETS[btn.getAttribute('data-preset')];
+        if (!preset) return;
+        state.type = preset.type;
+        state.depth = preset.depth;
+        state.clarity = preset.clarity;
+        state.age = preset.age;
+        state.body = preset.body;
+        state.acidity = preset.acidity;
+        state.tannin = preset.tannin;
+        state.sweet = preset.sweet;
+        state.abv = preset.abv;
+        state.finish = preset.finish;
+        state.aromas = {};
+        for (var k = 0; k < preset.aromas.length; k++) {
+          state.aromas[preset.aromas[k]] = true;
+        }
+        syncAllUI();
+      });
+    })(btns[i]);
+  }
+}
+
+function syncAllUI() {
+  /* Type buttons */
+  var typeBtns = document.querySelectorAll('.type-buttons button');
+  for (var i = 0; i < typeBtns.length; i++) {
+    if (typeBtns[i].getAttribute('data-type') === state.type) typeBtns[i].classList.add('active');
+    else typeBtns[i].classList.remove('active');
+  }
+  /* Sliders */
+  document.getElementById('slider-depth').value = state.depth;
+  document.getElementById('val-depth').textContent = state.depth;
+  document.getElementById('slider-clarity').value = state.clarity;
+  document.getElementById('val-clarity').textContent = state.clarity;
+  document.getElementById('slider-age').value = state.age;
+  document.getElementById('val-age').textContent = state.age;
+  document.getElementById('slider-body').value = state.body;
+  document.getElementById('val-body').textContent = state.body;
+  document.getElementById('slider-acidity').value = state.acidity;
+  document.getElementById('val-acidity').textContent = state.acidity;
+  document.getElementById('slider-tannin').value = state.tannin;
+  document.getElementById('val-tannin').textContent = state.tannin;
+  document.getElementById('slider-sweet').value = state.sweet;
+  document.getElementById('val-sweet').textContent = state.sweet;
+  document.getElementById('slider-abv').value = state.abv;
+  document.getElementById('val-abv').textContent = parseFloat(state.abv).toFixed(1);
+  document.getElementById('slider-finish').value = state.finish;
+  document.getElementById('val-finish').textContent = state.finish;
+
+  updateTanninVisibility();
+  syncAromaChips();
+  updateGlass();
+  updateNote();
+}
+
+function setupCopy() {
+  var btn = document.getElementById('copy-btn');
+  btn.addEventListener('click', function() {
+    var text = document.getElementById('note-output').innerText || document.getElementById('note-output').textContent;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function() {
+        btn.classList.add('copied');
+        btn.textContent = 'Copied!';
+        setTimeout(function() {
+          btn.classList.remove('copied');
+          btn.textContent = 'Copy Tasting Note';
+        }, 2000);
+      });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch(e) {}
+      document.body.removeChild(ta);
+      btn.classList.add('copied');
+      btn.textContent = 'Copied!';
+      setTimeout(function() {
+        btn.classList.remove('copied');
+        btn.textContent = 'Copy Tasting Note';
+      }, 2000);
+    }
+  });
+}
+
+/* ========== INIT ========== */
+buildAromaUI();
+setupSliders();
+setupTypeButtons();
+setupPresets();
+setupCopy();
+updateTanninVisibility();
+updateNote();
+initPixi();
+
+/* Fade out swirl hint after 6 seconds */
+setTimeout(function() {
+  var hint = document.getElementById('swirl-hint');
+  if (hint) hint.style.opacity = '0';
+}, 6000);
+
+})();
+</script>
+</body>
+</html>
