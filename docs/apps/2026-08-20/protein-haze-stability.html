@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Protein Haze & Heat Stability Explorer</title>
+<style>
+  :root{ --bg:#0a0f14; --surface:#101820; --border:#2a3a4a; --text:#d0d8e0; --muted:#7a8a9a; --accent:#5fb3a1; --accent2:#c9a060; --warn-bg:#1a1610; --warn-border:#3a3020; --warn-text:#c9a060; }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:16px; }
+  body{ background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .disclaimer{ background:var(--warn-bg); border-bottom:1px solid var(--warn-border); color:var(--warn-text); padding:0.75rem 1rem; text-align:center; font-size:0.85rem; font-family:system-ui,sans-serif; position:sticky; top:0; z-index:100; }
+  .disclaimer strong{ font-weight:600; }
+
+  #canvas-container{ position:fixed; inset:0; z-index:0; }
+  canvas{ display:block; }
+
+  #ui-layer{ position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; z-index:10; }
+
+  .panel{
+    background:rgba(16,24,32,0.92);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:0.9rem;
+    pointer-events:auto;
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
+  }
+
+  #controls{
+    position:absolute; top:12px; left:12px;
+    width:280px; max-height:calc(100vh - 24px);
+    overflow-y:auto;
+  }
+  #controls h2{ font-size:1.0rem; color:var(--accent); margin-bottom:0.3rem; }
+  #controls .subtitle{ font-size:0.78rem; color:var(--muted); margin-bottom:0.75rem; }
+
+  #metrics{
+    position:absolute; top:12px; right:12px;
+    width:230px;
+  }
+  #metrics h3{ font-size:0.85rem; color:var(--accent2); margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .metric-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; font-size:0.82rem; }
+  .metric-label{ color:var(--muted); }
+  .metric-value{ font-weight:600; font-variant-numeric:tabular-nums; }
+  .metric-value.warn{ color:#e8a060; }
+  .metric-value.danger{ color:#e86060; }
+  .metric-value.ok{ color:#60c880; }
+  .metric-value.accent{ color:var(--accent); }
+
+  .slider-group{ margin-bottom:0.6rem; }
+  .slider-group label{ display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text); margin-bottom:0.25rem; }
+  .slider-group label .val{ color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums; }
+  input[type=range]{
+    width:100%; height:6px; -webkit-appearance:none; appearance:none;
+    background:var(--border); border-radius:3px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:18px; height:18px; border-radius:50%;
+    background:var(--accent); cursor:pointer; border:none;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:18px; height:18px; border-radius:50%;
+    background:var(--accent); cursor:pointer; border:none;
+  }
+
+  .btn-group{ display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.5rem; }
+  .btn{
+    flex:1; min-width:calc(50% - 0.2rem);
+    background:var(--surface); border:1px solid var(--border);
+    color:var(--text); padding:0.4rem 0.5rem; border-radius:6px;
+    font-size:0.75rem; cursor:pointer; pointer-events:auto;
+    transition:all 0.15s; touch-action:manipulation;
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn.active{ background:var(--accent); color:#0a0f14; border-color:var(--accent); font-weight:600; }
+
+  .toggle-btn{
+    width:100%; background:var(--surface); border:1px solid var(--border);
+    color:var(--text); padding:0.5rem; border-radius:6px;
+    font-size:0.82rem; cursor:pointer; pointer-events:auto;
+    margin-top:0.5rem; touch-action:manipulation;
+    transition:all 0.15s;
+  }
+  .toggle-btn:hover{ border-color:var(--accent); }
+  .toggle-btn.heating{ background:#e86040; color:#fff; border-color:#e86040; }
+  .toggle-btn.fining{ background:var(--accent2); color:#0a0f14; border-color:var(--accent2); }
+
+  .spark-wrap{ margin-top:0.5rem; }
+  .spark-label{ font-size:0.72rem; color:var(--muted); margin-bottom:0.2rem; }
+  .spark-canvas{ width:100%; height:48px; background:rgba(10,15,20,0.5); border-radius:4px; border:1px solid var(--border); }
+
+  .status-badge{
+    display:inline-block; padding:0.25rem 0.6rem; border-radius:4px;
+    font-size:0.75rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.05em; margin-top:0.3rem;
+  }
+  .status-stable{ background:rgba(96,200,128,0.15); color:#60c880; border:1px solid #60c880; }
+  .status-risk{ background:rgba(232,160,96,0.15); color:#e8a060; border:1px solid #e8a060; }
+  .status-haze{ background:rgba(232,96,96,0.15); color:#e86060; border:1px solid #e86060; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.5rem; font-size:0.72rem; }
+  .legend-item{ display:flex; align-items:center; gap:0.25rem; color:var(--muted); }
+  .legend-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+  @media(max-width:768px){
+    html, body{ overflow-y:auto; height:auto; }
+    #canvas-container{
+      position:relative !important; width:100% !important;
+      height:42vh !important; min-height:280px; max-height:400px;
+      inset:auto !important; z-index:0;
+    }
+    canvas{ width:100% !important; height:100% !important; }
+    #ui-layer{ position:relative !important; inset:auto !important; pointer-events:auto; }
+    #controls{
+      position:relative !important; top:auto !important; left:auto !important;
+      width:auto !important; max-height:none !important; margin:0;
+      border-radius:0; border-left:none; border-right:none;
+    }
+    #metrics{
+      position:relative !important; top:auto !important; right:auto !important;
+      width:auto !important; margin:0;
+      border-radius:0; border-left:none; border-right:none;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <canvas id="canvas"></canvas>
+</div>
+<div id="ui-layer">
+  <div id="controls" class="panel">
+    <h2>Protein Haze &amp; Heat Stability</h2>
+    <div class="subtitle">Wine protein denaturation, aggregation &amp; bentonite fining simulator</div>
+
+    <div class="slider-group">
+      <label>Wine Temperature <span class="val" id="val-temp">20°C</span></label>
+      <input type="range" id="slider-temp" min="5" max="80" value="20" step="1">
+    </div>
+    <div class="slider-group">
+      <label>Protein Concentration <span class="val" id="val-protein">150 mg/L</span></label>
+      <input type="range" id="slider-protein" min="20" max="400" value="150" step="5">
+    </div>
+    <div class="slider-group">
+      <label>Wine pH <span class="val" id="val-ph">3.4</span></label>
+      <input type="range" id="slider-ph" min="2.8" max="4.2" value="3.4" step="0.1">
+    </div>
+    <div class="slider-group">
+      <label>Ethanol <span class="val" id="val-eth">12.0%</span></label>
+      <input type="range" id="slider-eth" min="0" max="20" value="12" step="0.5">
+    </div>
+    <div class="slider-group">
+      <label>Sulfate (SO₄²⁻) <span class="val" id="val-sulfate">500 mg/L</span></label>
+      <input type="range" id="slider-sulfate" min="0" max="2000" value="500" step="50">
+    </div>
+    <div class="slider-group">
+      <label>Bentonite Dose <span class="val" id="val-bentonite">0 g/hL</span></label>
+      <input type="range" id="slider-bentonite" min="0" max="300" value="0" step="10">
+    </div>
+
+    <button class="toggle-btn" id="btn-heat">Apply Heat Test (80°C)</button>
+    <button class="toggle-btn" id="btn-fine" style="margin-top:0.35rem">Add Bentonite</button>
+
+    <div class="btn-group">
+      <button class="btn active" data-preset="unfined-white">Unfined White</button>
+      <button class="btn" data-preset="unfined-red">Low-Protein Red</button>
+      <button class="btn" data-preset="high-protein">High Protein</button>
+      <button class="btn" data-preset="heat-stable">Heat Stable</button>
+      <button class="btn" data-preset="haze-risk">Haze Risk</button>
+      <button class="btn" data-preset="sauvignon-blanc">Sauvignon Blanc</button>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#5fb3a1"></div>Soluble Protein</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c9a060"></div>Denatured</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e8a060"></div>Aggregate</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a89bc4"></div>Bentonite</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e86060"></div>Haze Floc</div>
+    </div>
+  </div>
+
+  <div id="metrics" class="panel">
+    <h3>Stability Analysis</h3>
+    <div class="metric-row"><span class="metric-label">Soluble Protein</span><span class="metric-value accent" id="m-soluble">— mg/L</span></div>
+    <div class="metric-row"><span class="metric-label">Denatured</span><span class="metric-value warn" id="m-denatured">— mg/L</span></div>
+    <div class="metric-row"><span class="metric-label">Aggregates</span><span class="metric-value warn" id="m-aggregates">— mg/L</span></div>
+    <div class="metric-row"><span class="metric-label">Haze (NTU)</span><span class="metric-value" id="m-ntu">—</span></div>
+    <div class="metric-row"><span class="metric-label">Bentonite Bound</span><span class="metric-value" id="m-bound">— mg/L</span></div>
+    <div class="metric-row"><span class="metric-label">Turbidity Risk</span><span class="metric-value" id="m-risk">—</span></div>
+    <div style="text-align:center; margin-top:0.3rem;">
+      <div id="status-badge" class="status-badge status-stable">STABLE</div>
+    </div>
+
+    <div class="spark-wrap">
+      <div class="spark-label">Haze NTU over time</div>
+      <canvas class="spark-canvas" id="spark-ntu"></canvas>
+    </div>
+    <div class="spark-wrap">
+      <div class="spark-label">Soluble protein (mg/L)</div>
+      <canvas class="spark-canvas" id="spark-protein"></canvas>
+    </div>
+
+    <div style="margin-top:0.6rem; font-size:0.72rem; color:var(--muted); line-height:1.5;">
+      <strong style="color:var(--accent2)">Heat test:</strong> 80°C for 6 h predicts protein haze. Bentonite removes pathogenesis-related proteins (thaumatin-like, chitinases).
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ====== Parameters ======
+var P = {
+  temp: 20,         // °C
+  proteinConc: 150, // mg/L total protein
+  pH: 3.4,
+  ethanol: 12.0,    // % v/v
+  sulfate: 500,      // mg/L
+  bentoniteDose: 0,  // g/hL
+  heating: false,
+  finingActive: false,
+  heatTimer: 0,      // sim seconds of heating
+  fineTimer: 0,
+};
+
+// Protein types: thaumatin-like (TL), chitinase (CHI), invertase (INV)
+// TL and CHI are the haze-active proteins; invertase is mostly stable
+var PROTEIN_TYPES = [
+  { name: 'TL',  fraction: 0.45, mw: 21, denatureTemp: 62, aggRate: 1.0 },
+  { name: 'CHI', fraction: 0.30, mw: 25, denatureTemp: 58, aggRate: 1.2 },
+  { name: 'INV', fraction: 0.25, mw: 60, denatureTemp: 78, aggRate: 0.3 },
+];
+
+// ====== Canvas Setup ======
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+var DPR = window.devicePixelRatio || 1;
+var CW = 0, CH = 0;
+
+function resizeCanvas(){
+  var container = document.getElementById('canvas-container');
+  CW = container.clientWidth;
+  CH = container.clientHeight;
+  canvas.width = CW * DPR;
+  canvas.height = CH * DPR;
+  canvas.style.width = CW + 'px';
+  canvas.style.height = CH + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resizeCanvas();
+window.addEventListener('resize', function(){ resizeCanvas(); initParticles(); });
+
+// ====== Particle System ======
+// Particle types: 'protein' (soluble), 'denatured', 'aggregate', 'bentonite', 'haze'
+var particles = [];
+var bentoniteParticles = [];
+var MAX_PARTICLES = 800;
+
+function particleRadius(type, size){
+  if(type === 'protein') return 3 + size * 0.5;
+  if(type === 'denatured') return 4 + size * 0.8;
+  if(type === 'aggregate') return 6 + size * 2;
+  if(type === 'haze') return 10 + size * 4;
+  if(type === 'bentonite') return 5 + size * 3;
+  return 3;
+}
+
+function particleColor(type, opacity){
+  opacity = opacity || 1;
+  if(type === 'protein') return 'rgba(95,179,161,' + opacity + ')';
+  if(type === 'denatured') return 'rgba(201,160,96,' + opacity + ')';
+  if(type === 'aggregate') return 'rgba(232,160,96,' + opacity + ')';
+  if(type === 'haze') return 'rgba(232,96,96,' + (opacity * 0.6) + ')';
+  if(type === 'bentonite') return 'rgba(168,155,196,' + opacity + ')';
+  return 'rgba(200,200,200,' + opacity + ')';
+}
+
+function createProteinParticle(){
+  var typeIdx = Math.random() < 0.85 ? (Math.random() < (PROTEIN_TYPES[0].fraction / (PROTEIN_TYPES[0].fraction + PROTEIN_TYPES[1].fraction)) ? 0 : 1) : 2;
+  var pt = PROTEIN_TYPES[typeIdx];
+  var size = 0.5 + Math.random() * 1.0;
+  return {
+    x: Math.random() * CW,
+    y: Math.random() * CH,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.3,
+    type: 'protein',
+    pType: typeIdx,
+    size: size,
+    opacity: 0.7 + Math.random() * 0.3,
+    denatured: 0,   // 0 to 1 — how denatured
+    aggregated: false,
+    aggCluster: null,
+    age: 0,
+  };
+}
+
+function createBentoniteParticle(){
+  var size = 1 + Math.random() * 2;
+  return {
+    x: Math.random() * CW,
+    y: Math.random() * CH,
+    vx: (Math.random() - 0.5) * 0.2,
+    vy: (Math.random() - 0.5) * 0.2 + 0.1, // slight downward drift
+    type: 'bentonite',
+    size: size,
+    opacity: 0.6 + Math.random() * 0.3,
+    bound: 0,     // how many proteins bound
+    capacity: 3 + Math.floor(Math.random() * 4),
+    age: 0,
+  };
+}
+
+function initParticles(){
+  particles = [];
+  bentoniteParticles = [];
+
+  // Scale particle count to protein concentration (visual representation)
+  var targetCount = Math.min(MAX_PARTICLES, Math.floor(P.proteinConc * 1.5));
+  for(var i = 0; i < targetCount; i++){
+    particles.push(createProteinParticle());
+  }
+
+  // Add bentonite particles if dosed
+  var bentCount = Math.floor(P.bentoniteDose * 0.3);
+  for(var j = 0; j < bentCount; j++){
+    bentoniteParticles.push(createBentoniteParticle());
+  }
+}
+
+// ====== Simulation State ======
+var simState = {
+  solubleProtein: 0,
+  denaturedProtein: 0,
+  aggregateProtein: 0,
+  hazeNTU: 0,
+  bentoniteBound: 0,
+  risk: 'Stable',
+};
+
+var ntuHistory = [];
+var proteinHistory = [];
+var MAX_HISTORY = 100;
+
+// ====== Physics & Chemistry ======
+function denatureFraction(temp, pTypeIdx){
+  var pt = PROTEIN_TYPES[pTypeIdx];
+  // Sigmoid denaturation centered at denatureTemp
+  var dt = temp - pt.denatureTemp;
+  // Arrhenius-like: rate increases sharply near Td
+  // f = 1 / (1 + exp(-k * dt))
+  var k = 0.15;
+  return 1 / (1 + Math.exp(-k * dt));
+}
+
+function aggregationRate(temp, pH, ethanol, sulfate, denaturedFrac){
+  // Aggregation requires denatured proteins
+  if(denaturedFrac < 0.05) return 0;
+  // Sulfate promotes aggregation (charge shielding)
+  var sulfateFactor = 1 + (sulfate / 1000) * 0.5;
+  // pH near isoelectric point (pI ~4.1 for TL, ~3.5 for CHI) → faster aggregation
+  // Lower pH → closer to pI → less charge repulsion → faster
+  var pHFactor = 1;
+  if(pH < 4.0) pHFactor = 1.5;
+  if(pH < 3.5) pHFactor = 2.0;
+  // Ethanol slightly promotes aggregation (reduces dielectric constant)
+  var ethFactor = 1 + (ethanol / 20) * 0.3;
+  // Temperature accelerates aggregation
+  var tempFactor = Math.max(0, (temp - 40) / 40);
+  tempFactor = 1 + tempFactor * 2;
+
+  var baseRate = 0.0008 * denaturedFrac * denaturedFrac;
+  return baseRate * sulfateFactor * pHFactor * ethFactor * tempFactor;
+}
+
+function bentoniteAdsorption(dose, proteinConc, pH){
+  // Bentonite binding capacity: ~5-10 mg protein per g bentonite per hL
+  // Higher at lower pH (more positive protein charge)
+  var capacity = dose * 6.5; // mg/L protein removable
+  if(pH < 3.5) capacity *= 1.2;
+  if(pH > 3.8) capacity *= 0.85;
+  return Math.min(capacity, proteinConc * 0.95);
+}
+
+function computeMetrics(){
+  var totalProtein = P.proteinConc;
+  var remainingAfterBentonite = totalProtein - bentoniteAdsorption(P.bentoniteDose, totalProtein, P.pH);
+
+  // Denatured fraction depends on temperature (including heating boost)
+  var effectiveTemp = P.temp;
+  if(P.heating){
+    effectiveTemp = 80; // heat test
+  }
+  var avgDenatured = 0;
+  var weightedDen = 0;
+  for(var i = 0; i < PROTEIN_TYPES.length; i++){
+    var df = denatureFraction(effectiveTemp, i);
+    weightedDen += df * PROTEIN_TYPES[i].fraction;
+  }
+  var denaturedConc = remainingAfterBentonite * weightedDen;
+  var solubleConc = remainingAfterBentonite * (1 - weightedDen);
+
+  // Aggregation: some denatured proteins aggregate into haze
+  var aggRate = aggregationRate(effectiveTemp, P.pH, P.ethanol, P.sulfate, weightedDen);
+  var aggregatedConc = denaturedConc * Math.min(1, aggRate * (P.heating ? 60 : 1) * 100);
+  var denaturedFree = denaturedConc - aggregatedConc;
+
+  // Haze NTU: based on aggregate concentration
+  // ~1 NTU per 5 mg/L of aggregated protein (simplified)
+  var ntu = aggregatedConc / 5;
+
+  // Heat test factor
+  if(P.heating){
+    ntu *= 2.5; // heating amplifies visible haze
+  }
+
+  simState.solubleProtein = solubleConc;
+  simState.denaturedProtein = denaturedFree;
+  simState.aggregateProtein = aggregatedConc;
+  simState.hazeNTU = ntu;
+  simState.bentoniteBound = bentoniteAdsorption(P.bentoniteDose, totalProtein, P.pH);
+
+  // Risk classification
+  if(ntu < 2.0) simState.risk = 'Stable';
+  else if(ntu < 5.0) simState.risk = 'Marginal';
+  else simState.risk = 'Haze';
+}
+
+// ====== Animation Loop ======
+var lastTime = performance.now();
+var aggTimer = 0;
+var hazeFormTimer = 0;
+
+function updateParticles(dt){
+  var effectiveTemp = P.temp;
+  if(P.heating) effectiveTemp = 80;
+
+  // Update each protein particle
+  for(var i = particles.length - 1; i >= 0; i--){
+    var p = particles[i];
+    p.age += dt;
+
+    // Brownian motion — faster at higher temperature
+    var thermalEnergy = 0.3 + (effectiveTemp / 80) * 0.8;
+    p.vx += (Math.random() - 0.5) * thermalEnergy * 0.1;
+    p.vy += (Math.random() - 0.5) * thermalEnergy * 0.1;
+
+    // Damping
+    p.vx *= 0.96;
+    p.vy *= 0.96;
+
+    // Speed limit
+    var speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+    var maxSpeed = 1.5 + (effectiveTemp / 80) * 2.0;
+    if(speed > maxSpeed){
+      p.vx = (p.vx / speed) * maxSpeed;
+      p.vy = (p.vy / speed) * maxSpeed;
+    }
+
+    // Move
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Boundary
+    if(p.x < 0){ p.x = 0; p.vx *= -0.5; }
+    if(p.x > CW){ p.x = CW; p.vx *= -0.5; }
+    if(p.y < 0){ p.y = 0; p.vy *= -0.5; }
+    if(p.y > CH){ p.y = CH; p.vy *= -0.5; }
+
+    // Denaturation
+    var denRate = denatureFraction(effectiveTemp, p.pType);
+    // Gradual denaturation: increase p.denatured toward target
+    var targetDen = denRate;
+    if(p.denatured < targetDen){
+      p.denatured += (targetDen - p.denatured) * 0.02;
+    }
+
+    // Change type based on denaturation state
+    if(p.denatured > 0.7 && p.type === 'protein'){
+      p.type = 'denatured';
+      p.size *= 1.2;
+    }
+
+    // Bentonite interaction
+    for(var b = bentoniteParticles.length - 1; b >= 0; b--){
+      var bp = bentoniteParticles[b];
+      if(bp.bound >= bp.capacity) continue;
+      var dx = p.x - bp.x;
+      var dy = p.y - bp.y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if(dist < particleRadius(bp.type, bp.size) + particleRadius(p.type, p.size) + 3){
+        // Protein gets adsorbed by bentonite
+        if(p.type === 'protein' || p.type === 'denatured'){
+          bp.bound++;
+          particles.splice(i, 1);
+          break;
+        }
+      }
+    }
+  }
+
+  // Denatured protein aggregation
+  aggTimer += dt;
+  if(aggTimer > 0.3){
+    aggTimer = 0;
+    var denaturedParts = particles.filter(function(p){ return p.type === 'denatured'; });
+    var aggChance = aggregationRate(effectiveTemp, P.pH, P.ethanol, P.sulfate, 0.5) * 50;
+    aggChance = Math.min(0.3, aggChance);
+
+    for(var a = 0; a < denaturedParts.length; a++){
+      if(Math.random() < aggChance){
+        // Find nearby denatured particles to aggregate with
+        for(var c = a + 1; c < denaturedParts.length; c++){
+          var p1 = denaturedParts[a];
+          var p2 = denaturedParts[c];
+          var dx = p1.x - p2.x;
+          var dy = p1.y - p2.y;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if(dist < 30){
+            // Merge into aggregate
+            p1.type = 'aggregate';
+            p1.size = (p1.size + p2.size) * 0.8;
+            p1.denatured = 1;
+            // Remove p2
+            var idx2 = particles.indexOf(p2);
+            if(idx2 >= 0) particles.splice(idx2, 1);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Aggregates grow into haze flocs
+  hazeFormTimer += dt;
+  if(hazeFormTimer > 1.0){
+    hazeFormTimer = 0;
+    var aggregates = particles.filter(function(p){ return p.type === 'aggregate'; });
+    for(var h = 0; h < aggregates.length; h++){
+      var agg = aggregates[h];
+      agg.size += 0.3;
+      if(agg.size > 5 && Math.random() < 0.3){
+        agg.type = 'haze';
+        agg.opacity = 0.4;
+      }
+    }
+  }
+
+  // Update bentonite particles
+  for(var bi = bentoniteParticles.length - 1; bi >= 0; bi--){
+    var bpt = bentoniteParticles[bi];
+    bpt.age += dt;
+
+    // Gentle drift, slight downward (settling)
+    bpt.vx += (Math.random() - 0.5) * 0.05;
+    bpt.vy += 0.02; // settling
+    bpt.vx *= 0.95;
+    bpt.vy *= 0.95;
+
+    bpt.x += bpt.vx;
+    bpt.y += bpt.vy;
+
+    // Wrap around / bounce
+    if(bpt.x < 0 || bpt.x > CW) bpt.vx *= -0.5;
+    if(bpt.y < 0) bpt.vy *= -0.5;
+    if(bpt.y > CH) bpt.y = CH;
+
+    // Bentonite particles that are fully bound settle and become inactive
+    if(bpt.bound >= bpt.capacity){
+      bpt.opacity = Math.max(0.2, bpt.opacity - 0.002);
+      bpt.vy += 0.05; // sink faster when loaded
+    }
+  }
+
+  // Limit particles
+  if(particles.length > MAX_PARTICLES){
+    particles.splice(MAX_PARTICLES);
+  }
+}
+
+function drawParticles(){
+  ctx.clearRect(0, 0, CW, CH);
+
+  // Background — wine-like gradient
+  var bgGrad = ctx.createLinearGradient(0, 0, 0, CH);
+  var tempHot = P.heating || P.temp > 50;
+  if(tempHot){
+    bgGrad.addColorStop(0, '#1a1208');
+    bgGrad.addColorStop(0.5, '#2a1810');
+    bgGrad.addColorStop(1, '#1a0e04');
+  } else {
+    bgGrad.addColorStop(0, '#0a0f14');
+    bgGrad.addColorStop(0.5, '#0e1820');
+    bgGrad.addColorStop(1, '#0a0f14');
+  }
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Subtle thermal overlay when heating
+  if(P.heating){
+    ctx.save();
+    var heatGrad = ctx.createRadialGradient(CW/2, CH/2, 0, CW/2, CH/2, Math.max(CW, CH));
+    heatGrad.addColorStop(0, 'rgba(232,96,60,0.08)');
+    heatGrad.addColorStop(1, 'rgba(232,96,60,0)');
+    ctx.fillStyle = heatGrad;
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.restore();
+  }
+
+  // Draw haze (behind everything else — largest, most diffuse)
+  for(var h = particles.length - 1; h >= 0; h--){
+    var p = particles[h];
+    if(p.type !== 'haze') continue;
+    ctx.save();
+    ctx.globalAlpha = p.opacity;
+    var r = particleRadius(p.type, p.size);
+    var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+    grad.addColorStop(0, particleColor(p.type, 0.4));
+    grad.addColorStop(0.5, particleColor(p.type, 0.15));
+    grad.addColorStop(1, particleColor(p.type, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Draw bentonite particles
+  for(var b = 0; b < bentoniteParticles.length; b++){
+    var bp = bentoniteParticles[b];
+    ctx.save();
+    ctx.globalAlpha = bp.opacity;
+    var br = particleRadius(bp.type, bp.size);
+    ctx.fillStyle = particleColor(bp.type, 1);
+    ctx.beginPath();
+    ctx.arc(bp.x, bp.y, br, 0, Math.PI * 2);
+    ctx.fill();
+    // Inner texture
+    ctx.strokeStyle = particleColor(bp.type, 0.5);
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    // Bound indicator
+    if(bp.bound > 0){
+      ctx.fillStyle = 'rgba(95,179,161,0.5)';
+      for(var bi2 = 0; bi2 < bp.bound; bi2++){
+        var ang = (bi2 / bp.capacity) * Math.PI * 2;
+        var px = bp.x + Math.cos(ang) * (br + 2);
+        var py = bp.y + Math.sin(ang) * (br + 2);
+        ctx.beginPath();
+        ctx.arc(px, py, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Draw aggregates
+  for(var a = 0; a < particles.length; a++){
+    var ap = particles[a];
+    if(ap.type !== 'aggregate') continue;
+    ctx.save();
+    ctx.globalAlpha = ap.opacity;
+    var ar = particleRadius(ap.type, ap.size);
+    var grad2 = ctx.createRadialGradient(ap.x, ap.y, 0, ap.x, ap.y, ar);
+    grad2.addColorStop(0, particleColor(ap.type, 0.9));
+    grad2.addColorStop(1, particleColor(ap.type, 0.3));
+    ctx.fillStyle = grad2;
+    ctx.beginPath();
+    ctx.arc(ap.x, ap.y, ar, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Draw denatured particles
+  for(var d = 0; d < particles.length; d++){
+    var dp = particles[d];
+    if(dp.type !== 'denatured') continue;
+    ctx.save();
+    ctx.globalAlpha = dp.opacity;
+    var dr = particleRadius(dp.type, dp.size);
+    ctx.fillStyle = particleColor(dp.type, 0.85);
+    ctx.beginPath();
+    ctx.arc(dp.x, dp.y, dr, 0, Math.PI * 2);
+    ctx.fill();
+    // Unfolded appearance — irregular outline
+    ctx.strokeStyle = particleColor(dp.type, 0.5);
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Draw soluble proteins
+  for(var pr = 0; pr < particles.length; pr++){
+    var pp = particles[pr];
+    if(pp.type !== 'protein') continue;
+    ctx.save();
+    ctx.globalAlpha = pp.opacity;
+    var prr = particleRadius(pp.type, pp.size);
+    ctx.fillStyle = particleColor(pp.type, 0.85);
+    ctx.beginPath();
+    ctx.arc(pp.x, pp.y, prr, 0, Math.PI * 2);
+    ctx.fill();
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.arc(pp.x - prr * 0.3, pp.y - prr * 0.3, prr * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Draw temperature indicator
+  drawTemperatureGauge();
+}
+
+function drawTemperatureGauge(){
+  var gx = CW - 60;
+  var gy = CH - 100;
+  var gw = 14;
+  var gh = 80;
+
+  ctx.save();
+  // Background
+  ctx.fillStyle = 'rgba(20,30,40,0.8)';
+  ctx.fillRect(gx - 2, gy - 2, gw + 4, gh + 4);
+
+  // Fill
+  var tempPct = (P.temp - 5) / (80 - 5);
+  tempPct = Math.max(0, Math.min(1, tempPct));
+  var fillH = gh * tempPct;
+
+  var tempColor;
+  if(P.temp < 40) tempColor = '#5fb3a1';
+  else if(P.temp < 60) tempColor = '#c9a060';
+  else if(P.temp < 70) tempColor = '#e8a060';
+  else tempColor = '#e86060';
+
+  ctx.fillStyle = tempColor;
+  ctx.fillRect(gx, gy + gh - fillH, gw, fillH);
+
+  // Label
+  ctx.fillStyle = '#7a8a9a';
+  ctx.font = '9px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.round(P.temp) + '°C', gx + gw/2, gy - 6);
+  ctx.fillText('5°', gx + gw/2, gy + gh + 12);
+  ctx.fillText('80°', gx + gw/2, gy - 2);
+
+  if(P.heating){
+    ctx.fillStyle = '#e86040';
+    ctx.font = 'bold 9px system-ui';
+    ctx.fillText('HEATING', gx + gw/2, gy + gh + 24);
+  }
+  ctx.restore();
+}
+
+// ====== UI Update ======
+function updateMetricsDisplay(){
+  document.getElementById('m-soluble').textContent = simState.solubleProtein.toFixed(1) + ' mg/L';
+  document.getElementById('m-denatured').textContent = simState.denaturedProtein.toFixed(1) + ' mg/L';
+  document.getElementById('m-aggregates').textContent = simState.aggregateProtein.toFixed(1) + ' mg/L';
+
+  var ntuEl = document.getElementById('m-ntu');
+  ntuEl.textContent = simState.hazeNTU.toFixed(1) + ' NTU';
+  ntuEl.className = 'metric-value';
+  if(simState.hazeNTU > 5) ntuEl.classList.add('danger');
+  else if(simState.hazeNTU > 2) ntuEl.classList.add('warn');
+  else ntuEl.classList.add('ok');
+
+  document.getElementById('m-bound').textContent = simState.bentoniteBound.toFixed(1) + ' mg/L';
+
+  var riskEl = document.getElementById('m-risk');
+  riskEl.textContent = simState.risk;
+  riskEl.className = 'metric-value';
+  if(simState.risk === 'Haze') riskEl.classList.add('danger');
+  else if(simState.risk === 'Marginal') riskEl.classList.add('warn');
+  else riskEl.classList.add('ok');
+
+  // Status badge
+  var badge = document.getElementById('status-badge');
+  if(simState.risk === 'Stable'){
+    badge.textContent = 'STABLE';
+    badge.className = 'status-badge status-stable';
+  } else if(simState.risk === 'Marginal'){
+    badge.textContent = 'MARGINAL';
+    badge.className = 'status-badge status-risk';
+  } else {
+    badge.textContent = 'HAZE RISK';
+    badge.className = 'status-badge status-haze';
+  }
+}
+
+function drawSparkline(canvasEl, data, color){
+  var sctx = canvasEl.getContext('2d');
+  var sw = canvasEl.clientWidth;
+  var sh = canvasEl.clientHeight;
+  if(canvasEl.width !== sw * DPR){
+    canvasEl.width = sw * DPR;
+    canvasEl.height = sh * DPR;
+    sctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  sctx.clearRect(0, 0, sw, sh);
+
+  if(data.length < 2) return;
+
+  var maxVal = Math.max.apply(null, data);
+  var minVal = Math.min.apply(null, data);
+  if(maxVal === minVal){ maxVal = maxVal + 1; minVal = minVal - 1; }
+  var range = maxVal - minVal;
+
+  sctx.strokeStyle = color;
+  sctx.lineWidth = 1.5;
+  sctx.beginPath();
+  for(var i = 0; i < data.length; i++){
+    var x = (i / (data.length - 1)) * sw;
+    var y = sh - ((data[i] - minVal) / range) * (sh - 4) - 2;
+    if(i === 0) sctx.moveTo(x, y);
+    else sctx.lineTo(x, y);
+  }
+  sctx.stroke();
+
+  // Fill
+  sctx.lineTo(sw, sh);
+  sctx.lineTo(0, sh);
+  sctx.closePath();
+  sctx.fillStyle = color.replace('rgb', 'rgba').replace(')', ',0.1)');
+  // For hex colors, use rgba
+  sctx.fillStyle = color === '#e86060' ? 'rgba(232,96,96,0.1)' :
+                   color === '#5fb3a1' ? 'rgba(95,179,161,0.1)' :
+                   'rgba(95,179,161,0.1)';
+  sctx.fill();
+}
+
+function updateSparklines(){
+  drawSparkline(document.getElementById('spark-ntu'), ntuHistory, '#e86060');
+  drawSparkline(document.getElementById('spark-protein'), proteinHistory, '#5fb3a1');
+}
+
+// ====== Main Loop ======
+var metricTimer = 0;
+function animate(now){
+  var dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  // Heat test progression
+  if(P.heating){
+    P.heatTimer += dt;
+    if(P.heatTimer > 12){
+      P.heating = false;
+      P.heatTimer = 0;
+      document.getElementById('btn-heat').classList.remove('heating');
+      document.getElementById('btn-heat').textContent = 'Apply Heat Test (80°C)';
+    }
+  }
+
+  // Fining progression — gradually add bentonite particles
+  if(P.finingActive){
+    P.fineTimer += dt;
+    if(P.fineTimer > 0.3){
+      P.fineTimer = 0;
+      var need = Math.floor(P.bentoniteDose * 0.3);
+      if(bentoniteParticles.length < need){
+        bentoniteParticles.push(createBentoniteParticle());
+      } else {
+        P.finingActive = false;
+        document.getElementById('btn-fine').classList.remove('fining');
+      }
+    }
+  }
+
+  updateParticles(dt);
+  drawParticles();
+
+  metricTimer += dt;
+  if(metricTimer > 0.3){
+    metricTimer = 0;
+    computeMetrics();
+    updateMetricsDisplay();
+
+    ntuHistory.push(simState.hazeNTU);
+    if(ntuHistory.length > MAX_HISTORY) ntuHistory.shift();
+
+    proteinHistory.push(simState.solubleProtein);
+    if(proteinHistory.length > MAX_HISTORY) proteinHistory.shift();
+
+    updateSparklines();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// ====== Event Handlers ======
+function updateSliderLabel(id, suffix){
+  var slider = document.getElementById('slider-' + id);
+  var valSpan = document.getElementById('val-' + id);
+  return function(){
+    var v = parseFloat(slider.value);
+    P[id === 'temp' ? 'temp' : id === 'protein' ? 'proteinConc' : id === 'eth' ? 'ethanol' : id === 'ph' ? 'pH' : id === 'sulfate' ? 'sulfate' : id === 'bentonite' ? 'bentoniteDose' : id] = v;
+    valSpan.textContent = v + suffix;
+    computeMetrics();
+    updateMetricsDisplay();
+
+    // Reinit particles if structural params change
+    if(id === 'protein' || id === 'bentonite'){
+      initParticles();
+    }
+  };
+}
+
+document.getElementById('slider-temp').addEventListener('input', updateSliderLabel('temp', '°C'));
+document.getElementById('slider-protein').addEventListener('input', updateSliderLabel('protein', ' mg/L'));
+document.getElementById('slider-ph').addEventListener('input', updateSliderLabel('ph', ''));
+document.getElementById('slider-eth').addEventListener('input', updateSliderLabel('eth', '%'));
+document.getElementById('slider-sulfate').addEventListener('input', updateSliderLabel('sulfate', ' mg/L'));
+document.getElementById('slider-bentonite').addEventListener('input', function(){
+  var v = parseFloat(this.value);
+  P.bentoniteDose = v;
+  document.getElementById('val-bentonite').textContent = v + ' g/hL';
+  computeMetrics();
+  updateMetricsDisplay();
+  // Add/remove bentonite particles
+  var need = Math.floor(v * 0.3);
+  while(bentoniteParticles.length < need){
+    bentoniteParticles.push(createBentoniteParticle());
+  }
+  while(bentoniteParticles.length > need){
+    bentoniteParticles.pop();
+  }
+});
+
+document.getElementById('btn-heat').addEventListener('click', function(){
+  P.heating = !P.heating;
+  P.heatTimer = 0;
+  if(P.heating){
+    this.classList.add('heating');
+    this.textContent = 'Stop Heat Test';
+  } else {
+    this.classList.remove('heating');
+    this.textContent = 'Apply Heat Test (80°C)';
+  }
+  computeMetrics();
+  updateMetricsDisplay();
+});
+
+document.getElementById('btn-fine').addEventListener('click', function(){
+  if(P.bentoniteDose === 0){
+    P.bentoniteDose = 100;
+    document.getElementById('slider-bentonite').value = 100;
+    document.getElementById('val-bentonite').textContent = '100 g/hL';
+    var need = Math.floor(P.bentoniteDose * 0.3);
+    while(bentoniteParticles.length < need){
+      bentoniteParticles.push(createBentoniteParticle());
+    }
+  }
+  P.finingActive = true;
+  this.classList.add('fining');
+  computeMetrics();
+  updateMetricsDisplay();
+});
+
+// Presets
+var presets = {
+  'unfined-white': { temp:20, proteinConc:150, pH:3.4, ethanol:12.0, sulfate:500, bentoniteDose:0 },
+  'unfined-red': { temp:20, proteinConc:40, pH:3.6, ethanol:14.0, sulfate:300, bentoniteDose:0 },
+  'high-protein': { temp:20, proteinConc:320, pH:3.2, ethanol:11.0, sulfate:800, bentoniteDose:0 },
+  'heat-stable': { temp:20, proteinConc:30, pH:3.5, ethanol:13.0, sulfate:400, bentoniteDose:200 },
+  'haze-risk': { temp:55, proteinConc:280, pH:3.1, ethanol:11.5, sulfate:1200, bentoniteDose:0 },
+  'sauvignon-blanc': { temp:20, proteinConc:220, pH:3.0, ethanol:12.5, sulfate:600, bentoniteDose:0 },
+};
+
+document.querySelectorAll('.btn[data-preset]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('.btn[data-preset]').forEach(function(b){ b.classList.remove('active'); });
+    this.classList.add('active');
+    var preset = presets[this.dataset.preset];
+    P.temp = preset.temp;
+    P.proteinConc = preset.proteinConc;
+    P.pH = preset.pH;
+    P.ethanol = preset.ethanol;
+    P.sulfate = preset.sulfate;
+    P.bentoniteDose = preset.bentoniteDose;
+    P.heating = false;
+    P.heatTimer = 0;
+    P.finingActive = false;
+
+    document.getElementById('slider-temp').value = preset.temp;
+    document.getElementById('val-temp').textContent = preset.temp + '°C';
+    document.getElementById('slider-protein').value = preset.proteinConc;
+    document.getElementById('val-protein').textContent = preset.proteinConc + ' mg/L';
+    document.getElementById('slider-ph').value = preset.pH;
+    document.getElementById('val-ph').textContent = preset.pH.toFixed(1);
+    document.getElementById('slider-eth').value = preset.ethanol;
+    document.getElementById('val-eth').textContent = preset.ethanol.toFixed(1) + '%';
+    document.getElementById('slider-sulfate').value = preset.sulfate;
+    document.getElementById('val-sulfate').textContent = preset.sulfate + ' mg/L';
+    document.getElementById('slider-bentonite').value = preset.bentoniteDose;
+    document.getElementById('val-bentonite').textContent = preset.bentoniteDose + ' g/hL';
+
+    document.getElementById('btn-heat').classList.remove('heating');
+    document.getElementById('btn-heat').textContent = 'Apply Heat Test (80°C)';
+    document.getElementById('btn-fine').classList.remove('fining');
+
+    initParticles();
+    computeMetrics();
+    updateMetricsDisplay();
+  });
+});
+
+// ====== Init ======
+initParticles();
+computeMetrics();
+updateMetricsDisplay();
+ntuHistory.push(simState.hazeNTU);
+proteinHistory.push(simState.solubleProtein);
+requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>
