@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Cork Pop! — Champagne Cork Physics Game</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+<style>
+  .disclaimer { background: #1a1610; border-bottom: 1px solid #3a3020; color: #c9a060; padding: 0.75rem 1rem; text-align: center; font-size: 0.85rem; font-family: system-ui, sans-serif; position: sticky; top: 0; z-index: 100; }
+  .disclaimer strong { font-weight: 600; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 16px; }
+  body { background: #0d0a18; color: #e0d8f0; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; height: 100vh; }
+
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  canvas { display: block; width: 100% !important; height: 100% !important; }
+
+  /* HUD */
+  #hud { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; z-index: 10; padding: 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+
+  .panel { background: rgba(20, 14, 35, 0.88); border: 1px solid rgba(140, 100, 200, 0.3); border-radius: 12px; padding: 14px 16px; pointer-events: auto; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+  .score-panel { min-width: 160px; }
+  .score-panel .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a088c8; margin-bottom: 2px; }
+  .score-panel .value { font-size: 1.5rem; font-weight: 800; color: #ffd700; text-shadow: 0 0 12px rgba(255, 215, 0, 0.4); }
+  .score-panel .sub { font-size: 0.8rem; color: #c8b8e0; margin-top: 4px; }
+  .score-panel .sub b { color: #e8d0ff; }
+
+  .level-panel { text-align: right; }
+  .level-panel .level-num { font-size: 1.3rem; font-weight: 700; color: #c0a0ff; }
+  .level-panel .level-desc { font-size: 0.72rem; color: #a090c0; margin-top: 2px; }
+  .level-panel .corks-left { font-size: 0.85rem; color: #ffd700; margin-top: 4px; font-weight: 600; }
+  .level-panel .corks-left .icon { display: inline-block; width: 10px; height: 14px; border-radius: 3px; background: linear-gradient(180deg, #d4a040, #a06820); margin-right: 3px; vertical-align: middle; }
+
+  /* Controls bar */
+  #controls { position: absolute; bottom: 12px; left: 12px; right: 12px; pointer-events: none; z-index: 10; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn { pointer-events: auto; background: rgba(140, 80, 200, 0.25); border: 1px solid rgba(160, 120, 220, 0.4); color: #e0d0f0; padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s; touch-action: manipulation; font-family: inherit; }
+  .btn:hover { background: rgba(160, 100, 220, 0.4); border-color: rgba(180, 140, 240, 0.6); }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary { background: linear-gradient(135deg, rgba(180, 80, 200, 0.5), rgba(120, 60, 180, 0.5)); border-color: rgba(200, 120, 240, 0.5); color: #fff; }
+  .btn-primary:hover { background: linear-gradient(135deg, rgba(200, 100, 220, 0.6), rgba(140, 80, 200, 0.6)); }
+
+  /* Game over overlay */
+  #overlay { position: absolute; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center; background: rgba(10, 6, 20, 0.75); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); pointer-events: auto; }
+  #overlay.show { display: flex; }
+  .overlay-card { background: rgba(25, 18, 40, 0.95); border: 1px solid rgba(160, 120, 220, 0.3); border-radius: 20px; padding: 32px 40px; text-align: center; max-width: 380px; }
+  .overlay-card h2 { font-size: 1.8rem; margin-bottom: 8px; }
+  .overlay-card .stars { font-size: 2rem; margin: 12px 0; letter-spacing: 4px; }
+  .overlay-card .result-score { font-size: 2.2rem; font-weight: 800; color: #ffd700; text-shadow: 0 0 16px rgba(255, 215, 0, 0.4); margin: 8px 0; }
+  .overlay-card .result-msg { color: #c0a8e0; font-size: 0.9rem; margin-bottom: 20px; }
+  .overlay-card .btn { margin-top: 4px; }
+
+  /* Instructions tooltip */
+  #instructions { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; pointer-events: none; background: rgba(20, 14, 35, 0.85); border: 1px solid rgba(140, 100, 200, 0.3); border-radius: 14px; padding: 20px 28px; text-align: center; transition: opacity 0.4s; max-width: 320px; }
+  #instructions.hide { opacity: 0; }
+  #instructions h3 { font-size: 1.1rem; color: #c0a0ff; margin-bottom: 8px; }
+  #instructions p { font-size: 0.85rem; color: #c8b8e0; line-height: 1.5; }
+  #instructions .hint { margin-top: 10px; font-size: 0.78rem; color: #a090c0; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    html, body { overflow-y: auto; height: auto; }
+    #canvas-container {
+      position: relative !important;
+      width: 100% !important;
+      height: 50vh !important;
+      min-height: 300px;
+      max-height: 420px;
+      inset: auto !important;
+      z-index: 0;
+    }
+    canvas { width: 100% !important; height: 100% !important; }
+    #hud { position: relative !important; inset: auto !important; padding: 8px; flex-direction: row; justify-content: space-between; }
+    #controls { position: relative !important; inset: auto !important; bottom: auto; left: auto; right: auto; padding: 8px; margin-top: 8px; }
+    #overlay { position: fixed; }
+    #instructions { position: absolute; top: 45%; }
+    .panel { padding: 10px 12px; }
+    .score-panel .value { font-size: 1.2rem; }
+    .level-panel .level-num { font-size: 1.1rem; }
+    .overlay-card { padding: 24px 28px; margin: 12px; }
+    .overlay-card h2 { font-size: 1.4rem; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<div id="canvas-container">
+  <canvas id="game-canvas"></canvas>
+</div>
+
+<div id="hud">
+  <div class="panel score-panel" id="score-panel">
+    <div class="label">Score</div>
+    <div class="value" id="score-value">0</div>
+    <div class="sub">Best: <b id="best-score">0</b> · Hits: <b id="hits-count">0</b></div>
+  </div>
+  <div class="panel level-panel" id="level-panel">
+    <div class="level-num" id="level-num">Level 1</div>
+    <div class="level-desc" id="level-desc">3 glasses · 3 corks</div>
+    <div class="corks-left"><span class="icon"></span><span id="corks-left">3</span> corks left</div>
+  </div>
+</div>
+
+<div id="instructions">
+  <h3>🍷 Cork Pop!</h3>
+  <p>Drag back the champagne cork to aim, then release to launch!</p>
+  <p class="hint">Knock down all wine glasses to clear the level. Fewer corks = more stars!</p>
+</div>
+
+<div id="controls">
+  <button class="btn btn-primary" id="btn-reset">↻ Reset Level</button>
+  <button class="btn" id="btn-next" style="display:none">Next Level →</button>
+  <button class="btn" id="btn-restart">Restart Game</button>
+</div>
+
+<div id="overlay">
+  <div class="overlay-card">
+    <h2 id="overlay-title">Level Complete!</h2>
+    <div class="stars" id="overlay-stars">⭐⭐⭐</div>
+    <div class="result-score" id="overlay-score">0</div>
+    <div class="result-msg" id="overlay-msg">Perfect corksmanship!</div>
+    <button class="btn btn-primary" id="overlay-btn">Next Level →</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  "use strict";
+
+  // Matter.js aliases
+  const { Engine, World, Bodies, Body, Composite, Constraint, Events, Mouse, MouseConstraint, Query } = Matter;
+
+  // ---- Game state ----
+  let engine, world;
+  let canvas, ctx;
+  let W = 0, H = 0;
+  const DPR = window.devicePixelRatio || 1;
+
+  let currentLevel = 0;
+  let score = 0;
+  let bestScore = parseInt(localStorage.getItem('corkpop_best') || '0', 10);
+  let corksRemaining = 0;
+  let totalCorks = 0;
+  let glassesHit = 0;
+  let totalGlasses = 0;
+  let isAiming = false;
+  let aimStart = null;
+  let aimCurrent = null;
+  let currentCork = null;
+  let corkRestBody = null; // static anchor for the loaded cork
+  let corkConstraint = null;
+  let particles = [];
+  let popEffects = [];
+  let launchedCorks = [];
+  let gameGlasses = [];
+  let groundBody = null;
+  let walls = [];
+  let shakeAmount = 0;
+  let levelComplete = false;
+  let gameOverShown = false;
+  let aimMouseConstraint = null;
+
+  // ---- Canvas setup ----
+  function resizeCanvas() {
+    const container = document.getElementById('canvas-container');
+    const rect = container.getBoundingClientRect();
+    W = rect.width;
+    H = rect.height;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  // ---- Levels ----
+  const levels = [
+    {
+      name: "Level 1 — Cellar Entrance",
+      desc: "3 glasses · 3 corks",
+      corks: 3,
+      glasses: [
+        { x: 0.70, y: 0.72, size: 1.0 },
+        { x: 0.82, y: 0.72, size: 1.0 },
+        { x: 0.76, y: 0.60, size: 1.0 },
+      ],
+      obstacles: []
+    },
+    {
+      name: "Level 2 — Barrel Stack",
+      desc: "4 glasses · 4 corks",
+      corks: 4,
+      glasses: [
+        { x: 0.68, y: 0.76, size: 1.0 },
+        { x: 0.80, y: 0.76, size: 1.0 },
+        { x: 0.74, y: 0.64, size: 1.0 },
+        { x: 0.74, y: 0.52, size: 0.9 },
+      ],
+      obstacles: [
+        { type: 'box', x: 0.68, y: 0.70, w: 0.06, h: 0.06 },
+        { type: 'box', x: 0.80, y: 0.70, w: 0.06, h: 0.06 },
+      ]
+    },
+    {
+      name: "Level 3 — Tower of Glasses",
+      desc: "5 glasses · 4 corks",
+      corks: 4,
+      glasses: [
+        { x: 0.62, y: 0.77, size: 1.0 },
+        { x: 0.74, y: 0.77, size: 1.0 },
+        { x: 0.86, y: 0.77, size: 1.0 },
+        { x: 0.68, y: 0.67, size: 0.9 },
+        { x: 0.80, y: 0.67, size: 0.9 },
+      ],
+      obstacles: [
+        { type: 'plank', x: 0.68, y: 0.72, w: 0.14, h: 0.015, angle: 0 },
+        { type: 'plank', x: 0.80, y: 0.72, w: 0.14, h: 0.015, angle: 0 },
+      ]
+    },
+    {
+      name: "Level 4 — Pendulum Swing",
+      desc: "4 glasses · 3 corks",
+      corks: 3,
+      glasses: [
+        { x: 0.60, y: 0.78, size: 1.0 },
+        { x: 0.72, y: 0.78, size: 1.0 },
+        { x: 0.84, y: 0.78, size: 1.0 },
+        { x: 0.78, y: 0.55, size: 0.85 },
+      ],
+      obstacles: [
+        { type: 'pendulum', x: 0.50, y: 0.25, length: 0.20, weight: 0.04 },
+      ]
+    },
+    {
+      name: "Level 5 — Master Sommelier",
+      desc: "6 glasses · 4 corks",
+      corks: 4,
+      glasses: [
+        { x: 0.58, y: 0.79, size: 0.9 },
+        { x: 0.68, y: 0.79, size: 0.9 },
+        { x: 0.78, y: 0.79, size: 0.9 },
+        { x: 0.88, y: 0.79, size: 0.9 },
+        { x: 0.63, y: 0.68, size: 0.85 },
+        { x: 0.83, y: 0.68, size: 0.85 },
+      ],
+      obstacles: [
+        { type: 'plank', x: 0.63, y: 0.74, w: 0.12, h: 0.015, angle: 0 },
+        { type: 'plank', x: 0.83, y: 0.74, w: 0.12, h: 0.015, angle: 0 },
+        { type: 'box', x: 0.58, y: 0.74, w: 0.04, h: 0.06 },
+        { type: 'box', x: 0.68, y: 0.74, w: 0.04, h: 0.06 },
+        { type: 'box', x: 0.78, y: 0.74, w: 0.04, h: 0.06 },
+        { type: 'box', x: 0.88, y: 0.74, w: 0.04, h: 0.06 },
+      ]
+    },
+  ];
+
+  // ---- Physics setup ----
+  function initEngine() {
+    if (engine) { World.clear(world); Engine.clear(engine); }
+    engine = Engine.create();
+    engine.gravity.y = 1.0;
+    world = engine.world;
+    particles = [];
+    popEffects = [];
+    launchedCorks = [];
+    gameGlasses = [];
+    walls = [];
+    shakeAmount = 0;
+    levelComplete = false;
+    gameOverShown = false;
+    currentCork = null;
+    corkRestBody = null;
+    corkConstraint = null;
+    aimMouseConstraint = null;
+
+    // Ground
+    groundBody = Bodies.rectangle(W / 2, H - 15, W + 200, 30, { isStatic: true, label: 'ground', friction: 0.8 });
+    World.add(world, groundBody);
+
+    // Side walls (invisible)
+    const leftWall = Bodies.rectangle(-15, H / 2, 30, H + 200, { isStatic: true, label: 'wall' });
+    const rightWall = Bodies.rectangle(W + 15, H / 2, 30, H + 200, { isStatic: true, label: 'wall' });
+    const ceiling = Bodies.rectangle(W / 2, -100, W + 200, 30, { isStatic: true, label: 'wall' });
+    walls.push(leftWall, rightWall, ceiling);
+    World.add(world, walls);
+  }
+
+  function loadLevel(idx) {
+    currentLevel = idx;
+    const level = levels[idx];
+    corksRemaining = level.corks;
+    totalCorks = level.corks;
+    glassesHit = 0;
+    totalGlasses = level.glasses.length;
+    levelComplete = false;
+    gameOverShown = false;
+    launchedCorks = [];
+    gameGlasses = [];
+    particles = [];
+    popEffects = [];
+    shakeAmount = 0;
+
+    // Update UI
+    document.getElementById('level-num').textContent = 'Level ' + (idx + 1);
+    document.getElementById('level-desc').textContent = level.desc;
+    document.getElementById('corks-left').textContent = corksRemaining;
+    document.getElementById('hits-count').textContent = '0';
+    document.getElementById('btn-next').style.display = 'none';
+    document.getElementById('overlay').classList.remove('show');
+
+    // Build glasses
+    for (const g of level.glasses) {
+      const gx = g.x * W;
+      const gy = g.y * H;
+      const glassW = 26 * g.size;
+      const glassH = 52 * g.size;
+      const glass = Bodies.rectangle(gx, gy, glassW, glassH, {
+        label: 'glass',
+        density: 0.002,
+        friction: 0.5,
+        frictionAir: 0.008,
+        restitution: 0.2,
+        slop: 0.02,
+        glassSize: g.size,
+        hit: false,
+      });
+      gameGlasses.push(glass);
+      World.add(world, glass);
+    }
+
+    // Build obstacles
+    for (const obs of level.obstacles) {
+      if (obs.type === 'box') {
+        const bw = obs.w * W;
+        const bh = obs.h * H;
+        const box = Bodies.rectangle(obs.x * W, obs.y * H, bw, bh, {
+          label: 'obstacle',
+          density: 0.003,
+          friction: 0.6,
+          restitution: 0.1,
+          obstacleType: 'box',
+        });
+        World.add(world, box);
+      } else if (obs.type === 'plank') {
+        const pw = obs.w * W;
+        const ph = obs.h * H;
+        const plank = Bodies.rectangle(obs.x * W, obs.y * H, pw, ph, {
+          label: 'obstacle',
+          density: 0.002,
+          friction: 0.5,
+          restitution: 0.1,
+          angle: obs.angle || 0,
+          obstacleType: 'plank',
+        });
+        World.add(world, plank);
+      } else if (obs.type === 'pendulum') {
+        const px = obs.x * W;
+        const py = obs.y * H;
+        const pLen = obs.length * H;
+        const pWeight = obs.weight * W;
+        const anchor = Bodies.circle(px, py, 5, { isStatic: true, label: 'anchor' });
+        const bob = Bodies.circle(px, py + pLen, pWeight, {
+          label: 'obstacle',
+          density: 0.01,
+          friction: 0.3,
+          restitution: 0.4,
+          obstacleType: 'pendulum',
+        });
+        const piv = Constraint.create({
+          bodyA: anchor,
+          bodyB: bob,
+          pointA: { x: 0, y: 0 },
+          pointB: { x: 0, y: -pLen },
+          stiffness: 1,
+          damping: 0.01,
+          length: 0,
+        });
+        World.add(world, [anchor, bob, piv]);
+      }
+    }
+
+    // Load first cork
+    loadCork();
+
+    // Show instructions on first level
+    if (idx === 0) {
+      const inst = document.getElementById('instructions');
+      inst.classList.remove('hide');
+      setTimeout(function() { inst.classList.add('hide'); }, 4500);
+    }
+  }
+
+  function loadCork() {
+    if (corksRemaining <= 0) {
+      currentCork = null;
+      corkRestBody = null;
+      corkConstraint = null;
+      checkGameOver();
+      return;
+    }
+
+    // Cork launcher position (bottom-left area)
+    const launcherX = W * 0.12;
+    const launcherY = H * 0.78;
+
+    // Create a small static anchor for the cork constraint
+    corkRestBody = Bodies.circle(launcherX, launcherY, 4, { isStatic: true, label: 'corkRest', render: { visible: false } });
+
+    // Create the cork
+    const corkRadius = 12;
+    currentCork = Bodies.circle(launcherX, launcherY, corkRadius, {
+      label: 'cork',
+      density: 0.004,
+      friction: 0.3,
+      frictionAir: 0.002,
+      restitution: 0.5,
+      isLaunched: false,
+    });
+    currentCork.corkRadius = corkRadius;
+
+    // Elastic constraint keeping cork at rest
+    corkConstraint = Constraint.create({
+      bodyA: corkRestBody,
+      bodyB: currentCork,
+      stiffness: 0.08,
+      damping: 0.1,
+      length: 0,
+    });
+
+    World.add(world, [corkRestBody, currentCork, corkConstraint]);
+  }
+
+  // ---- Input handling ----
+  function getPointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    if (e.touches && e.touches.length > 0) {
+      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+    }
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    if (!currentCork || levelComplete || gameOverShown) return;
+
+    const pos = getPointerPos(e);
+    // Check if near the cork
+    const dx = pos.x - currentCork.position.x;
+    const dy = pos.y - currentCork.position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 80) return; // Must click near cork
+
+    isAiming = true;
+    aimStart = { x: currentCork.position.x, y: currentCork.position.y };
+    aimCurrent = pos;
+
+    // Remove the constraint so the cork follows the pointer
+    if (corkConstraint) {
+      World.remove(world, corkConstraint);
+      corkConstraint = null;
+    }
+    // Make cork static temporarily while aiming
+    Body.setStatic(currentCork, true);
+  }
+
+  function onPointerMove(e) {
+    if (!isAiming || !currentCork) return;
+    e.preventDefault();
+    const pos = getPointerPos(e);
+
+    // Limit how far you can pull back
+    const dx = pos.x - aimStart.x;
+    const dy = pos.y - aimStart.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxPull = Math.min(W, H) * 0.25;
+    if (dist > maxPull) {
+      const ratio = maxPull / dist;
+      aimCurrent = { x: aimStart.x + dx * ratio, y: aimStart.y + dy * ratio };
+    } else {
+      aimCurrent = pos;
+    }
+
+    // Move cork to aim position
+    Body.setPosition(currentCork, aimCurrent);
+    Body.setVelocity(currentCork, { x: 0, y: 0 });
+    Body.setAngularVelocity(currentCork, 0);
+  }
+
+  function onPointerUp(e) {
+    if (!isAiming || !currentCork) return;
+    e.preventDefault();
+    isAiming = false;
+
+    // Calculate launch velocity (opposite of pull direction)
+    const dx = aimStart.x - aimCurrent.x;
+    const dy = aimStart.y - aimCurrent.y;
+    const pullDist = Math.sqrt(dx * dx + dy * dy);
+
+    if (pullDist < 15) {
+      // Too small a pull, snap back
+      Body.setPosition(currentCork, aimStart);
+      if (corkRestBody) {
+        corkConstraint = Constraint.create({
+          bodyA: corkRestBody,
+          bodyB: currentCork,
+          stiffness: 0.08,
+          damping: 0.1,
+          length: 0,
+        });
+        World.add(world, corkConstraint);
+      }
+      Body.setStatic(currentCork, false);
+      return;
+    }
+
+    // Launch! Velocity proportional to pull distance
+    const power = 0.16;
+    const vx = dx * power;
+    const vy = dy * power;
+    Body.setStatic(currentCork, false);
+    Body.setVelocity(currentCork, { x: vx, y: vy });
+    Body.setAngularVelocity(currentCork, (Math.random() - 0.5) * 0.3);
+    currentCork.isLaunched = true;
+
+    // Remove rest body
+    if (corkRestBody) {
+      World.remove(world, corkRestBody);
+      corkRestBody = null;
+    }
+
+    launchedCorks.push(currentCork);
+    currentCork = null;
+    corksRemaining--;
+    document.getElementById('corks-left').textContent = corksRemaining;
+
+    // Pop effect at launch point
+    createPopEffect(aimStart.x, aimStart.y, 12, '#ffd700');
+
+    // Load next cork after a delay
+    setTimeout(function() {
+      if (!levelComplete && !gameOverShown && corksRemaining > 0) {
+        loadCork();
+      } else if (corksRemaining <= 0) {
+        // Wait for things to settle, then check
+        setTimeout(checkGameOver, 2000);
+      }
+    }, 800);
+  }
+
+  // ---- Collision events ----
+  Events.on(engine, 'collisionStart', function(event) {
+    for (const pair of event.pairs) {
+      const a = pair.bodyA;
+      const b = pair.bodyB;
+
+      // Glass hit by cork or obstacle
+      if (a.label === 'glass' && !a.hit && (b.label === 'cork' || b.label === 'obstacle' || b.label === 'ground')) {
+        const speed = Math.sqrt(b.velocity.x * b.velocity.x + b.velocity.y * b.velocity.y);
+        if (b.label === 'cork' && speed > 3) {
+          hitGlass(a, b);
+        } else if (b.label === 'obstacle' && speed > 5) {
+          hitGlass(a, b);
+        }
+      }
+      if (b.label === 'glass' && !b.hit && (a.label === 'cork' || a.label === 'obstacle' || a.label === 'ground')) {
+        const speed = Math.sqrt(a.velocity.x * a.velocity.x + a.velocity.y * a.velocity.y);
+        if (a.label === 'cork' && speed > 3) {
+          hitGlass(b, a);
+        } else if (a.label === 'obstacle' && speed > 5) {
+          hitGlass(b, a);
+        }
+      }
+    }
+  });
+
+  function hitGlass(glass, projectile) {
+    glass.hit = true;
+    glassesHit++;
+    score += 100;
+    document.getElementById('score-value').textContent = score;
+    document.getElementById('hits-count').textContent = glassesHit;
+
+    // Shatter effect
+    const gx = glass.position.x;
+    const gy = glass.position.y;
+    const size = glass.glassSize || 1.0;
+    createShatter(gx, gy, size);
+    createPopEffect(gx, gy, 20, '#e0b0ff');
+    shakeAmount = Math.min(shakeAmount + 6, 15);
+
+    // Mark glass as broken (make it non-collidable and fade)
+    glass.isBroken = true;
+    glass.isSensor = true;
+    glass.isStatic = false;
+
+    // Check level complete
+    if (glassesHit >= totalGlasses) {
+      onLevelComplete();
+    }
+  }
+
+  function createShatter(x, y, size) {
+    const count = 18;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+      const speed = 2 + Math.random() * 5;
+      particles.push({
+        x: x + (Math.random() - 0.5) * 20 * size,
+        y: y + (Math.random() - 0.5) * 30 * size,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2,
+        life: 1.0,
+        decay: 0.015 + Math.random() * 0.01,
+        size: 2 + Math.random() * 4 * size,
+        color: ['#c0a0ff', '#e0c0ff', '#a080d0', '#d0b0e0'][Math.floor(Math.random() * 4)],
+        rotation: Math.random() * Math.PI,
+        rotSpeed: (Math.random() - 0.5) * 0.3,
+        type: 'shard',
+      });
+    }
+  }
+
+  function createPopEffect(x, y, count, color) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 4;
+      popEffects.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1.0,
+        decay: 0.02 + Math.random() * 0.02,
+        size: 3 + Math.random() * 5,
+        color: color,
+      });
+    }
+  }
+
+  // ---- Game state checks ----
+  function onLevelComplete() {
+    if (levelComplete) return;
+    levelComplete = true;
+
+    // Bonus for remaining corks
+    const corkBonus = corksRemaining * 250;
+    score += corkBonus;
+    document.getElementById('score-value').textContent = score;
+
+    // Calculate stars
+    const corksUsed = totalCorks - corksRemaining;
+    let stars = 1;
+    if (corksUsed <= totalCorks * 0.6) stars = 2;
+    if (corksUsed <= totalCorks * 0.4 && corksUsed > 0) stars = 3;
+    if (corksUsed === 1 && totalGlasses >= 3) stars = 3;
+
+    // Update best score
+    if (score > bestScore) {
+      bestScore = score;
+      localStorage.setItem('corkpop_best', String(bestScore));
+      document.getElementById('best-score').textContent = bestScore;
+    }
+
+    // Show overlay
+    setTimeout(function() {
+      const overlay = document.getElementById('overlay');
+      const isLastLevel = currentLevel >= levels.length - 1;
+      document.getElementById('overlay-title').textContent = isLastLevel ? '🏆 All Levels Complete!' : 'Level Complete!';
+      document.getElementById('overlay-stars').textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
+      document.getElementById('overlay-score').textContent = score;
+      let msg = '';
+      if (stars === 3) msg = 'Perfect corksmanship! ' + (corkBonus > 0 ? '(+' + corkBonus + ' cork bonus)' : '');
+      else if (stars === 2) msg = 'Well done! ' + (corkBonus > 0 ? '(+' + corkBonus + ' cork bonus)' : '');
+      else msg = 'Cleared! Try using fewer corks for 3 stars.';
+      if (isLastLevel) msg = 'You are a Master Sommelier! Final score: ' + score;
+      document.getElementById('overlay-msg').textContent = msg;
+      document.getElementById('overlay-btn').textContent = isLastLevel ? 'Play Again ↻' : 'Next Level →';
+      overlay.classList.add('show');
+      gameOverShown = true;
+    }, 1200);
+  }
+
+  function checkGameOver() {
+    if (levelComplete || gameOverShown) return;
+    // If all corks launched and glasses remain, check if things have settled
+    if (corksRemaining > 0) return;
+
+    // Check if all launched corks have stopped moving
+    let allStopped = true;
+    for (const c of launchedCorks) {
+      const speed = Math.sqrt(c.velocity.x * c.velocity.x + c.velocity.y * c.velocity.y);
+      if (speed > 1) { allStopped = false; break; }
+    }
+    // Check if glasses are still moving
+    for (const g of gameGlasses) {
+      if (g.hit) continue;
+      const speed = Math.sqrt(g.velocity.x * g.velocity.x + g.velocity.y * g.velocity.y);
+      if (speed > 1) { allStopped = false; break; }
+    }
+
+    if (allStopped && glassesHit < totalGlasses) {
+      // Game over — failed to clear all glasses
+      gameOverShown = true;
+      setTimeout(function() {
+        const overlay = document.getElementById('overlay');
+        document.getElementById('overlay-title').textContent = 'Out of Corks!';
+        document.getElementById('overlay-stars').textContent = '☆☆☆';
+        document.getElementById('overlay-score').textContent = score;
+        document.getElementById('overlay-msg').textContent = 'You knocked down ' + glassesHit + ' of ' + totalGlasses + ' glasses. Try again!';
+        document.getElementById('overlay-btn').textContent = '↻ Retry Level';
+        overlay.classList.add('show');
+      }, 800);
+    }
+  }
+
+  // ---- Rendering ----
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Apply screen shake
+    let shakeX = 0, shakeY = 0;
+    if (shakeAmount > 0) {
+      shakeX = (Math.random() - 0.5) * shakeAmount;
+      shakeY = (Math.random() - 0.5) * shakeAmount;
+      shakeAmount *= 0.88;
+      if (shakeAmount < 0.5) shakeAmount = 0;
+    }
+
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
+    // Draw background — cellar ambiance
+    drawBackground();
+
+    // Draw ground/platform
+    drawGround();
+
+    // Draw obstacles
+    const bodies = Composite.allBodies(world);
+    for (const body of bodies) {
+      if (body.label === 'obstacle') drawObstacle(body);
+      if (body.label === 'pendulum') drawPendulumBob(body);
+    }
+
+    // Draw pendulum ropes
+    const constraints = Composite.allConstraints(world);
+    for (const c of constraints) {
+      // Draw constraint lines for pendulums
+      if (c.bodyA && c.bodyB && c.bodyA.label === 'anchor') {
+        ctx.strokeStyle = 'rgba(120, 100, 80, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(c.bodyA.position.x, c.bodyA.position.y);
+        ctx.lineTo(c.bodyB.position.x, c.bodyB.position.y);
+        ctx.stroke();
+      }
+    }
+
+    // Draw glasses
+    for (const glass of gameGlasses) {
+      drawWineGlass(glass);
+    }
+
+    // Draw launched corks
+    for (const cork of launchedCorks) {
+      drawCork(cork);
+    }
+
+    // Draw current cork (loaded, aiming)
+    if (currentCork) {
+      drawCork(currentCork);
+      if (isAiming && aimStart && aimCurrent) {
+        drawAimingLine();
+      }
+    }
+
+    // Draw launcher (slingshot)
+    if (currentCork && !isAiming) {
+      drawLauncher();
+    }
+
+    // Draw particles (shatter shards)
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.18;
+      p.vx *= 0.99;
+      p.rotation += p.rotSpeed;
+      p.life -= p.decay;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.moveTo(0, -p.size);
+      ctx.lineTo(p.size * 0.6, p.size * 0.5);
+      ctx.lineTo(-p.size * 0.6, p.size * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    // Draw pop effects (sparkles)
+    for (let i = popEffects.length - 1; i >= 0; i--) {
+      const p = popEffects[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.05;
+      p.vx *= 0.97;
+      p.life -= p.decay;
+      if (p.life <= 0) { popEffects.splice(i, 1); continue; }
+
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Glow
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 8;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+  }
+
+  function drawBackground() {
+    // Vertical gradient — wine cellar ambiance
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#1a0e28');
+    grad.addColorStop(0.5, '#140a1e');
+    grad.addColorStop(1, '#0d0815');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Decorative barrels in background (faint)
+    ctx.globalAlpha = 0.06;
+    for (let i = 0; i < 6; i++) {
+      const bx = (W / 6) * i + W / 12;
+      const by = H * 0.35;
+      const br = 30;
+      ctx.fillStyle = '#8b6040';
+      ctx.beginPath();
+      ctx.ellipse(bx, by, br * 1.4, br, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#6b4030';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(bx, by - br * 0.5, br * 1.4, br * 0.3, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawGround() {
+    // Stone floor
+    const grad = ctx.createLinearGradient(0, H - 30, 0, H);
+    grad.addColorStop(0, '#3a2a50');
+    grad.addColorStop(1, '#2a1a38');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, H - 30, W, 30);
+
+    // Stone tile lines
+    ctx.strokeStyle = 'rgba(80, 60, 100, 0.3)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, H - 30);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(0, H - 30);
+    ctx.lineTo(W, H - 30);
+    ctx.stroke();
+  }
+
+  function drawWineGlass(body) {
+    if (body.isBroken) return; // Broken glasses are drawn via particles
+    const x = body.position.x;
+    const y = body.position.y;
+    const angle = body.angle;
+    const size = body.glassSize || 1.0;
+    const gw = 26 * size;
+    const gh = 52 * size;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    // Glass body — bowl shape
+    ctx.strokeStyle = 'rgba(200, 220, 255, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(180, 60, 120, 0.35)';
+
+    // Bowl (curved trapezoid)
+    ctx.beginPath();
+    ctx.moveTo(-gw / 2, -gh / 2);
+    ctx.bezierCurveTo(-gw / 2, -gh / 4, -gw / 3, gh / 6, -gw / 6, gh / 3);
+    ctx.lineTo(-gw / 8, gh / 2);
+    ctx.lineTo(gw / 8, gh / 2);
+    ctx.lineTo(gw / 6, gh / 3);
+    ctx.bezierCurveTo(gw / 3, gh / 6, gw / 2, -gh / 4, gw / 2, -gh / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Wine inside (red liquid)
+    ctx.fillStyle = 'rgba(160, 30, 70, 0.6)';
+    ctx.beginPath();
+    const wineTop = -gh / 2 + gh * 0.25;
+    ctx.moveTo(-gw / 2 + 3, wineTop);
+    ctx.bezierCurveTo(-gw / 2 + 3, -gh / 8, -gw / 3 + 2, gh / 5, -gw / 6 + 1, gh / 3);
+    ctx.lineTo(-gw / 8 + 1, gh / 2 - 2);
+    ctx.lineTo(gw / 8 - 1, gh / 2 - 2);
+    ctx.lineTo(gw / 6 - 1, gh / 3);
+    ctx.bezierCurveTo(gw / 3 - 2, gh / 5, gw / 2 - 3, -gh / 8, gw / 2 - 3, wineTop);
+    ctx.closePath();
+    ctx.fill();
+
+    // Shine highlight
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-gw / 3, -gh / 2 + 5);
+    ctx.lineTo(-gw / 4, gh / 4);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawCork(body) {
+    const x = body.position.x;
+    const y = body.position.y;
+    const angle = body.angle;
+    const r = body.corkRadius || 12;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    // Cork body — cylindrical look (ellipse + side)
+    const cw = r * 0.8;
+    const ch = r * 1.5;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, ch * 0.1, cw, ch, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cork gradient
+    const grad = ctx.createLinearGradient(-cw, 0, cw, 0);
+    grad.addColorStop(0, '#8a5a20');
+    grad.addColorStop(0.4, '#c08040');
+    grad.addColorStop(0.6, '#d09050');
+    grad.addColorStop(1, '#8a5a20');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, cw, ch, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cork texture lines
+    ctx.strokeStyle = 'rgba(100, 60, 20, 0.3)';
+    ctx.lineWidth = 0.8;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-cw * 0.8, i * 3);
+      ctx.lineTo(cw * 0.8, i * 3);
+      ctx.stroke();
+    }
+
+    // Top highlight
+    ctx.fillStyle = 'rgba(220, 180, 100, 0.5)';
+    ctx.beginPath();
+    ctx.ellipse(0, -ch * 0.6, cw * 0.7, ch * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawLauncher() {
+    if (!currentCork) return;
+    const x = currentCork.position.x;
+    const y = currentCork.position.y;
+
+    // Slingshot fork
+    ctx.strokeStyle = '#6b4020';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+
+    // Left prong
+    ctx.beginPath();
+    ctx.moveTo(x - 18, y + 30);
+    ctx.lineTo(x - 10, y + 8);
+    ctx.stroke();
+
+    // Right prong
+    ctx.beginPath();
+    ctx.moveTo(x + 18, y + 30);
+    ctx.lineTo(x + 10, y + 8);
+    ctx.stroke();
+
+    // Base
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(x - 18, y + 30);
+    ctx.lineTo(x - 18, y + 50);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 18, y + 30);
+    ctx.lineTo(x + 18, y + 50);
+    ctx.stroke();
+
+    // Elastic bands (from prongs to cork)
+    ctx.strokeStyle = 'rgba(200, 160, 80, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y + 8);
+    ctx.lineTo(x - 5, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 10, y + 8);
+    ctx.lineTo(x + 5, y);
+    ctx.stroke();
+  }
+
+  function drawAimingLine() {
+    if (!aimStart || !aimCurrent || !currentCork) return;
+
+    // Draw pull-back line
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.moveTo(aimStart.x, aimStart.y);
+    ctx.lineTo(aimCurrent.x, aimCurrent.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw trajectory prediction
+    const dx = aimStart.x - aimCurrent.x;
+    const dy = aimStart.y - aimCurrent.y;
+    const power = 0.16;
+    const vx = dx * power;
+    const vy = dy * power;
+
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.25)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 8]);
+    ctx.beginPath();
+    let px = aimStart.x;
+    let py = aimStart.y;
+    let pvx = vx;
+    let pvy = vy;
+    ctx.moveTo(px, py);
+    for (let i = 0; i < 30; i++) {
+      px += pvx;
+      py += pvy;
+      pvy += 1.0; // gravity
+      ctx.lineTo(px, py);
+      if (py > H - 30) break;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Power indicator
+    const pullDist = Math.sqrt(dx * dx + dy * dy);
+    const maxPull = Math.min(W, H) * 0.25;
+    const powerPct = Math.min(pullDist / maxPull, 1.0);
+    ctx.fillStyle = powerPct > 0.8 ? '#ff6040' : (powerPct > 0.5 ? '#ffd700' : '#a0d060');
+    ctx.font = 'bold 12px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(powerPct * 100) + '% power', aimStart.x, aimStart.y - 40);
+  }
+
+  function drawObstacle(body) {
+    const x = body.position.x;
+    const y = body.position.y;
+    const angle = body.angle;
+    const vertices = body.vertices;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    // Get dimensions from vertices
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of vertices) {
+      const lx = v.x - x;
+      const ly = v.y - y;
+      // Undo rotation
+      const cos = Math.cos(-angle);
+      const sin = Math.sin(-angle);
+      const rx = lx * cos - ly * sin;
+      const ry = lx * sin + ly * cos;
+      minX = Math.min(minX, rx);
+      maxX = Math.max(maxX, rx);
+      minY = Math.min(minY, ry);
+      maxY = Math.max(maxY, ry);
+    }
+
+    const w = maxX - minX;
+    const h = maxY - minY;
+
+    if (body.obstacleType === 'box') {
+      // Wooden crate
+      const grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+      grad.addColorStop(0, '#8b6030');
+      grad.addColorStop(1, '#6b4020');
+      ctx.fillStyle = grad;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.strokeStyle = '#5a3020';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
+      // Crate slats
+      ctx.strokeStyle = 'rgba(90, 50, 30, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, 0);
+      ctx.lineTo(w / 2, 0);
+      ctx.stroke();
+    } else if (body.obstacleType === 'plank') {
+      // Wooden plank
+      const grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+      grad.addColorStop(0, '#9b7040');
+      grad.addColorStop(1, '#7b5030');
+      ctx.fillStyle = grad;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.strokeStyle = '#6b4020';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
+      // Wood grain
+      ctx.strokeStyle = 'rgba(100, 60, 30, 0.3)';
+      ctx.lineWidth = 0.5;
+      for (let i = 1; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-w / 2 + i * w / 4, -h / 2);
+        ctx.lineTo(-w / 2 + i * w / 4, h / 2);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function drawPendulumBob(body) {
+    const x = body.position.x;
+    const y = body.position.y;
+    const r = body.circleRadius || 15;
+
+    // Wrecking ball
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.arc(2, 2, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball
+    const grad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r);
+    grad.addColorStop(0, '#606070');
+    grad.addColorStop(1, '#303038');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Highlight
+    ctx.fillStyle = 'rgba(200, 200, 220, 0.3)';
+    ctx.beginPath();
+    ctx.arc(-r * 0.35, -r * 0.35, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // ---- Main loop ----
+  function gameLoop() {
+    Engine.update(engine, 1000 / 60);
+    render();
+
+    // Periodic game-over check
+    if (corksRemaining <= 0 && !levelComplete && !gameOverShown) {
+      // Use a counter to avoid checking every frame
+      if (!gameLoop.checkCounter) gameLoop.checkCounter = 0;
+      gameLoop.checkCounter++;
+      if (gameLoop.checkCounter > 60) {
+        gameLoop.checkCounter = 0;
+        checkGameOver();
+      }
+    }
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  // ---- Initialization ----
+  function init() {
+    canvas = document.getElementById('game-canvas');
+    ctx = canvas.getContext('2d');
+    resizeCanvas();
+
+    document.getElementById('best-score').textContent = bestScore;
+
+    initEngine();
+    loadLevel(0);
+
+    // Input events
+    canvas.addEventListener('mousedown', onPointerDown);
+    canvas.addEventListener('mousemove', onPointerMove);
+    canvas.addEventListener('mouseup', onPointerUp);
+    canvas.addEventListener('mouseleave', onPointerUp);
+    canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    canvas.addEventListener('touchmove', onPointerMove, { passive: false });
+    canvas.addEventListener('touchend', onPointerUp, { passive: false });
+
+    // Buttons
+    document.getElementById('btn-reset').addEventListener('click', function() {
+      initEngine();
+      loadLevel(currentLevel);
+    });
+
+    document.getElementById('btn-restart').addEventListener('click', function() {
+      score = 0;
+      document.getElementById('score-value').textContent = '0';
+      initEngine();
+      loadLevel(0);
+    });
+
+    document.getElementById('btn-next').addEventListener('click', function() {
+      if (currentLevel < levels.length - 1) {
+        initEngine();
+        loadLevel(currentLevel + 1);
+      } else {
+        score = 0;
+        document.getElementById('score-value').textContent = '0';
+        initEngine();
+        loadLevel(0);
+      }
+    });
+
+    document.getElementById('overlay-btn').addEventListener('click', function() {
+      const isLastLevel = currentLevel >= levels.length - 1;
+      const isRetry = glassesHit < totalGlasses;
+      document.getElementById('overlay').classList.remove('show');
+      gameOverShown = false;
+
+      if (isRetry) {
+        initEngine();
+        loadLevel(currentLevel);
+      } else if (isLastLevel) {
+        score = 0;
+        document.getElementById('score-value').textContent = '0';
+        initEngine();
+        loadLevel(0);
+      } else {
+        initEngine();
+        loadLevel(currentLevel + 1);
+      }
+    });
+
+    // Resize
+    window.addEventListener('resize', function() {
+      resizeCanvas();
+      // Rebuild level with new dimensions
+      initEngine();
+      loadLevel(currentLevel);
+      // Restore score (loadLevel doesn't reset score)
+    });
+
+    gameLoop();
+  }
+
+  // Wait for Matter.js to load
+  if (typeof Matter !== 'undefined') {
+    init();
+  } else {
+    window.addEventListener('load', init);
+  }
+})();
+</script>
+</body>
+</html>
