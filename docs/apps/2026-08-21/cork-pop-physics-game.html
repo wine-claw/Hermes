@@ -1228,6 +1228,7 @@
 
     // Buttons
     document.getElementById('btn-reset').addEventListener('click', function() {
+      resizeCanvas();
       initEngine();
       loadLevel(currentLevel);
     });
@@ -1235,37 +1236,43 @@
     document.getElementById('btn-restart').addEventListener('click', function() {
       score = 0;
       document.getElementById('score-value').textContent = '0';
+      resizeCanvas();
       initEngine();
       loadLevel(0);
     });
 
     document.getElementById('btn-next').addEventListener('click', function() {
       if (currentLevel < levels.length - 1) {
+        resizeCanvas();
         initEngine();
         loadLevel(currentLevel + 1);
       } else {
         score = 0;
         document.getElementById('score-value').textContent = '0';
+        resizeCanvas();
         initEngine();
         loadLevel(0);
       }
     });
 
     document.getElementById('overlay-btn').addEventListener('click', function() {
-      const isLastLevel = currentLevel >= levels.length - 1;
-      const isRetry = glassesHit < totalGlasses;
+      var isLastLevel = currentLevel >= levels.length - 1;
+      var isRetry = glassesHit < totalGlasses;
       document.getElementById('overlay').classList.remove('show');
       gameOverShown = false;
 
       if (isRetry) {
+        resizeCanvas();
         initEngine();
         loadLevel(currentLevel);
       } else if (isLastLevel) {
         score = 0;
         document.getElementById('score-value').textContent = '0';
+        resizeCanvas();
         initEngine();
         loadLevel(0);
       } else {
+        resizeCanvas();
         initEngine();
         loadLevel(currentLevel + 1);
       }
@@ -1283,11 +1290,24 @@
     gameLoop();
   }
 
-  // Wait for Matter.js to load
+  // Wait for Matter.js to load — robust check that handles CDN load timing
+  function startGame() { init(); }
   if (typeof Matter !== 'undefined') {
-    init();
+    startGame();
+  } else if (document.readyState === 'complete') {
+    // Page already loaded but Matter not ready — poll for it
+    var pollCount = 0;
+    var pollInterval = setInterval(function() {
+      if (typeof Matter !== 'undefined') {
+        clearInterval(pollInterval);
+        startGame();
+      } else if (++pollCount > 100) {
+        clearInterval(pollInterval);
+        console.error('Matter.js failed to load from CDN');
+      }
+    }, 50);
   } else {
-    window.addEventListener('load', init);
+    window.addEventListener('load', startGame);
   }
 })();
 </script>
