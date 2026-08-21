@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Wine Price Elasticity & Revenue Optimizer</title>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  :root{
+    --bg:#0b0f14; --surface:#141a22; --surface2:#1a2230; --border:#2a3441; --border2:#3a4453;
+    --text:#d4dce6; --muted:#7a8290; --accent:#f0a060; --accent2:#e8b840;
+    --green:#4ade80; --red:#f87171; --blue:#60a5fa; --purple:#a371f7;
+    --shadow:0 4px 20px rgba(0,0,0,0.35);
+  }
+  html{ font-size:14px; }
+  body{
+    background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  .disclaimer{
+    background:#1a1610; border-bottom:1px solid #3a3020; color:#c9a060;
+    padding:0.75rem 1rem; text-align:center; font-size:0.85rem;
+    position:sticky; top:0; z-index:100;
+  }
+  .disclaimer strong{ font-weight:600; }
+
+  #canvas-container{ position:fixed; inset:0; z-index:0; overflow-y:auto; }
+  #bg-canvas{ position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.35; }
+  #ui-layer{
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    pointer-events:none; z-index:10; overflow-y:auto;
+    display:flex; flex-direction:column; align-items:center; padding:12px;
+  }
+  .panel{ background:rgba(20,26,34,0.92); border:1px solid var(--border); border-radius:12px; pointer-events:auto; }
+  .panel-inner{ padding:14px 16px; }
+  .shadow{ box-shadow:var(--shadow); }
+
+  header{ text-align:center; padding:0.5rem 0 0.75rem; pointer-events:none; }
+  header h1{
+    font-size:clamp(1.25rem,3.5vw,1.75rem);
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    display:inline-block;
+  }
+  header p{ color:var(--muted); font-size:0.82rem; margin-top:0.2rem; }
+
+  .content{ width:100%; max-width:820px; display:flex; flex-direction:column; gap:10px; }
+
+  /* Controls */
+  #controls .panel-inner{ display:flex; flex-direction:column; gap:10px; }
+  .slider-row{ display:flex; flex-direction:column; gap:4px; }
+  .slider-row label{ font-size:0.82rem; color:var(--muted); display:flex; justify-content:space-between; }
+  .slider-row label .val{ color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:6px;
+    background:var(--border); border-radius:3px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:18px; height:18px; background:var(--accent);
+    border-radius:50%; cursor:pointer; border:2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:18px; height:18px; background:var(--accent); border-radius:50%;
+    cursor:pointer; border:2px solid var(--bg);
+  }
+
+  .seg{ display:flex; gap:4px; flex-wrap:wrap; }
+  .seg button{
+    flex:1; min-width:fit-content; background:var(--surface2); border:1px solid var(--border2);
+    color:var(--text); padding:6px 10px; border-radius:6px; font-size:0.78rem;
+    cursor:pointer; transition:all 0.15s; touch-action:manipulation;
+  }
+  .seg button:hover{ border-color:var(--accent); }
+  .seg button.active{ background:var(--accent); color:#1a1008; border-color:var(--accent); font-weight:600; }
+
+  .preset-row{ display:flex; flex-wrap:wrap; gap:4px; }
+  .preset-row button{
+    background:var(--surface2); border:1px solid var(--border2); color:var(--text);
+    padding:5px 10px; border-radius:16px; font-size:0.75rem; cursor:pointer;
+    transition:all 0.15s; touch-action:manipulation;
+  }
+  .preset-row button:hover{ border-color:var(--accent); background:rgba(240,160,96,0.15); }
+
+  /* Chart cards */
+  .chart-area{ display:flex; flex-direction:column; gap:10px; }
+  .chart-card{ }
+  .chart-card .panel-inner{ padding:12px 14px; }
+  .chart-card h3{ font-size:0.88rem; color:var(--accent2); margin-bottom:2px; }
+  .chart-card .sub{ font-size:0.72rem; color:var(--muted); margin-bottom:8px; }
+  .chart-wrap{ position:relative; width:100%; }
+
+  /* Metrics */
+  .metrics-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .metric{ text-align:center; background:var(--surface2); border-radius:8px; padding:8px 4px; border:1px solid var(--border); }
+  .metric .num{ font-size:1.15rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .metric .lbl{ font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-top:2px; }
+  .metric.opt .num{ color:var(--green); }
+  .metric.cur .num{ color:var(--accent); }
+  .metric.gap .num{ color:var(--red); }
+  .metric.opp .num{ color:var(--purple); }
+
+  /* Revenue bar */
+  .rev-section{ display:flex; flex-direction:column; gap:8px; }
+  .rev-bar-wrap{ position:relative; height:28px; background:var(--surface2); border-radius:6px; overflow:hidden; border:1px solid var(--border); }
+  .rev-bar-current{ position:absolute; top:0; left:0; height:100%; background:linear-gradient(90deg,rgba(240,160,96,0.7),rgba(240,160,96,0.5)); border-right:1px solid var(--accent); }
+  .rev-bar-optimal{ position:absolute; top:0; left:0; height:100%; background:linear-gradient(90deg,rgba(74,222,128,0.6),rgba(74,222,128,0.4)); }
+  .rev-bar-label{ position:absolute; top:50%; transform:translateY(-50%); font-size:0.72rem; font-weight:600; z-index:2; }
+  .rev-legend{ display:flex; gap:12px; font-size:0.75rem; color:var(--muted); }
+  .rev-legend span{ display:flex; align-items:center; gap:4px; }
+  .rev-legend .dot{ width:10px; height:10px; border-radius:50%; }
+  .dot-cur{ background:var(--accent); }
+  .dot-opt{ background:var(--green); }
+
+  /* Insights */
+  .insights{ display:flex; flex-direction:column; gap:6px; }
+  .insight{
+    display:flex; gap:8px; align-items:flex-start; padding:8px 10px; border-radius:8px;
+    font-size:0.8rem; line-height:1.4;
+  }
+  .insight.alert{ background:rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.3); }
+  .insight.ok{ background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.3); }
+  .insight.info{ background:rgba(96,165,250,0.12); border:1px solid rgba(96,165,250,0.3); }
+  .insight .icon{ font-size:0.9rem; flex-shrink:0; }
+
+  .footer-note{ text-align:center; color:var(--muted); font-size:0.72rem; padding:4px 0 8px; pointer-events:none; }
+
+  @media (max-width:768px){
+    html, body{ overflow-y:auto; height:auto; }
+    #canvas-container{ position:relative !important; inset:auto !important; height:auto !important; overflow-y:visible; z-index:0; }
+    #bg-canvas{ position:relative !important; inset:auto !important; height:120px !important; width:100% !important; opacity:0.25; }
+    #ui-layer{ position:relative !important; inset:auto !important; pointer-events:auto; overflow-y:visible; }
+    .metrics-grid{ grid-template-columns:repeat(2,1fr); }
+    .content{ max-width:100%; }
+    .panel-inner{ padding:12px; }
+    .chart-wrap{ height:240px; }
+  }
+</style>
+</head>
+<body>
+<div class="disclaimer"><strong>⚠ Disclaimer:</strong> Unlisted Hermes Agent AI mini-apps. Experimental and not professionally validated. Do not rely on them.</div>
+
+<canvas id="bg-canvas"></canvas>
+
+<div id="canvas-container">
+  <div id="ui-layer">
+    <header>
+      <h1>Wine Price Elasticity & Revenue Optimizer</h1>
+      <p>How price changes affect demand, revenue, and profit — optimise your pricing strategy</p>
+    </header>
+
+    <div class="content">
+      <!-- Controls -->
+      <div class="panel shadow" id="controls">
+        <div class="panel-inner">
+          <div class="slider-row">
+            <label>Wine Segment <span class="val" id="seg-val">Mid-range Red</span></label>
+            <div class="seg" id="seg-btns">
+              <button data-seg="budget">Budget</button>
+              <button data-seg="mid" class="active">Mid-range</button>
+              <button data-seg="premium">Premium</button>
+              <button data-seg="luxury">Luxury</button>
+              <button data-seg="ultra">Ultra-premium</button>
+            </div>
+          </div>
+          <div class="slider-row">
+            <label>Wine Type <span class="val" id="type-val">Red</span></label>
+            <div class="seg" id="type-btns">
+              <button data-type="red" class="active">Red</button>
+              <button data-type="white">White</button>
+              <button data-type="sparkling">Sparkling</button>
+              <button data-type="rose">Rosé</button>
+              <button data-type="fortified">Fortified</button>
+            </div>
+          </div>
+          <div class="slider-row">
+            <label>Distribution Channel <span class="val" id="ch-val">Retail</span></label>
+            <div class="seg" id="ch-btns">
+              <button data-ch="retail" class="active">Retail</button>
+              <button data-ch="restaurant">Restaurant</button>
+              <button data-ch="direct">Direct-to-Consumer</button>
+              <button data-ch="export">Export</button>
+            </div>
+          </div>
+          <div class="slider-row">
+            <label>Base Price <span class="val" id="price-val">$28.00</span></label>
+            <input type="range" id="price-slider" min="5" max="250" step="0.50" value="28">
+          </div>
+          <div class="slider-row">
+            <label>Price Elasticity (|Ed|) <span class="val" id="elast-val">1.40</span></label>
+            <input type="range" id="elast-slider" min="0.1" max="5.0" step="0.05" value="1.40">
+          </div>
+          <div class="slider-row">
+            <label>Cost per Unit <span class="val" id="cost-val">$9.50</span></label>
+            <input type="range" id="cost-slider" min="1" max="100" step="0.50" value="9.50">
+          </div>
+          <div class="slider-row">
+            <label>Base Annual Volume <span class="val" id="vol-val">12,000</span></label>
+            <input type="range" id="vol-slider" min="500" max="50000" step="100" value="12000">
+          </div>
+          <div class="slider-row">
+            <label>Price Adjustment <span class="val" id="adj-val">+0%</span></label>
+            <input type="range" id="adj-slider" min="-40" max="40" step="1" value="0">
+          </div>
+          <div class="slider-row">
+            <label>Quick Presets</label>
+            <div class="preset-row" id="presets">
+              <button data-preset="bargain">Bargain Hunter</button>
+              <button data-preset="balanced">Balanced</button>
+              <button data-preset="premium">Premium Shift</button>
+              <button data-preset="veblen">Veblen Effect</button>
+              <button data-preset="recession">Recession</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="panel shadow">
+        <div class="panel-inner">
+          <div class="metrics-grid">
+            <div class="metric cur"><div class="num" id="m-rev">$0</div><div class="lbl">Current Revenue</div></div>
+            <div class="metric opt"><div class="num" id="m-rev-opt">$0</div><div class="lbl">Optimal Revenue</div></div>
+            <div class="metric gap"><div class="num" id="m-gap">0%</div><div class="lbl">Revenue Gap</div></div>
+            <div class="metric opp"><div class="num" id="m-price-opt">$0</div><div class="lbl">Optimal Price</div></div>
+          </div>
+          <div style="height:6px"></div>
+          <div class="metrics-grid">
+            <div class="metric"><div class="num" id="m-cur-profit">$0</div><div class="lbl">Current Profit</div></div>
+            <div class="metric"><div class="num" id="m-opt-profit">$0</div><div class="lbl">Optimal Profit</div></div>
+            <div class="metric"><div class="num" id="m-margin">0%</div><div class="lbl">Current Margin</div></div>
+            <div class="metric"><div class="num" id="m-demand">0</div><div class="lbl">Demand Change</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Revenue Bar -->
+      <div class="panel shadow">
+        <div class="panel-inner rev-section">
+          <h3 style="font-size:0.88rem;color:var(--accent2);margin-bottom:2px">Revenue at Current vs Optimal Price</h3>
+          <div class="rev-bar-wrap">
+            <div class="rev-bar-optimal" id="rev-opt-bar" style="width:0%"></div>
+            <div class="rev-bar-current" id="rev-cur-bar" style="width:0%"></div>
+            <div class="rev-bar-label" id="rev-label" style="left:50%;color:var(--text)">—</div>
+          </div>
+          <div class="rev-legend">
+            <span><span class="dot dot-cur"></span> Current Pricing</span>
+            <span><span class="dot dot-opt"></span> Optimal Pricing</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="chart-area">
+        <div class="panel shadow chart-card">
+          <div class="panel-inner">
+            <h3>Demand Curve — Price vs Volume</h3>
+            <div class="sub">Linear elasticity model · current price (orange) · adjusted price (green)</div>
+            <div class="chart-wrap" style="height:220px;">
+              <canvas id="demandChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="panel shadow chart-card">
+          <div class="panel-inner">
+            <h3>Revenue & Profit Curves</h3>
+            <div class="sub">Total revenue (blue) · Total profit (green) · Current price marker</div>
+            <div class="chart-wrap" style="height:220px;">
+              <canvas id="revChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="panel shadow chart-card">
+          <div class="panel-inner">
+            <h3>Elasticity Scenario Comparison</h3>
+            <div class="sub">Revenue at different elasticity values for the same price adjustment</div>
+            <div class="chart-wrap" style="height:200px;">
+              <canvas id="elastChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Insights -->
+      <div class="panel shadow">
+        <div class="panel-inner">
+          <h3 style="font-size:0.88rem;color:var(--accent2);margin-bottom:6px">Pricing Insights</h3>
+          <div class="insights" id="insights"></div>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        Model: linear price elasticity of demand (Ed = %ΔQ ÷ %ΔP). Revenue maximised where |Ed| ≈ 1. Profit maximised at (P − C) × Q peak. Educational model — actual wine markets have brand, vintage, and channel-specific dynamics.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  /* === Elasticity parameters by segment × type × channel === */
+  var ELAST_DATA = {
+    budget:    { red:1.8, white:1.7, sparkling:2.2, rose:1.9, fortified:1.3 },
+    mid:       { red:1.4, white:1.3, sparkling:1.8, rose:1.5, fortified:1.1 },
+    premium:   { red:0.9, white:0.8, sparkling:1.2, rose:1.0, fortified:0.7 },
+    luxury:    { red:0.5, white:0.45, sparkling:0.8, rose:0.6, fortified:0.35 },
+    ultra:     { red:0.25, white:0.2, sparkling:0.5, rose:0.3, fortified:0.15 }
+  };
+  var CHAN_MULT = { retail:1.0, restaurant:0.6, direct:0.85, export:1.15 };
+  var SEG_LABELS = { budget:"Budget", mid:"Mid-range", premium:"Premium", luxury:"Luxury", ultra:"Ultra-premium" };
+  var TYPE_LABELS = { red:"Red", white:"White", sparkling:"Sparkling", rose:"Rosé", fortified:"Fortified" };
+  var CHAN_LABELS = { retail:"Retail", restaurant:"Restaurant", direct:"Direct-to-Consumer", export:"Export" };
+
+  var state = {
+    segment:"mid", type:"red", channel:"retail",
+    basePrice:28, elasticity:1.40, cost:9.50, baseVol:12000, priceAdj:0
+  };
+
+  function getElasticity(){
+    var base = ELAST_DATA[state.segment][state.type];
+    var mult = CHAN_MULT[state.channel];
+    return base * mult;
+  }
+
+  function fmtMoney(v){
+    if (Math.abs(v) >= 1e6) return "$"+(v/1e6).toFixed(2)+"M";
+    if (Math.abs(v) >= 1e3) return "$"+(v/1e3).toFixed(1)+"k";
+    return "$"+v.toFixed(0);
+  }
+  function fmtNum(v){
+    if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(2)+"M";
+    if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(1)+"k";
+    return Math.round(v).toLocaleString();
+  }
+
+  /* Demand model: Q = Q0 * (1 - Ed * pctChange)
+     where pctChange = (P - P0)/P0
+     Ed here is the absolute value of elasticity; demand decreases when price goes up */
+  function demandAt(price){
+    var P0 = state.basePrice;
+    var Q0 = state.baseVol;
+    var ed = getElasticity() + (state.elasticity - 1.4); // user override offset
+    var pct = (price - P0) / P0;
+    var q = Q0 * (1 - ed * pct);
+    return Math.max(0, q);
+  }
+  function revenueAt(price){
+    return price * demandAt(price);
+  }
+  function profitAt(price){
+    return (price - state.cost) * demandAt(price);
+  }
+
+  function findOptimalPrice(){
+    var best = { price: state.basePrice, rev: 0 };
+    var bestP = { price: state.basePrice, prof: 0 };
+    var step = (state.basePrice > 50) ? 0.5 : 0.25;
+    var minP = state.cost + 0.5;
+    var maxP = state.basePrice * 3;
+    for (var p = minP; p <= maxP; p += step) {
+      var r = revenueAt(p);
+      if (r > best.rev) { best = { price: p, rev: r }; }
+      var pr = profitAt(p);
+      if (pr > bestP.prof) { bestP = { price: p, prof: pr }; }
+    }
+    return { rev: best, prof: bestP };
+  }
+
+  /* === Charts === */
+  var demandChart, revChart, elastChart;
+  var chartColors = {
+    grid: "rgba(42,52,65,0.35)",
+    text: "#7a8290",
+    demand: "rgba(96,165,250,0.7)",
+    demandCur: "rgba(240,160,96,0.9)",
+    demandAdj: "rgba(74,222,128,0.9)",
+    rev: "rgba(96,165,250,0.6)",
+    prof: "rgba(74,222,128,0.6)",
+    cur: "rgba(240,160,96,0.9)",
+    elast: [
+      "rgba(96,165,250,0.7)",
+      "rgba(74,222,128,0.7)",
+      "rgba(240,160,96,0.7)",
+      "rgba(167,113,247,0.7)",
+      "rgba(248,113,113,0.7)"
+    ]
+  };
+
+  function initCharts(){
+    Chart.defaults.color = chartColors.text;
+    Chart.defaults.font.family = "system-ui, -apple-system, sans-serif";
+    Chart.defaults.font.size = 10.5;
+
+    var gridOpts = { color: chartColors.grid, drawBorder:false };
+
+    demandChart = new Chart(document.getElementById("demandChart"), {
+      type:"line",
+      data:{ labels:[], datasets:[
+        { label:"Demand", data:[], borderColor:chartColors.demand, backgroundColor:"rgba(96,165,250,0.08)", fill:true, borderWidth:2.5, tension:0.3, pointRadius:0 },
+        { label:"Current Price", data:[], borderColor:chartColors.demandCur, backgroundColor:"transparent", borderWidth:2, borderDash:[5,4], pointRadius:0, fill:false },
+        { label:"Adjusted Price", data:[], borderColor:chartColors.demandAdj, backgroundColor:"transparent", borderWidth:2, borderDash:[5,4], pointRadius:0, fill:false }
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:{duration:200},
+        interaction:{ mode:"index", intersect:false },
+        scales:{
+          x:{ grid:gridOpts, ticks:{ callback:function(v,i){ return "$"+this.getLabelForValue(v); }, maxTicksLimit:8 } },
+          y:{ grid:gridOpts, ticks:{ callback:function(v){ return fmtNum(v); } } }
+        },
+        plugins:{
+          legend:{ display:true, position:"top", labels:{ boxWidth:18, padding:8, font:{size:10} } },
+          tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+": "+fmtNum(c.parsed.y)+" units"; } } }
+        }
+      }
+    });
+
+    revChart = new Chart(document.getElementById("revChart"), {
+      type:"line",
+      data:{ labels:[], datasets:[
+        { label:"Revenue", data:[], borderColor:chartColors.rev, backgroundColor:"rgba(96,165,250,0.08)", fill:true, borderWidth:2.5, tension:0.3, pointRadius:0 },
+        { label:"Profit", data:[], borderColor:chartColors.prof, backgroundColor:"rgba(74,222,128,0.06)", fill:true, borderWidth:2.5, tension:0.3, pointRadius:0 },
+        { label:"Current", data:[], borderColor:chartColors.cur, backgroundColor:"transparent", borderWidth:2, borderDash:[5,4], pointRadius:0, fill:false }
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:{duration:200},
+        interaction:{ mode:"index", intersect:false },
+        scales:{
+          x:{ grid:gridOpts, ticks:{ callback:function(v){ return "$"+this.getLabelForValue(v); }, maxTicksLimit:8 } },
+          y:{ grid:gridOpts, ticks:{ callback:function(v){ return fmtMoney(v); } } }
+        },
+        plugins:{
+          legend:{ display:true, position:"top", labels:{ boxWidth:18, padding:8, font:{size:10} } },
+          tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+": "+fmtMoney(c.parsed.y); } } }
+        }
+      }
+    });
+
+    elastChart = new Chart(document.getElementById("elastChart"), {
+      type:"bar",
+      data:{ labels:[], datasets:[] },
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:{duration:200},
+        scales:{
+          x:{ grid:gridOpts },
+          y:{ grid:gridOpts, ticks:{ callback:function(v){ return fmtMoney(v); } } }
+        },
+        plugins:{
+          legend:{ display:true, position:"top", labels:{ boxWidth:14, padding:6, font:{size:9.5} } },
+          tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+": "+fmtMoney(c.parsed.y); } } }
+        }
+      }
+    });
+  }
+
+  function updateCharts(){
+    var P0 = state.basePrice;
+    var minP = Math.max(state.cost + 0.5, P0 * 0.4);
+    var maxP = P0 * 2.2;
+    var points = 60;
+    var labels = [];
+    var dData = [];
+    var rData = [];
+    var pData = [];
+    for (var i = 0; i < points; i++) {
+      var p = minP + (maxP - minP) * (i / (points-1));
+      labels.push(+p.toFixed(2));
+      dData.push(+demandAt(p).toFixed(0));
+      rData.push(+revenueAt(p).toFixed(0));
+      pData.push(+profitAt(p).toFixed(0));
+    }
+
+    demandChart.data.labels = labels;
+    demandChart.data.datasets[0].data = dData;
+    // vertical line markers at current and adjusted prices
+    var curIdx = labels.findIndex(function(l){ return l >= P0; });
+    var adjPrice = P0 * (1 + state.priceAdj/100);
+    var adjIdx = labels.findIndex(function(l){ return l >= adjPrice; });
+
+    demandChart.data.datasets[1].data = labels.map(function(l,i){
+      if (i === curIdx || i === curIdx+1) return demandAt(l);
+      return null;
+    });
+    demandChart.data.datasets[2].data = labels.map(function(l,i){
+      if (i === adjIdx || i === adjIdx+1) return demandAt(l);
+      return null;
+    });
+    demandChart.update("none");
+
+    revChart.data.labels = labels;
+    revChart.data.datasets[0].data = rData;
+    revChart.data.datasets[1].data = pData;
+    revChart.data.datasets[2].data = labels.map(function(l,i){
+      if (i === curIdx || i === curIdx+1) return revenueAt(l);
+      return null;
+    });
+    revChart.update("none");
+
+    // Elasticity comparison chart
+    var ed = getElasticity() + (state.elasticity - 1.4);
+    var elastValues = [0.3, 0.6, 1.0, 1.5, 2.5];
+    var eLabels = [];
+    var eData = [];
+    var eColors = [];
+    for (var ei = 0; ei < elastValues.length; ei++) {
+      var ev = elastValues[ei];
+      var pct = state.priceAdj / 100;
+      var q = state.baseVol * (1 - ev * pct);
+      q = Math.max(0, q);
+      var rev = adjPrice * q;
+      eLabels.push("|Ed|=" + ev.toFixed(1));
+      eData.push(+rev.toFixed(0));
+      var ci = (Math.abs(ev - ed) < 0.15) ? 3 : ei; // highlight current
+      eColors.push(chartColors.elast[ci]);
+    }
+    elastChart.data.labels = eLabels;
+    elastChart.data.datasets = [{
+      label:"Revenue at price adjustment",
+      data:eData,
+      backgroundColor:eColors,
+      borderColor:eColors,
+      borderWidth:1,
+      borderRadius:4
+    }];
+    elastChart.update("none");
+  }
+
+  /* === Metrics & Insights === */
+  function updateMetrics(){
+    var P0 = state.basePrice;
+    var adjPrice = P0 * (1 + state.priceAdj/100);
+    var curVol = demandAt(adjPrice);
+    var curRev = adjPrice * curVol;
+    var curProf = (adjPrice - state.cost) * curVol;
+    var baseRev = P0 * state.baseVol;
+    var baseProf = (P0 - state.cost) * state.baseVol;
+    var opts = findOptimalPrice();
+    var optRev = opts.rev.rev;
+    var optProf = opts.prof.prof;
+    var optRevPrice = opts.rev.price;
+    var optProfPrice = opts.prof.price;
+    var gap = optRev > 0 ? ((optRev - curRev) / optRev * 100) : 0;
+    var demandPct = state.priceAdj !== 0 ? ((curVol - state.baseVol) / state.baseVol * 100) : 0;
+    var margin = curRev > 0 ? (curProf / curRev * 100) : 0;
+
+    document.getElementById("m-rev").textContent = fmtMoney(curRev);
+    document.getElementById("m-rev-opt").textContent = fmtMoney(optRev);
+    document.getElementById("m-gap").textContent = gap.toFixed(1) + "%";
+    document.getElementById("m-price-opt").textContent = "$" + optRevPrice.toFixed(2);
+    document.getElementById("m-cur-profit").textContent = fmtMoney(curProf);
+    document.getElementById("m-opt-profit").textContent = fmtMoney(optProf);
+    document.getElementById("m-margin").textContent = margin.toFixed(1) + "%";
+    document.getElementById("m-demand").textContent = (demandPct >= 0 ? "+" : "") + demandPct.toFixed(1) + "%";
+
+    // Revenue bars
+    var maxRev = Math.max(optRev, curRev, 1);
+    var curPct = curRev / maxRev * 100;
+    var optPct = optRev / maxRev * 100;
+    document.getElementById("rev-opt-bar").style.width = optPct + "%";
+    document.getElementById("rev-cur-bar").style.width = curPct + "%";
+    document.getElementById("rev-label").textContent = fmtMoney(curRev) + " → " + fmtMoney(optRev);
+
+    // Insights
+    var ed = getElasticity() + (state.elasticity - 1.4);
+    var insights = [];
+
+    if (ed > 1.0) {
+      insights.push({type:"info", icon:"📊", text:"Elastic demand (|Ed|="+ed.toFixed(2)+"). Price increases reduce volume more than proportionally. Revenue falls when price rises."});
+    } else if (ed < 1.0 && ed > 0.3) {
+      insights.push({type:"ok", icon:"📈", text:"Inelastic demand (|Ed|="+ed.toFixed(2)+"). Price increases have proportionally smaller effect on volume. Revenue rises with price."});
+    } else if (ed <= 0.3) {
+      insights.push({type:"alert", icon:"💎", text:"Highly inelastic (|Ed|="+ed.toFixed(2)+"). Veblen goods territory — price increases barely affect demand. Revenue maximised at high prices."});
+    } else {
+      insights.push({type:"info", icon:"⚖️", text:"Unit-elastic (|Ed|≈"+ed.toFixed(2)+"). Revenue is near-maximum. Price changes have little effect on total revenue."});
+    }
+
+    if (gap > 5) {
+      insights.push({type:"alert", icon:"⚠️", text:"Revenue gap of "+gap.toFixed(1)+"% from optimal. Consider pricing at $"+optRevPrice.toFixed(2)+" to maximise revenue ("+fmtMoney(optRev)+")."});
+    } else if (gap < 2) {
+      insights.push({type:"ok", icon:"✓", text:"Near-optimal pricing — revenue gap is only "+gap.toFixed(1)+"%. Current strategy is well-tuned."});
+    }
+
+    if (optProfPrice > adjPrice * 1.1) {
+      insights.push({type:"info", icon:"🎯", text:"Profit-maximising price is $"+optProfPrice.toFixed(2)+". Current adjusted price ($"+adjPrice.toFixed(2)+") is below the profit optimum."});
+    } else if (optProfPrice < adjPrice * 0.9) {
+      insights.push({type:"alert", icon:"⬇️", text:"Current price ($"+adjPrice.toFixed(2)+") exceeds the profit-maximising price ($"+optProfPrice.toFixed(2)+"). Lowering price could increase total profit."});
+    }
+
+    if (state.priceAdj > 0 && demandPct < -demandPct && ed > 1.0) {
+      insights.push({type:"alert", icon:"📉", text:"Price increase of "+state.priceAdj+"% is causing "+Math.abs(demandPct).toFixed(1)+"% volume loss. Net effect: "+(curRev > baseRev ? "revenue still up" : "revenue declined")+"."});
+    }
+    if (state.priceAdj < 0 && ed < 1.0) {
+      insights.push({type:"alert", icon:"💸", text:"Price cut on inelastic demand is leaving money on the table. Revenue dropped from "+fmtMoney(baseRev)+" to "+fmtMoney(curRev)+"."});
+    }
+
+    var marginPct = curRev > 0 ? (curProf / curRev * 100) : 0;
+    if (marginPct < 20 && curProf > 0) {
+      insights.push({type:"alert", icon:"🔴", text:"Profit margin is only "+marginPct.toFixed(1)+"%. Cost structure is high relative to price — consider cost reduction or price increase."});
+    } else if (marginPct > 70) {
+      insights.push({type:"ok", icon:"🟢", text:"Healthy margin of "+marginPct.toFixed(1)+"%. Strong pricing power in this segment."});
+    }
+
+    var html = insights.map(function(ins){
+      return '<div class="insight '+ins.type+'"><span class="icon">'+ins.icon+'</span><span>'+ins.text+'</span></div>';
+    }).join("");
+    document.getElementById("insights").innerHTML = html;
+  }
+
+  function updateAll(){
+    updateCharts();
+    updateMetrics();
+  }
+
+  /* === UI Wiring === */
+  function wireSegGroup(groupId, stateKey, labelFn, valId){
+    var btns = document.querySelectorAll("#"+groupId+" button");
+    btns.forEach(function(btn){
+      btn.addEventListener("click", function(){
+        btns.forEach(function(b){ b.classList.remove("active"); });
+        btn.classList.add("active");
+        var key = btn.getAttribute("data-"+stateKey.substring(0,3));
+        if (stateKey === "segment") state.segment = btn.getAttribute("data-seg");
+        if (stateKey === "type") state.type = btn.getAttribute("data-type");
+        if (stateKey === "channel") state.channel = btn.getAttribute("data-ch");
+        document.getElementById(valId).textContent = labelFn();
+        // update elasticity slider to match new segment/type/channel
+        var newEd = getElasticity();
+        state.elasticity = newEd;
+        document.getElementById("elast-slider").value = newEd.toFixed(2);
+        document.getElementById("elast-val").textContent = newEd.toFixed(2);
+        updateAll();
+      });
+    });
+  }
+
+  function wireSliders(){
+    var priceS = document.getElementById("price-slider");
+    priceS.addEventListener("input", function(){
+      state.basePrice = parseFloat(priceS.value);
+      document.getElementById("price-val").textContent = "$" + state.basePrice.toFixed(2);
+      // also adjust cost slider max to keep it sensible
+      updateAll();
+    });
+
+    var elS = document.getElementById("elast-slider");
+    elS.addEventListener("input", function(){
+      state.elasticity = parseFloat(elS.value);
+      document.getElementById("elast-val").textContent = state.elasticity.toFixed(2);
+      updateAll();
+    });
+
+    var costS = document.getElementById("cost-slider");
+    costS.addEventListener("input", function(){
+      state.cost = parseFloat(costS.value);
+      document.getElementById("cost-val").textContent = "$" + state.cost.toFixed(2);
+      updateAll();
+    });
+
+    var volS = document.getElementById("vol-slider");
+    volS.addEventListener("input", function(){
+      state.baseVol = parseInt(volS.value);
+      document.getElementById("vol-val").textContent = fmtNum(state.baseVol);
+      updateAll();
+    });
+
+    var adjS = document.getElementById("adj-slider");
+    adjS.addEventListener("input", function(){
+      state.priceAdj = parseInt(adjS.value);
+      document.getElementById("adj-val").textContent = (state.priceAdj >= 0 ? "+" : "") + state.priceAdj + "%";
+      updateAll();
+    });
+  }
+
+  function wirePresets(){
+    var presets = {
+      bargain:  { segment:"budget", type:"red", channel:"retail", basePrice:12, cost:4, baseVol:20000, adj:-10, elast:1.8 },
+      balanced: { segment:"mid", type:"red", channel:"retail", basePrice:28, cost:9.5, baseVol:12000, adj:0, elast:1.4 },
+      premium:  { segment:"premium", type:"red", channel:"direct", basePrice:65, cost:22, baseVol:5000, adj:8, elast:0.9 },
+      veblen:   { segment:"ultra", type:"red", channel:"direct", basePrice:180, cost:45, baseVol:800, adj:15, elast:0.25 },
+      recession:{ segment:"mid", type:"red", channel:"retail", basePrice:28, cost:11, baseVol:9000, adj:-12, elast:2.0 }
+    };
+    document.querySelectorAll("#presets button").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var p = presets[btn.getAttribute("data-preset")];
+        state.segment = p.segment; state.type = p.type; state.channel = p.channel;
+        state.basePrice = p.basePrice; state.cost = p.cost; state.baseVol = p.baseVol;
+        state.priceAdj = p.adj; state.elasticity = p.elast;
+
+        // Update UI
+        function setActive(groupId, attr, val){
+          document.querySelectorAll("#"+groupId+" button").forEach(function(b){
+            b.classList.toggle("active", b.getAttribute(attr) === val);
+          });
+        }
+        setActive("seg-btns", "data-seg", p.segment);
+        setActive("type-btns", "data-type", p.type);
+        setActive("ch-btns", "data-ch", p.channel);
+        document.getElementById("seg-val").textContent = SEG_LABELS[p.segment] + " " + TYPE_LABELS[p.type];
+        document.getElementById("type-val").textContent = TYPE_LABELS[p.type];
+        document.getElementById("ch-val").textContent = CHAN_LABELS[p.channel];
+        document.getElementById("price-slider").value = p.basePrice;
+        document.getElementById("price-val").textContent = "$" + p.basePrice.toFixed(2);
+        document.getElementById("elast-slider").value = p.elast.toFixed(2);
+        document.getElementById("elast-val").textContent = p.elast.toFixed(2);
+        document.getElementById("cost-slider").value = p.cost;
+        document.getElementById("cost-val").textContent = "$" + p.cost.toFixed(2);
+        document.getElementById("vol-slider").value = p.baseVol;
+        document.getElementById("vol-val").textContent = fmtNum(p.baseVol);
+        document.getElementById("adj-slider").value = p.adj;
+        document.getElementById("adj-val").textContent = (p.adj >= 0 ? "+" : "") + p.adj + "%";
+        updateAll();
+      });
+    });
+  }
+
+  /* === Background canvas decoration === */
+  function initBgCanvas(){
+    var canvas = document.getElementById("bg-canvas");
+    var ctx = canvas.getContext("2d");
+    var blobs = [];
+    var W, H;
+
+    function resize(){
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    var colors = ["rgba(240,160,96,0.15)", "rgba(96,165,250,0.10)", "rgba(74,222,128,0.08)", "rgba(167,113,247,0.10)"];
+    for (var i = 0; i < 6; i++) {
+      blobs.push({
+        x: Math.random()*W, y: Math.random()*H,
+        vx: (Math.random()-0.5)*0.3, vy:(Math.random()-0.5)*0.3,
+        r: 120 + Math.random()*180, c: colors[i%colors.length]
+      });
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      for (var i = 0; i < blobs.length; i++) {
+        var b = blobs[i];
+        b.x += b.vx; b.y += b.vy;
+        if (b.x < -b.r || b.x > W+b.r) b.vx *= -1;
+        if (b.y < -b.r || b.y > H+b.r) b.vy *= -1;
+        var grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+        grad.addColorStop(0, b.c);
+        grad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(b.x-b.r, b.y-b.r, b.r*2, b.r*2);
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+  }
+
+  /* === Init === */
+  function init(){
+    // Set initial label values
+    document.getElementById("seg-val").textContent = SEG_LABELS[state.segment] + " " + TYPE_LABELS[state.type];
+    document.getElementById("type-val").textContent = TYPE_LABELS[state.type];
+    document.getElementById("ch-val").textContent = CHAN_LABELS[state.channel];
+
+    wireSegGroup("seg-btns", "segment", function(){ return SEG_LABELS[state.segment] + " " + TYPE_LABELS[state.type]; }, "seg-val");
+    wireSegGroup("type-btns", "type", function(){ return TYPE_LABELS[state.type]; }, "type-val");
+    wireSegGroup("ch-btns", "channel", function(){ return CHAN_LABELS[state.channel]; }, "ch-val");
+    wireSliders();
+    wirePresets();
+    initBgCanvas();
+    initCharts();
+    updateAll();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
